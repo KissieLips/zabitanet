@@ -59,8 +59,26 @@ async function initDb() {
       action_taken VARCHAR(150) NOT NULL DEFAULT 'Henüz İşlem Yapılmadı',
       status VARCHAR(50) NOT NULL DEFAULT 'Açık',
       note TEXT,
+      process_date DATE,
+      closed_date DATE,
+      control_date DATE,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE complaints
+    ADD COLUMN IF NOT EXISTS process_date DATE
+  `);
+
+  await pool.query(`
+    ALTER TABLE complaints
+    ADD COLUMN IF NOT EXISTS closed_date DATE
+  `);
+
+  await pool.query(`
+    ALTER TABLE complaints
+    ADD COLUMN IF NOT EXISTS control_date DATE
   `);
 }
 
