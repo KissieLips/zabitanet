@@ -762,7 +762,66 @@ app.get("/", (req, res) => {
       document.getElementById("closedCount").textContent = closedCount;
       document.getElementById("totalCount").textContent = data.length;
     }
+function renderControlAlerts() {
+  var panel = document.getElementById("controlAlertsPanel");
+  var list = document.getElementById("controlAlertsList");
+  var today = todayInputDate();
 
+  var dueToday = [];
+  var overdue = [];
+
+  for (var i = 0; i < complaints.length; i++) {
+    var item = complaints[i];
+
+    if (item.status === "Süre Verildi" && item.controlDate) {
+      if (item.controlDate === today) {
+        dueToday.push(item);
+      } else if (item.controlDate < today) {
+        overdue.push(item);
+      }
+    }
+  }
+
+  if (dueToday.length === 0 && overdue.length === 0) {
+    panel.style.display = "none";
+    list.innerHTML = "";
+    return;
+  }
+
+  panel.style.display = "block";
+
+  var html = "";
+
+  if (overdue.length > 0) {
+    html += '<div style="margin-bottom:16px;">';
+    html += '<div style="font-weight:700; color:#b91c1c; margin-bottom:10px;">Geciken Kontroller</div>';
+
+    for (var j = 0; j < overdue.length; j++) {
+      html += '<div style="background:#fee2e2; border:1px solid #fecaca; border-radius:12px; padding:12px 14px; margin-bottom:10px;">';
+      html += '<div style="font-weight:700;">' + escapeHtml(overdue[j].no) + ' - ' + escapeHtml(overdue[j].subject) + '</div>';
+      html += '<div style="margin-top:4px; color:#7f1d1d;">Kontrol Tarihi: ' + escapeHtml(overdue[j].controlDateText || "-") + '</div>';
+      html += "</div>";
+    }
+
+    html += "</div>";
+  }
+
+  if (dueToday.length > 0) {
+    html += '<div>';
+    html += '<div style="font-weight:700; color:#92400e; margin-bottom:10px;">Bugün Kontrol Edilecekler</div>';
+
+    for (var k = 0; k < dueToday.length; k++) {
+      html += '<div style="background:#fef3c7; border:1px solid #fde68a; border-radius:12px; padding:12px 14px; margin-bottom:10px;">';
+      html += '<div style="font-weight:700;">' + escapeHtml(dueToday[k].no) + ' - ' + escapeHtml(dueToday[k].subject) + '</div>';
+      html += '<div style="margin-top:4px; color:#92400e;">Kontrol Tarihi: ' + escapeHtml(dueToday[k].controlDateText || "-") + '</div>';
+      html += "</div>";
+    }
+
+    html += "</div>";
+  }
+
+  list.innerHTML = html;
+}
     function getComplaintById(id) {
       for (var i = 0; i < complaints.length; i++) {
         if (complaints[i].id === id) {
