@@ -203,8 +203,46 @@ app.post("/api/complaints", async (req, res) => {
 app.put("/api/complaints/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { date, subject, source, address, detail, action, status, note } =
-      req.body;
+    const {
+      date,
+      subject,
+      source,
+      address,
+      detail,
+      action,
+      status,
+      note,
+      controlDate,
+    } = req.body;
+
+    const existingResult = await pool.query(
+      "SELECT * FROM complaints WHERE id = $1",
+      [id]
+    );
+
+    if (existingResult.rows.length === 0) {
+      return res.status(404).json({ error: "Kayıt bulunamadı." });
+    }
+
+    const existing = existingResult.rows[0];
+
+    const finalAction = action || "Henüz İşlem Yapılmadı";
+    const finalStatus = status || "Açık";
+
+    const processDate =
+      finalAction !== "Henüz İşlem Yapılmadı"
+        ? (existing.process_date || date)
+        : null;
+
+    const closedDate =
+      finalStatus === "Kapatıldı"
+        ? (existing.closed_date || date)
+        : null;
+
+    const finalControlDate =
+      finalStatus === "Süre Verildi"
+        ? (controlDate || existing.control_date || null)
+        : null;
 
     const result = await pool.query(
       `
@@ -217,8 +255,11 @@ app.put("/api/complaints/:id", async (req, res) => {
           detail = $5,
           action_taken = $6,
           status = $7,
-          note = $8
-        WHERE id = $9
+          note = $8,
+          process_date = $9,
+          closed_date = $10,
+          control_date = $11
+        WHERE id = $12
         RETURNING *
       `,
       [
@@ -227,16 +268,15 @@ app.put("/api/complaints/:id", async (req, res) => {
         source,
         address || "",
         detail || "",
-        action,
-        status,
+        finalAction,
+        finalStatus,
         note || "",
+        processDate,
+        closedDate,
+        finalControlDate,
         id,
       ]
     );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Kayıt bulunamadı." });
-    }
 
     res.json(mapComplaint(result.rows[0]));
   } catch (error) {
