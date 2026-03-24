@@ -464,6 +464,13 @@ app.get("/", (req, res) => {
       </section>
 
       <section class="panel">
+      <section class="panel" id="controlAlertsPanel" style="display:none;">
+  <div style="font-size:18px; font-weight:700; margin-bottom:16px;">
+    Bugün Kontrol Edilecek Şikayetler
+  </div>
+
+  <div id="controlAlertsList"></div>
+</section>
         <div class="filters">
           <input type="date" id="filterDate" />
           <select id="filterSource">
