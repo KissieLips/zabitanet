@@ -672,7 +672,11 @@ app.get("/", (req, res) => {
 
     function openNewModal() {
       document.getElementById("newNo").value = "Otomatik oluşturulacak";
-      document.getElementById("newDate").value = new Date().toISOString().slice(0, 10);
+      var now = new Date();
+      var yyyy = now.getFullYear();
+      var mm = String(now.getMonth() + 1).padStart(2, "0");
+      var dd = String(now.getDate()).padStart(2, "0");
+      document.getElementById("newDate").value = yyyy + "-" + mm + "-" + dd;
       document.getElementById("newSubject").value = "";
       document.getElementById("newSource").value = "";
       document.getElementById("newAddress").value = "";
