@@ -529,14 +529,19 @@ app.get("/", (req, res) => {
             </select>
           </div>
           <div class="form-group">
-            <label>Durum *</label>
-            <select id="newStatus">
-              <option value="Açık">Açık</option>
-              <option value="İnceleniyor">İnceleniyor</option>
-              <option value="Süre Verildi">Süre Verildi</option>
-              <option value="Kapatıldı">Kapatıldı</option>
-            </select>
-          </div>
+  <label>Durum *</label>
+  <select id="newStatus">
+    <option value="Açık">Açık</option>
+    <option value="İnceleniyor">İnceleniyor</option>
+    <option value="Süre Verildi">Süre Verildi</option>
+    <option value="Kapatıldı">Kapatıldı</option>
+  </select>
+</div>
+
+<div class="form-group">
+  <label>Kontrol Tarihi</label>
+  <input type="date" id="newControlDate" />
+</div>
           <div class="form-group full">
             <label>İşlem Açıklaması / Notlar</label>
             <textarea id="newNote" placeholder="Yapılan işlemle ilgili ek notlar..."></textarea>
