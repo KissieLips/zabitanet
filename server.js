@@ -126,8 +126,17 @@ app.get("/api/complaints", async (req, res) => {
 
 app.post("/api/complaints", async (req, res) => {
   try {
-    const { date, subject, source, address, detail, action, status, note } =
-      req.body;
+    const {
+      date,
+      subject,
+      source,
+      address,
+      detail,
+      action,
+      status,
+      note,
+      controlDate,
+    } = req.body;
 
     if (!date || !subject || !source) {
       return res.status(400).json({ error: "Zorunlu alanları doldurun." });
@@ -135,12 +144,37 @@ app.post("/api/complaints", async (req, res) => {
 
     const complaintNo = await nextComplaintNo();
 
+    const finalAction = action || "Henüz İşlem Yapılmadı";
+    const finalStatus = status || "Açık";
+
+    const processDate =
+      finalAction !== "Henüz İşlem Yapılmadı" ? date : null;
+
+    const closedDate =
+      finalStatus === "Kapatıldı" ? date : null;
+
+    const finalControlDate =
+      finalStatus === "Süre Verildi" ? (controlDate || null) : null;
+
     const result = await pool.query(
       `
         INSERT INTO complaints
-          (complaint_no, complaint_date, subject, source, address, detail, action_taken, status, note)
+          (
+            complaint_no,
+            complaint_date,
+            subject,
+            source,
+            address,
+            detail,
+            action_taken,
+            status,
+            note,
+            process_date,
+            closed_date,
+            control_date
+          )
         VALUES
-          ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *
       `,
       [
@@ -150,9 +184,12 @@ app.post("/api/complaints", async (req, res) => {
         source,
         address || "",
         detail || "",
-        action || "Henüz İşlem Yapılmadı",
-        status || "Açık",
+        finalAction,
+        finalStatus,
         note || "",
+        processDate,
+        closedDate,
+        finalControlDate,
       ]
     );
 
