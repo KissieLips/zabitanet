@@ -887,7 +887,7 @@ function renderControlAlerts() {
       });
 
       updateCards(filtered);
-
+      renderControlAlerts();
       if (filtered.length === 0) {
         tbody.innerHTML = "";
         emptyNote.style.display = "block";
