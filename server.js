@@ -69,5 +69,5 @@ app.get("/", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(\`Sunucu çalışıyor: \${PORT}\`);
+  console.log("Sunucu çalışıyor: " + PORT);
 });
