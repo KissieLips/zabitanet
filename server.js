@@ -510,13 +510,6 @@ app.get("/", (req, res) => {
   <nav class="menu">
     <a href="#" class="menu-item">🏠 Ana Sayfa</a>
     <a href="#" class="menu-item active">💬 Şikayet Takip Sistemi</a>
-    <a href="#" class="menu-item">👥 Esnaf & Üretici Kayıt</a>
-    <a href="#" class="menu-item">📅 İzin & Rapor Yönetimi</a>
-    <a href="#" class="menu-item">✅ Yoklama Sistemi</a>
-    <a href="#" class="menu-item">📄 Tutanak & İhlal</a>
-    <a href="#" class="menu-item">📘 Pazar Kuralları</a>
-    <a href="#" class="menu-item">📊 Raporlar</a>
-    <a href="#" class="menu-item">⚙️ Ayarlar</a>
   </nav>
 </aside>
 
