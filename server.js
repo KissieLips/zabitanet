@@ -42,6 +42,18 @@ function mapComplaint(row) {
     action: row.action_taken,
     status: row.status,
     note: row.note || "",
+    processDate: row.process_date
+      ? new Date(row.process_date).toISOString().slice(0, 10)
+      : "",
+    processDateText: formatDate(row.process_date),
+    closedDate: row.closed_date
+      ? new Date(row.closed_date).toISOString().slice(0, 10)
+      : "",
+    closedDateText: formatDate(row.closed_date),
+    controlDate: row.control_date
+      ? new Date(row.control_date).toISOString().slice(0, 10)
+      : "",
+    controlDateText: formatDate(row.control_date),
     createdAt: formatDateTime(row.created_at),
   };
 }
