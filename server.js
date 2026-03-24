@@ -298,10 +298,9 @@ app.get("/", (req, res) => {
       <div class="topbar">
         <div class="topbar-title">💬 Şikayet Takip Sistemi</div>
         <div class="topbar-actions">
-          <button class="btn btn-secondary">☾</button>
-          <button class="btn btn-primary">⤓ Yedekle</button>
-          <div class="date-pill" id="todayText"></div>
-        </div>
+  <button class="btn btn-secondary">☾</button>
+  <div class="date-pill" id="todayText"></div>
+</div>
       </div>
 
       <div class="section-head">
