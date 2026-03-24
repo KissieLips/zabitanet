@@ -10,13 +10,42 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-function formatDate(dateValue) {
-  if (!dateValue) return "";
-  return new Intl.DateTimeFormat("tr-TR").format(new Date(dateValue));
+function toInputDate(value) {
+  if (!value) return "";
+
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return yyyy + "-" + mm + "-" + dd;
 }
 
-function formatDateTime(dateValue) {
-  if (!dateValue) return "";
+function formatDate(value) {
+  if (!value) return "";
+
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const parts = value.split("-");
+    return parts[2] + "." + parts[1] + "." + parts[0];
+  }
+
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+
+  return new Intl.DateTimeFormat("tr-TR").format(d);
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+
   return new Intl.DateTimeFormat("tr-TR", {
     day: "2-digit",
     month: "2-digit",
@@ -24,16 +53,14 @@ function formatDateTime(dateValue) {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-  }).format(new Date(dateValue));
+  }).format(d);
 }
 
 function mapComplaint(row) {
   return {
     id: row.id,
     no: row.complaint_no,
-    date: row.complaint_date
-      ? new Date(row.complaint_date).toISOString().slice(0, 10)
-      : "",
+    date: toInputDate(row.complaint_date),
     displayDate: formatDate(row.complaint_date),
     subject: row.subject,
     source: row.source,
@@ -42,17 +69,11 @@ function mapComplaint(row) {
     action: row.action_taken,
     status: row.status,
     note: row.note || "",
-    processDate: row.process_date
-      ? new Date(row.process_date).toISOString().slice(0, 10)
-      : "",
+    processDate: toInputDate(row.process_date),
     processDateText: formatDate(row.process_date),
-    closedDate: row.closed_date
-      ? new Date(row.closed_date).toISOString().slice(0, 10)
-      : "",
+    closedDate: toInputDate(row.closed_date),
     closedDateText: formatDate(row.closed_date),
-    controlDate: row.control_date
-      ? new Date(row.control_date).toISOString().slice(0, 10)
-      : "",
+    controlDate: toInputDate(row.control_date),
     controlDateText: formatDate(row.control_date),
     createdAt: formatDateTime(row.created_at),
   };
@@ -98,7 +119,7 @@ async function nextComplaintNo() {
   const currentYear = new Date().getFullYear();
   const result = await pool.query(
     "SELECT complaint_no FROM complaints WHERE complaint_no LIKE $1 ORDER BY id DESC LIMIT 1",
-    [`ŞKY-${currentYear}-%`]
+    ["ŞKY-" + currentYear + "-%"]
   );
 
   let nextNumber = 1;
@@ -111,7 +132,7 @@ async function nextComplaintNo() {
     }
   }
 
-  return `ŞKY-${currentYear}-${String(nextNumber).padStart(4, "0")}`;
+  return "ŞKY-" + currentYear + "-" + String(nextNumber).padStart(4, "0");
 }
 
 app.get("/api/complaints", async (req, res) => {
@@ -215,6 +236,10 @@ app.put("/api/complaints/:id", async (req, res) => {
       controlDate,
     } = req.body;
 
+    if (!date || !subject || !source) {
+      return res.status(400).json({ error: "Zorunlu alanları doldurun." });
+    }
+
     const existingResult = await pool.query(
       "SELECT * FROM complaints WHERE id = $1",
       [id]
@@ -231,17 +256,17 @@ app.put("/api/complaints/:id", async (req, res) => {
 
     const processDate =
       finalAction !== "Henüz İşlem Yapılmadı"
-        ? (existing.process_date || date)
+        ? (toInputDate(existing.process_date) || date)
         : null;
 
     const closedDate =
       finalStatus === "Kapatıldı"
-        ? (existing.closed_date || date)
+        ? (toInputDate(existing.closed_date) || date)
         : null;
 
     const finalControlDate =
       finalStatus === "Süre Verildi"
-        ? (controlDate || existing.control_date || null)
+        ? (controlDate || toInputDate(existing.control_date) || null)
         : null;
 
     const result = await pool.query(
@@ -316,12 +341,9 @@ app.get("/", (req, res) => {
     .menu-item:hover { background: rgba(255,255,255,0.08); }
     .menu-item.active { background: #f5b301; color: #ffffff; font-weight: 700; }
     .main { flex: 1; padding: 28px; }
-    .topbar { background: #ffffff; border-radius: 16px; padding: 20px 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 16px; }
+    .topbar { background: #ffffff; border-radius: 16px; padding: 20px 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
     .topbar-title { font-size: 20px; font-weight: 700; }
-    .topbar-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .date-pill { background: #2563eb; color: #ffffff; border-radius: 8px; padding: 10px 14px; font-weight: 700; font-size: 14px; }
-    .section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; gap: 16px; flex-wrap: wrap; }
-    .section-title { font-size: 20px; font-weight: 700; }
     .section-actions { display: flex; gap: 12px; flex-wrap: wrap; }
     .btn { border: none; border-radius: 10px; padding: 12px 18px; font-size: 15px; font-weight: 700; cursor: pointer; transition: 0.2s ease; }
     .btn:hover { opacity: 0.92; }
@@ -329,6 +351,7 @@ app.get("/", (req, res) => {
     .btn-info { background: #06b6d4; color: #ffffff; }
     .btn-warning { background: #f5b301; color: #1f2937; }
     .btn-secondary { background: #6b7280; color: #ffffff; }
+    .btn-danger { background: #ef4444; color: #ffffff; }
     .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; margin-bottom: 24px; }
     .card { background: #ffffff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); min-height: 150px; }
     .card-icon { width: 56px; height: 56px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 26px; margin-bottom: 20px; }
@@ -352,6 +375,8 @@ app.get("/", (req, res) => {
     .badge-review { background: #dbeafe; color: #1d4ed8; }
     .badge-deadline { background: #fde68a; color: #92400e; }
     .badge-closed { background: #dcfce7; color: #166534; }
+    .badge-due-today { background: #fef3c7; color: #92400e; }
+    .badge-overdue { background: #fee2e2; color: #b91c1c; }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .icon-btn { border: none; width: 38px; height: 38px; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; color: #ffffff; }
     .view-btn { background: #06b6d4; }
@@ -368,6 +393,7 @@ app.get("/", (req, res) => {
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 22px; }
     .full { grid-column: 1 / -1; }
     .form-group label { display: block; margin-bottom: 8px; font-weight: 700; font-size: 15px; color: #374151; }
+    .hidden { display: none !important; }
     .modal-footer { padding: 16px 22px; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #e5e7eb; background: #ffffff; }
     .detail-title { text-align: center; font-size: 22px; font-weight: 800; margin-bottom: 24px; letter-spacing: 0.5px; }
     .detail-table td, .detail-table th { border: 1px solid #d1d5db; padding: 14px 12px; }
@@ -403,16 +429,16 @@ app.get("/", (req, res) => {
 
     <main class="main">
       <div class="topbar">
-  <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-    <div class="topbar-title">Şikayet Yönetim Ekranı</div>
-    <div class="date-pill" id="todayText"></div>
-  </div>
+        <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+          <div class="topbar-title">Şikayet Yönetim Ekranı</div>
+          <div class="date-pill" id="todayText"></div>
+        </div>
 
-  <div class="section-actions">
-    <button class="btn btn-info">📊 İstatistikler</button>
-    <button class="btn btn-primary" onclick="openNewModal()">＋ Yeni Şikayet</button>
-  </div>
-</div>
+        <div class="section-actions">
+          <button class="btn btn-info">📊 İstatistikler</button>
+          <button class="btn btn-primary" onclick="openNewModal()">＋ Yeni Şikayet</button>
+        </div>
+      </div>
 
       <section class="cards">
         <div class="card">
@@ -529,19 +555,18 @@ app.get("/", (req, res) => {
             </select>
           </div>
           <div class="form-group">
-  <label>Durum *</label>
-  <select id="newStatus">
-    <option value="Açık">Açık</option>
-    <option value="İnceleniyor">İnceleniyor</option>
-    <option value="Süre Verildi">Süre Verildi</option>
-    <option value="Kapatıldı">Kapatıldı</option>
-  </select>
-</div>
-
-<div class="form-group">
-  <label>Kontrol Tarihi</label>
-  <input type="date" id="newControlDate" />
-</div>
+            <label>Durum *</label>
+            <select id="newStatus">
+              <option value="Açık">Açık</option>
+              <option value="İnceleniyor">İnceleniyor</option>
+              <option value="Süre Verildi">Süre Verildi</option>
+              <option value="Kapatıldı">Kapatıldı</option>
+            </select>
+          </div>
+          <div class="form-group hidden" id="newControlWrap">
+            <label>Kontrol Tarihi</label>
+            <input type="date" id="newControlDate" />
+          </div>
           <div class="form-group full">
             <label>İşlem Açıklaması / Notlar</label>
             <textarea id="newNote" placeholder="Yapılan işlemle ilgili ek notlar..."></textarea>
@@ -631,6 +656,10 @@ app.get("/", (req, res) => {
               <option value="Kapatıldı">Kapatıldı</option>
             </select>
           </div>
+          <div class="form-group hidden" id="editControlWrap">
+            <label>Kontrol Tarihi</label>
+            <input type="date" id="editControlDate" />
+          </div>
           <div class="form-group full">
             <label>İşlem Açıklaması / Notlar</label>
             <textarea id="editNote"></textarea>
@@ -654,8 +683,16 @@ app.get("/", (req, res) => {
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
-        .replace(/\\"/g, "&quot;")
+        .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
+    }
+
+    function todayInputDate() {
+      var now = new Date();
+      var yyyy = now.getFullYear();
+      var mm = String(now.getMonth() + 1).padStart(2, "0");
+      var dd = String(now.getDate()).padStart(2, "0");
+      return yyyy + "-" + mm + "-" + dd;
     }
 
     function setTodayText() {
@@ -669,7 +706,19 @@ app.get("/", (req, res) => {
       document.getElementById("todayText").textContent = text;
     }
 
-    function getStatusBadge(status) {
+    function getStatusBadge(item) {
+      var status = item.status;
+      var today = todayInputDate();
+
+      if (status === "Süre Verildi" && item.controlDate) {
+        if (item.controlDate < today) {
+          return '<span class="badge badge-overdue">🔴 Kontrol Gecikti</span>';
+        }
+        if (item.controlDate === today) {
+          return '<span class="badge badge-due-today">🟠 Bugün Kontrol</span>';
+        }
+      }
+
       if (status === "Açık") {
         return '<span class="badge badge-open">🟡 Açık</span>';
       }
@@ -716,9 +765,34 @@ app.get("/", (req, res) => {
       return null;
     }
 
+    function toggleNewControlDate() {
+      var status = document.getElementById("newStatus").value;
+      var wrap = document.getElementById("newControlWrap");
+
+      if (status === "Süre Verildi") {
+        wrap.classList.remove("hidden");
+      } else {
+        wrap.classList.add("hidden");
+        document.getElementById("newControlDate").value = "";
+      }
+    }
+
+    function toggleEditControlDate() {
+      var status = document.getElementById("editStatus").value;
+      var wrap = document.getElementById("editControlWrap");
+
+      if (status === "Süre Verildi") {
+        wrap.classList.remove("hidden");
+      } else {
+        wrap.classList.add("hidden");
+        document.getElementById("editControlDate").value = "";
+      }
+    }
+
     async function loadComplaints() {
       try {
         var response = await fetch("/api/complaints");
+        if (!response.ok) throw new Error();
         complaints = await response.json();
         renderTable();
       } catch (error) {
@@ -760,17 +834,17 @@ app.get("/", (req, res) => {
       for (var i = 0; i < filtered.length; i++) {
         var item = filtered[i];
         rows += "<tr>";
-        rows += '<td class="complaint-no">' + escapeHtml(item.no) + '</td>';
-        rows += '<td>' + escapeHtml(item.displayDate) + '</td>';
-        rows += '<td>' + escapeHtml(item.subject) + '</td>';
-        rows += '<td>' + sourceBadge(item.source) + '</td>';
-        rows += '<td>' + getStatusBadge(item.status) + '</td>';
-        rows += '<td>' + escapeHtml(item.action) + '</td>';
+        rows += '<td class="complaint-no">' + escapeHtml(item.no) + "</td>";
+        rows += "<td>" + escapeHtml(item.displayDate) + "</td>";
+        rows += "<td>" + escapeHtml(item.subject) + "</td>";
+        rows += "<td>" + sourceBadge(item.source) + "</td>";
+        rows += "<td>" + getStatusBadge(item) + "</td>";
+        rows += "<td>" + escapeHtml(item.action) + "</td>";
         rows += '<td><div class="actions">';
         rows += '<button class="icon-btn view-btn" onclick="openDetail(' + item.id + ')">👁</button>';
         rows += '<button class="icon-btn edit-btn" onclick="openEdit(' + item.id + ')">✎</button>';
         rows += '<button class="icon-btn delete-btn" onclick="deleteComplaint(' + item.id + ')">🗑</button>';
-        rows += '</div></td>';
+        rows += "</div></td>";
         rows += "</tr>";
       }
 
@@ -779,18 +853,16 @@ app.get("/", (req, res) => {
 
     function openNewModal() {
       document.getElementById("newNo").value = "Otomatik oluşturulacak";
-      var now = new Date();
-      var yyyy = now.getFullYear();
-      var mm = String(now.getMonth() + 1).padStart(2, "0");
-      var dd = String(now.getDate()).padStart(2, "0");
-      document.getElementById("newDate").value = yyyy + "-" + mm + "-" + dd;
+      document.getElementById("newDate").value = todayInputDate();
       document.getElementById("newSubject").value = "";
       document.getElementById("newSource").value = "";
       document.getElementById("newAddress").value = "";
       document.getElementById("newDetail").value = "";
       document.getElementById("newAction").value = "Henüz İşlem Yapılmadı";
       document.getElementById("newStatus").value = "Açık";
+      document.getElementById("newControlDate").value = "";
       document.getElementById("newNote").value = "";
+      toggleNewControlDate();
       document.getElementById("newModal").classList.add("show");
     }
 
@@ -806,10 +878,16 @@ app.get("/", (req, res) => {
       var detail = document.getElementById("newDetail").value.trim();
       var action = document.getElementById("newAction").value;
       var status = document.getElementById("newStatus").value;
+      var controlDate = document.getElementById("newControlDate").value;
       var note = document.getElementById("newNote").value.trim();
 
       if (!date || !subject || !source) {
         alert("Lütfen zorunlu alanları doldurun.");
+        return;
+      }
+
+      if (status === "Süre Verildi" && !controlDate) {
+        alert("Süre Verildi durumunda Kontrol Tarihi girmeniz gerekiyor.");
         return;
       }
 
@@ -825,13 +903,12 @@ app.get("/", (req, res) => {
             detail: detail,
             action: action,
             status: status,
+            controlDate: controlDate,
             note: note
           })
         });
 
-        if (!response.ok) {
-          throw new Error();
-        }
+        if (!response.ok) throw new Error();
 
         closeModal("newModal");
         await loadComplaints();
@@ -850,10 +927,13 @@ app.get("/", (req, res) => {
       html += "<tr><th>Konu</th><td><strong>" + escapeHtml(item.subject) + "</strong></td></tr>";
       html += "<tr><th>Kaynak</th><td>" + escapeHtml(item.source) + "</td></tr>";
       html += "<tr><th>Adres</th><td>" + escapeHtml(item.address) + "</td></tr>";
-      html += "<tr><th>Durum</th><td>" + getStatusBadge(item.status) + "</td></tr>";
+      html += "<tr><th>Durum</th><td>" + getStatusBadge(item) + "</td></tr>";
       html += "<tr><th>Detay</th><td>" + escapeHtml(item.detail) + "</td></tr>";
       html += "<tr><th>Yapılan İşlem</th><td>" + escapeHtml(item.action) + "</td></tr>";
       html += "<tr><th>İşlem Açıklaması</th><td>" + escapeHtml(item.note || "-") + "</td></tr>";
+      html += "<tr><th>İşlem Tarihi</th><td>" + escapeHtml(item.processDateText || "-") + "</td></tr>";
+      html += "<tr><th>Kontrol Tarihi</th><td>" + escapeHtml(item.controlDateText || "-") + "</td></tr>";
+      html += "<tr><th>Kapatma Tarihi</th><td>" + escapeHtml(item.closedDateText || "-") + "</td></tr>";
       html += "<tr><th>Kayıt Tarihi</th><td>" + escapeHtml(item.createdAt) + "</td></tr>";
       document.getElementById("detailTableBody").innerHTML = html;
       document.getElementById("detailModal").classList.add("show");
@@ -872,12 +952,22 @@ app.get("/", (req, res) => {
       document.getElementById("editDetail").value = item.detail;
       document.getElementById("editAction").value = item.action;
       document.getElementById("editStatus").value = item.status;
+      document.getElementById("editControlDate").value = item.controlDate || "";
       document.getElementById("editNote").value = item.note;
+      toggleEditControlDate();
       document.getElementById("editModal").classList.add("show");
     }
 
     async function saveEditComplaint() {
       if (!editingId) return;
+
+      var status = document.getElementById("editStatus").value;
+      var controlDate = document.getElementById("editControlDate").value;
+
+      if (status === "Süre Verildi" && !controlDate) {
+        alert("Süre Verildi durumunda Kontrol Tarihi girmeniz gerekiyor.");
+        return;
+      }
 
       try {
         var response = await fetch("/api/complaints/" + editingId, {
@@ -890,14 +980,13 @@ app.get("/", (req, res) => {
             address: document.getElementById("editAddress").value.trim(),
             detail: document.getElementById("editDetail").value.trim(),
             action: document.getElementById("editAction").value,
-            status: document.getElementById("editStatus").value,
+            status: status,
+            controlDate: controlDate,
             note: document.getElementById("editNote").value.trim()
           })
         });
 
-        if (!response.ok) {
-          throw new Error();
-        }
+        if (!response.ok) throw new Error();
 
         closeModal("editModal");
         await loadComplaints();
@@ -918,9 +1007,7 @@ app.get("/", (req, res) => {
           method: "DELETE"
         });
 
-        if (!response.ok) {
-          throw new Error();
-        }
+        if (!response.ok) throw new Error();
 
         await loadComplaints();
       } catch (error) {
@@ -928,8 +1015,13 @@ app.get("/", (req, res) => {
       }
     }
 
-    setTodayText();
-    loadComplaints();
+    document.addEventListener("DOMContentLoaded", function() {
+      setTodayText();
+      loadComplaints();
+
+      document.getElementById("newStatus").addEventListener("change", toggleNewControlDate);
+      document.getElementById("editStatus").addEventListener("change", toggleEditControlDate);
+    });
   </script>
 </body>
 </html>`);
