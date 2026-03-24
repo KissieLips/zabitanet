@@ -296,20 +296,16 @@ app.get("/", (req, res) => {
 
     <main class="main">
       <div class="topbar">
-        <div class="topbar-title">Şikayet Yönetim Ekranı</div>
-        <div class="topbar-actions">
-  <button class="btn btn-secondary">☾</button>
-  <div class="date-pill" id="todayText"></div>
-</div>
-      </div>
+  <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+    <div class="topbar-title">Şikayet Yönetim Ekranı</div>
+    <div class="date-pill" id="todayText"></div>
+  </div>
 
-      <div class="section-head">
-        <div class="section-title">💬 Şikayet Takip Sistemi</div>
-        <div class="section-actions">
-          <button class="btn btn-info">📊 İstatistikler</button>
-          <button class="btn btn-primary" onclick="openNewModal()">＋ Yeni Şikayet</button>
-        </div>
-      </div>
+  <div class="section-actions">
+    <button class="btn btn-info">📊 İstatistikler</button>
+    <button class="btn btn-primary" onclick="openNewModal()">＋ Yeni Şikayet</button>
+  </div>
+</div>
 
       <section class="cards">
         <div class="card">
