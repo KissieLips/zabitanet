@@ -1,7 +1,193 @@
 const express = require("express");
+const { Pool } = require("pg");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+app.use(express.json());
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+function formatDate(dateValue) {
+  if (!dateValue) return "";
+  return new Intl.DateTimeFormat("tr-TR").format(new Date(dateValue));
+}
+
+function formatDateTime(dateValue) {
+  if (!dateValue) return "";
+  return new Intl.DateTimeFormat("tr-TR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(dateValue));
+}
+
+function mapComplaint(row) {
+  return {
+    id: row.id,
+    no: row.complaint_no,
+    date: row.complaint_date
+      ? new Date(row.complaint_date).toISOString().slice(0, 10)
+      : "",
+    displayDate: formatDate(row.complaint_date),
+    subject: row.subject,
+    source: row.source,
+    address: row.address || "",
+    detail: row.detail || "",
+    action: row.action_taken,
+    status: row.status,
+    note: row.note || "",
+    createdAt: formatDateTime(row.created_at),
+  };
+}
+
+async function initDb() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS complaints (
+      id SERIAL PRIMARY KEY,
+      complaint_no VARCHAR(30) UNIQUE NOT NULL,
+      complaint_date DATE NOT NULL,
+      subject VARCHAR(255) NOT NULL,
+      source VARCHAR(100) NOT NULL,
+      address TEXT,
+      detail TEXT,
+      action_taken VARCHAR(150) NOT NULL DEFAULT 'Henüz İşlem Yapılmadı',
+      status VARCHAR(50) NOT NULL DEFAULT 'Açık',
+      note TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+}
+
+async function nextComplaintNo() {
+  const currentYear = new Date().getFullYear();
+  const result = await pool.query(
+    "SELECT complaint_no FROM complaints WHERE complaint_no LIKE $1 ORDER BY id DESC LIMIT 1",
+    [`ŞKY-${currentYear}-%`]
+  );
+
+  let nextNumber = 1;
+
+  if (result.rows.length > 0) {
+    const lastNo = result.rows[0].complaint_no || "";
+    const match = lastNo.match(/(\d+)$/);
+    if (match) {
+      nextNumber = Number(match[1]) + 1;
+    }
+  }
+
+  return `ŞKY-${currentYear}-${String(nextNumber).padStart(4, "0")}`;
+}
+
+app.get("/api/complaints", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM complaints ORDER BY id DESC");
+    res.json(result.rows.map(mapComplaint));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Kayıtlar alınamadı." });
+  }
+});
+
+app.post("/api/complaints", async (req, res) => {
+  try {
+    const { date, subject, source, address, detail, action, status, note } =
+      req.body;
+
+    if (!date || !subject || !source) {
+      return res.status(400).json({ error: "Zorunlu alanları doldurun." });
+    }
+
+    const complaintNo = await nextComplaintNo();
+
+    const result = await pool.query(
+      `
+        INSERT INTO complaints
+          (complaint_no, complaint_date, subject, source, address, detail, action_taken, status, note)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING *
+      `,
+      [
+        complaintNo,
+        date,
+        subject,
+        source,
+        address || "",
+        detail || "",
+        action || "Henüz İşlem Yapılmadı",
+        status || "Açık",
+        note || "",
+      ]
+    );
+
+    res.json(mapComplaint(result.rows[0]));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Kayıt eklenemedi." });
+  }
+});
+
+app.put("/api/complaints/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { date, subject, source, address, detail, action, status, note } =
+      req.body;
+
+    const result = await pool.query(
+      `
+        UPDATE complaints
+        SET
+          complaint_date = $1,
+          subject = $2,
+          source = $3,
+          address = $4,
+          detail = $5,
+          action_taken = $6,
+          status = $7,
+          note = $8
+        WHERE id = $9
+        RETURNING *
+      `,
+      [
+        date,
+        subject,
+        source,
+        address || "",
+        detail || "",
+        action,
+        status,
+        note || "",
+        id,
+      ]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Kayıt bulunamadı." });
+    }
+
+    res.json(mapComplaint(result.rows[0]));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Kayıt güncellenemedi." });
+  }
+});
+
+app.delete("/api/complaints/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query("DELETE FROM complaints WHERE id = $1", [id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Kayıt silinemedi." });
+  }
+});
 
 app.get("/", (req, res) => {
   res.send(`<!DOCTYPE html>
@@ -9,509 +195,104 @@ app.get("/", (req, res) => {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ZabitaNet - Şikayet Takip Sistemi</title>
+  <title>Zabıta Yönetim Sistemi - Şikayet Takip Sistemi</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      font-family: Arial, Helvetica, sans-serif;
-      background: #f3f4f6;
-      color: #1f2937;
-    }
-
-    .app {
-      display: flex;
-      min-height: 100vh;
-    }
-
-    .sidebar {
-      width: 280px;
-      background: #183b68;
-      color: #ffffff;
-      padding: 0;
-      flex-shrink: 0;
-    }
-
-    .sidebar-top {
-      padding: 28px 22px 18px 22px;
-      border-bottom: 1px solid rgba(255,255,255,0.12);
-    }
-
-    .brand {
-      font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-
-    .brand-sub {
-      font-size: 14px;
-      color: rgba(255,255,255,0.82);
-    }
-
-    .menu {
-      padding: 18px 0;
-    }
-
-    .menu-item {
-      padding: 16px 22px;
-      font-size: 16px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      color: #ffffff;
-      text-decoration: none;
-      border-left: 4px solid transparent;
-    }
-
-    .menu-item:hover {
-      background: rgba(255,255,255,0.08);
-    }
-
-    .menu-item.active {
-      background: #f5b301;
-      color: #ffffff;
-      font-weight: 700;
-    }
-
-    .main {
-      flex: 1;
-      padding: 28px;
-    }
-
-    .topbar {
-      background: #ffffff;
-      border-radius: 16px;
-      padding: 20px 24px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 24px;
-      gap: 16px;
-    }
-
-    .topbar-title {
-      font-size: 20px;
-      font-weight: 700;
-    }
-
-    .topbar-actions {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    .date-pill {
-      background: #2563eb;
-      color: #ffffff;
-      border-radius: 8px;
-      padding: 10px 14px;
-      font-weight: 700;
-      font-size: 14px;
-    }
-
-    .section-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 18px;
-      gap: 16px;
-      flex-wrap: wrap;
-    }
-
-    .section-title {
-      font-size: 20px;
-      font-weight: 700;
-    }
-
-    .section-actions {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    .btn {
-      border: none;
-      border-radius: 10px;
-      padding: 12px 18px;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: 0.2s ease;
-    }
-
-    .btn:hover {
-      opacity: 0.92;
-    }
-
-    .btn-primary {
-      background: #2563eb;
-      color: #ffffff;
-    }
-
-    .btn-info {
-      background: #06b6d4;
-      color: #ffffff;
-    }
-
-    .btn-warning {
-      background: #f5b301;
-      color: #1f2937;
-    }
-
-    .btn-secondary {
-      background: #6b7280;
-      color: #ffffff;
-    }
-
-    .btn-danger {
-      background: #ef4444;
-      color: #ffffff;
-    }
-
-    .cards {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 20px;
-      margin-bottom: 24px;
-    }
-
-    .card {
-      background: #ffffff;
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-      min-height: 150px;
-    }
-
-    .card-icon {
-      width: 56px;
-      height: 56px;
-      border-radius: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 26px;
-      margin-bottom: 20px;
-    }
-
-    .icon-yellow {
-      background: #fef3c7;
-    }
-
-    .icon-blue {
-      background: #dbeafe;
-    }
-
-    .icon-green {
-      background: #dcfce7;
-    }
-
-    .icon-gray {
-      background: #e5e7eb;
-    }
-
-    .card-number {
-      font-size: 40px;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-
-    .card-label {
-      font-size: 16px;
-      color: #6b7280;
-    }
-
-    .panel {
-      background: #ffffff;
-      border-radius: 16px;
-      padding: 22px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-      margin-bottom: 24px;
-    }
-
-    .filters {
-      display: grid;
-      grid-template-columns: 200px 1fr 1fr 1.2fr 180px;
-      gap: 16px;
-      align-items: center;
-    }
-
-    input, select, textarea {
-      width: 100%;
-      border: 1px solid #d1d5db;
-      border-radius: 10px;
-      padding: 13px 14px;
-      font-size: 15px;
-      outline: none;
-      background: #ffffff;
-    }
-
-    textarea {
-      resize: vertical;
-      min-height: 96px;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    th {
-      text-align: left;
-      padding: 16px 12px;
-      font-size: 15px;
-      color: #111827;
-      border-bottom: 1px solid #e5e7eb;
-    }
-
-    td {
-      padding: 16px 12px;
-      border-bottom: 1px solid #e5e7eb;
-      font-size: 15px;
-      vertical-align: middle;
-    }
-
-    .complaint-no {
-      font-weight: 700;
-    }
-
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 7px 12px;
-      border-radius: 999px;
-      font-size: 13px;
-      font-weight: 700;
-      white-space: nowrap;
-    }
-
-    .badge-source {
-      background: #6b7280;
-      color: #ffffff;
-    }
-
-    .badge-open {
-      background: #fef3c7;
-      color: #92400e;
-    }
-
-    .badge-review {
-      background: #dbeafe;
-      color: #1d4ed8;
-    }
-
-    .badge-deadline {
-      background: #fde68a;
-      color: #92400e;
-    }
-
-    .badge-closed {
-      background: #dcfce7;
-      color: #166534;
-    }
-
-    .actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .icon-btn {
-      border: none;
-      width: 38px;
-      height: 38px;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-      color: #ffffff;
-    }
-
-    .view-btn {
-      background: #06b6d4;
-    }
-
-    .edit-btn {
-      background: #f5b301;
-      color: #1f2937;
-    }
-
-    .delete-btn {
-      background: #ef4444;
-    }
-
-    .empty-note {
-      padding: 24px 8px 8px 8px;
-      color: #6b7280;
-      font-size: 15px;
-    }
-
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(17, 24, 39, 0.45);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      z-index: 999;
-    }
-
-    .modal-overlay.show {
-      display: flex;
-    }
-
-    .modal {
-      width: 100%;
-      max-width: 900px;
-      background: #ffffff;
-      border-radius: 18px;
-      overflow: hidden;
-      box-shadow: 0 20px 45px rgba(0,0,0,0.18);
-    }
-
-    .modal-header {
-      background: #f5b301;
-      padding: 18px 22px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 18px;
-      font-weight: 700;
-      color: #1f2937;
-    }
-
-    .modal-header.white {
-      background: #ffffff;
-      border-bottom: 1px solid #e5e7eb;
-    }
-
-    .close-btn {
-      border: none;
-      background: transparent;
-      font-size: 34px;
-      line-height: 1;
-      cursor: pointer;
-      color: #4b5563;
-    }
-
-    .modal-body {
-      padding: 22px;
-      max-height: 75vh;
-      overflow: auto;
-    }
-
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 18px 22px;
-    }
-
-    .full {
-      grid-column: 1 / -1;
-    }
-
-    .form-group label {
-      display: block;
-      margin-bottom: 8px;
-      font-weight: 700;
-      font-size: 15px;
-      color: #374151;
-    }
-
-    .modal-footer {
-      padding: 16px 22px;
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      border-top: 1px solid #e5e7eb;
-      background: #ffffff;
-    }
-
-    .detail-title {
-      text-align: center;
-      font-size: 22px;
-      font-weight: 800;
-      margin-bottom: 24px;
-      letter-spacing: 0.5px;
-    }
-
-    .detail-table td,
-    .detail-table th {
-      border: 1px solid #d1d5db;
-      padding: 14px 12px;
-    }
-
-    .detail-table th {
-      width: 230px;
-      background: #f9fafb;
-      font-weight: 700;
-    }
-
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f3f4f6; color: #1f2937; }
+    .app { display: flex; min-height: 100vh; }
+    .sidebar { width: 320px; background: #183b68; color: #ffffff; padding: 0; flex-shrink: 0; }
+    .sidebar-top { padding: 28px 22px 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+    .brand { font-size: 20px; font-weight: 700; margin-bottom: 8px; line-height: 1.35; }
+    .brand-sub { font-size: 14px; color: rgba(255,255,255,0.82); }
+    .menu { padding: 18px 0; }
+    .menu-item { padding: 16px 22px; font-size: 16px; display: flex; align-items: center; gap: 12px; color: #ffffff; text-decoration: none; border-left: 4px solid transparent; }
+    .menu-item:hover { background: rgba(255,255,255,0.08); }
+    .menu-item.active { background: #f5b301; color: #ffffff; font-weight: 700; }
+    .main { flex: 1; padding: 28px; }
+    .topbar { background: #ffffff; border-radius: 16px; padding: 20px 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; gap: 16px; }
+    .topbar-title { font-size: 20px; font-weight: 700; }
+    .topbar-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .date-pill { background: #2563eb; color: #ffffff; border-radius: 8px; padding: 10px 14px; font-weight: 700; font-size: 14px; }
+    .section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; gap: 16px; flex-wrap: wrap; }
+    .section-title { font-size: 20px; font-weight: 700; }
+    .section-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+    .btn { border: none; border-radius: 10px; padding: 12px 18px; font-size: 15px; font-weight: 700; cursor: pointer; transition: 0.2s ease; }
+    .btn:hover { opacity: 0.92; }
+    .btn-primary { background: #2563eb; color: #ffffff; }
+    .btn-info { background: #06b6d4; color: #ffffff; }
+    .btn-warning { background: #f5b301; color: #1f2937; }
+    .btn-secondary { background: #6b7280; color: #ffffff; }
+    .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; margin-bottom: 24px; }
+    .card { background: #ffffff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); min-height: 150px; }
+    .card-icon { width: 56px; height: 56px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 26px; margin-bottom: 20px; }
+    .icon-yellow { background: #fef3c7; }
+    .icon-blue { background: #dbeafe; }
+    .icon-green { background: #dcfce7; }
+    .icon-gray { background: #e5e7eb; }
+    .card-number { font-size: 40px; font-weight: 700; margin-bottom: 8px; }
+    .card-label { font-size: 16px; color: #6b7280; }
+    .panel { background: #ffffff; border-radius: 16px; padding: 22px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-bottom: 24px; }
+    .filters { display: grid; grid-template-columns: 200px 1fr 1fr 1.2fr 180px; gap: 16px; align-items: center; }
+    input, select, textarea { width: 100%; border: 1px solid #d1d5db; border-radius: 10px; padding: 13px 14px; font-size: 15px; outline: none; background: #ffffff; }
+    textarea { resize: vertical; min-height: 96px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 16px 12px; font-size: 15px; color: #111827; border-bottom: 1px solid #e5e7eb; }
+    td { padding: 16px 12px; border-bottom: 1px solid #e5e7eb; font-size: 15px; vertical-align: middle; }
+    .complaint-no { font-weight: 700; }
+    .badge { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+    .badge-source { background: #6b7280; color: #ffffff; }
+    .badge-open { background: #fef3c7; color: #92400e; }
+    .badge-review { background: #dbeafe; color: #1d4ed8; }
+    .badge-deadline { background: #fde68a; color: #92400e; }
+    .badge-closed { background: #dcfce7; color: #166534; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .icon-btn { border: none; width: 38px; height: 38px; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; color: #ffffff; }
+    .view-btn { background: #06b6d4; }
+    .edit-btn { background: #f5b301; color: #1f2937; }
+    .delete-btn { background: #ef4444; }
+    .empty-note { padding: 24px 8px 8px 8px; color: #6b7280; font-size: 15px; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.45); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 999; }
+    .modal-overlay.show { display: flex; }
+    .modal { width: 100%; max-width: 900px; background: #ffffff; border-radius: 18px; overflow: hidden; box-shadow: 0 20px 45px rgba(0,0,0,0.18); }
+    .modal-header { background: #f5b301; padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; font-size: 18px; font-weight: 700; color: #1f2937; }
+    .modal-header.white { background: #ffffff; border-bottom: 1px solid #e5e7eb; }
+    .close-btn { border: none; background: transparent; font-size: 34px; line-height: 1; cursor: pointer; color: #4b5563; }
+    .modal-body { padding: 22px; max-height: 75vh; overflow: auto; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 22px; }
+    .full { grid-column: 1 / -1; }
+    .form-group label { display: block; margin-bottom: 8px; font-weight: 700; font-size: 15px; color: #374151; }
+    .modal-footer { padding: 16px 22px; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #e5e7eb; background: #ffffff; }
+    .detail-title { text-align: center; font-size: 22px; font-weight: 800; margin-bottom: 24px; letter-spacing: 0.5px; }
+    .detail-table td, .detail-table th { border: 1px solid #d1d5db; padding: 14px 12px; }
+    .detail-table th { width: 230px; background: #f9fafb; font-weight: 700; }
     @media (max-width: 1200px) {
-      .cards {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .filters {
-        grid-template-columns: 1fr 1fr;
-      }
+      .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .filters { grid-template-columns: 1fr 1fr; }
     }
-
     @media (max-width: 900px) {
-      .app {
-        flex-direction: column;
-      }
-
-      .sidebar {
-        width: 100%;
-      }
-
-      .form-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .filters {
-        grid-template-columns: 1fr;
-      }
-
-      .cards {
-        grid-template-columns: 1fr;
-      }
-
-      .main {
-        padding: 16px;
-      }
-
-      .panel {
-        overflow-x: auto;
-      }
-
-      table {
-        min-width: 780px;
-      }
+      .app { flex-direction: column; }
+      .sidebar { width: 100%; }
+      .form-grid { grid-template-columns: 1fr; }
+      .filters { grid-template-columns: 1fr; }
+      .cards { grid-template-columns: 1fr; }
+      .main { padding: 16px; }
+      .panel { overflow-x: auto; }
+      table { min-width: 780px; }
     }
   </style>
 </head>
 <body>
   <div class="app">
-   <aside class="sidebar">
-  <div class="sidebar-top">
-    <div class="brand">🛡️ Zabıta Yönetim Sistemi</div>
-    <div class="brand-sub">Zabıta Yönetim Paneli</div>
-  </div>
-
-  <nav class="menu">
-    <a href="#" class="menu-item">🏠 Ana Sayfa</a>
-    <a href="#" class="menu-item active">💬 Şikayet Takip Sistemi</a>
-  </nav>
-</aside>
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <div class="brand">🛡️ Zabıta Yönetim Sistemi</div>
+        <div class="brand-sub">Zabıta Yönetim Paneli</div>
+      </div>
+      <nav class="menu">
+        <a href="#" class="menu-item">🏠 Ana Sayfa</a>
+        <a href="#" class="menu-item active">💬 Şikayet Takip Sistemi</a>
+      </nav>
+    </aside>
 
     <main class="main">
       <div class="topbar">
@@ -519,7 +300,7 @@ app.get("/", (req, res) => {
         <div class="topbar-actions">
           <button class="btn btn-secondary">☾</button>
           <button class="btn btn-primary">⤓ Yedekle</button>
-          <div class="date-pill">25 Mart 2026 Çarşamba</div>
+          <div class="date-pill" id="todayText"></div>
         </div>
       </div>
 
@@ -537,19 +318,16 @@ app.get("/", (req, res) => {
           <div class="card-number" id="openCount">0</div>
           <div class="card-label">Açık Şikayetler</div>
         </div>
-
         <div class="card">
           <div class="card-icon icon-blue">🕒</div>
           <div class="card-number" id="reviewCount">0</div>
           <div class="card-label">İnceleniyor / Süreli</div>
         </div>
-
         <div class="card">
           <div class="card-icon icon-green">✔</div>
           <div class="card-number" id="closedCount">0</div>
           <div class="card-label">Kapanan</div>
         </div>
-
         <div class="card">
           <div class="card-icon icon-gray">📋</div>
           <div class="card-number" id="totalCount">0</div>
@@ -605,24 +383,20 @@ app.get("/", (req, res) => {
         <span>Yeni Şikayet Ekle</span>
         <button class="close-btn" onclick="closeModal('newModal')">&times;</button>
       </div>
-
       <div class="modal-body">
         <div class="form-grid">
           <div class="form-group">
             <label>Şikayet No</label>
             <input type="text" id="newNo" placeholder="Otomatik oluşturulacak" disabled />
           </div>
-
           <div class="form-group">
             <label>Tarih *</label>
             <input type="date" id="newDate" />
           </div>
-
           <div class="form-group">
             <label>Şikayet Konusu *</label>
             <input type="text" id="newSubject" placeholder="Örn: Gürültü, Çöp, vb." />
           </div>
-
           <div class="form-group">
             <label>Şikayet Kaynağı *</label>
             <select id="newSource">
@@ -633,17 +407,14 @@ app.get("/", (req, res) => {
               <option value="Vatandaş Talebi">Vatandaş Talebi</option>
             </select>
           </div>
-
           <div class="form-group full">
             <label>Şikayet Adresi</label>
             <textarea id="newAddress" placeholder="Şikayetin yapıldığı adres"></textarea>
           </div>
-
           <div class="form-group full">
             <label>Şikayet Detayı</label>
             <textarea id="newDetail" placeholder="Şikayet detayını buraya yazın..."></textarea>
           </div>
-
           <div class="form-group">
             <label>Yapılan İşlem</label>
             <select id="newAction">
@@ -655,7 +426,6 @@ app.get("/", (req, res) => {
               <option value="Süre Verildi">Süre Verildi</option>
             </select>
           </div>
-
           <div class="form-group">
             <label>Durum *</label>
             <select id="newStatus">
@@ -665,14 +435,12 @@ app.get("/", (req, res) => {
               <option value="Kapatıldı">Kapatıldı</option>
             </select>
           </div>
-
           <div class="form-group full">
             <label>İşlem Açıklaması / Notlar</label>
             <textarea id="newNote" placeholder="Yapılan işlemle ilgili ek notlar..."></textarea>
           </div>
         </div>
       </div>
-
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('newModal')">İptal</button>
         <button class="btn btn-warning" onclick="saveNewComplaint()">Kaydet</button>
@@ -686,14 +454,12 @@ app.get("/", (req, res) => {
         <span>Şikayet Detayı</span>
         <button class="close-btn" onclick="closeModal('detailModal')">&times;</button>
       </div>
-
       <div class="modal-body">
         <div class="detail-title">ŞİKAYET DETAYI</div>
         <table class="detail-table">
           <tbody id="detailTableBody"></tbody>
         </table>
       </div>
-
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('detailModal')">Kapat</button>
         <button class="btn btn-primary" onclick="window.print()">🖨 Yazdır / PDF</button>
@@ -707,24 +473,20 @@ app.get("/", (req, res) => {
         <span>Şikayet Düzenle</span>
         <button class="close-btn" onclick="closeModal('editModal')">&times;</button>
       </div>
-
       <div class="modal-body">
         <div class="form-grid">
           <div class="form-group">
             <label>Şikayet No</label>
             <input type="text" id="editNo" disabled />
           </div>
-
           <div class="form-group">
             <label>Tarih *</label>
             <input type="date" id="editDate" />
           </div>
-
           <div class="form-group">
             <label>Şikayet Konusu *</label>
             <input type="text" id="editSubject" />
           </div>
-
           <div class="form-group">
             <label>Şikayet Kaynağı *</label>
             <select id="editSource">
@@ -734,17 +496,14 @@ app.get("/", (req, res) => {
               <option value="Vatandaş Talebi">Vatandaş Talebi</option>
             </select>
           </div>
-
           <div class="form-group full">
             <label>Şikayet Adresi</label>
             <textarea id="editAddress"></textarea>
           </div>
-
           <div class="form-group full">
             <label>Şikayet Detayı</label>
             <textarea id="editDetail"></textarea>
           </div>
-
           <div class="form-group">
             <label>Yapılan İşlem</label>
             <select id="editAction">
@@ -756,7 +515,6 @@ app.get("/", (req, res) => {
               <option value="Süre Verildi">Süre Verildi</option>
             </select>
           </div>
-
           <div class="form-group">
             <label>Durum *</label>
             <select id="editStatus">
@@ -766,14 +524,12 @@ app.get("/", (req, res) => {
               <option value="Kapatıldı">Kapatıldı</option>
             </select>
           </div>
-
           <div class="form-group full">
             <label>İşlem Açıklaması / Notlar</label>
             <textarea id="editNote"></textarea>
           </div>
         </div>
       </div>
-
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('editModal')">İptal</button>
         <button class="btn btn-warning" onclick="saveEditComplaint()">Kaydet</button>
@@ -782,49 +538,29 @@ app.get("/", (req, res) => {
   </div>
 
   <script>
-    var complaints = [
-      {
-        no: "ŞKY-2026-0001",
-        date: "2026-03-24",
-        displayDate: "24.03.2026",
-        subject: "Gürültü",
-        source: "CİMER",
-        address: "Sanayi mahallesi",
-        detail: "X kişi evinde horoz besliyor, sesten rahatsızlık oluşuyor.",
-        action: "İhtar Verildi",
-        status: "Kapatıldı",
-        note: "-",
-        createdAt: "24.03.2026 20:29:10"
-      },
-      {
-        no: "ŞKY-2026-0002",
-        date: "2026-03-25",
-        displayDate: "25.03.2026",
-        subject: "Çöp",
-        source: "Şeffaf Masa",
-        address: "Yeni mahalle pazar arkası",
-        detail: "Boş alana gelişigüzel atık bırakıldığı bildirildi.",
-        action: "Henüz İşlem Yapılmadı",
-        status: "Açık",
-        note: "",
-        createdAt: "25.03.2026 09:12:00"
-      },
-      {
-        no: "ŞKY-2026-0003",
-        date: "2026-03-25",
-        displayDate: "25.03.2026",
-        subject: "İşgal",
-        source: "Vatandaş Talebi",
-        address: "Cumhuriyet caddesi",
-        detail: "Kaldırım üzerine malzeme bırakıldığı bildirildi.",
-        action: "Süre Verildi",
-        status: "Süre Verildi",
-        note: "Esnafa 2 gün süre verildi.",
-        createdAt: "25.03.2026 10:40:00"
-      }
-    ];
+    var complaints = [];
+    var editingId = null;
 
-    var editingIndex = -1;
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return "";
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function setTodayText() {
+      var now = new Date();
+      var text = new Intl.DateTimeFormat("tr-TR", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        weekday: "long"
+      }).format(now);
+      document.getElementById("todayText").textContent = text;
+    }
 
     function getStatusBadge(status) {
       if (status === "Açık") {
@@ -840,7 +576,7 @@ app.get("/", (req, res) => {
     }
 
     function sourceBadge(source) {
-      return '<span class="badge badge-source">' + source + '</span>';
+      return '<span class="badge badge-source">' + escapeHtml(source) + '</span>';
     }
 
     function updateCards(data) {
@@ -862,6 +598,25 @@ app.get("/", (req, res) => {
       document.getElementById("reviewCount").textContent = reviewCount;
       document.getElementById("closedCount").textContent = closedCount;
       document.getElementById("totalCount").textContent = data.length;
+    }
+
+    function getComplaintById(id) {
+      for (var i = 0; i < complaints.length; i++) {
+        if (complaints[i].id === id) {
+          return complaints[i];
+        }
+      }
+      return null;
+    }
+
+    async function loadComplaints() {
+      try {
+        var response = await fetch("/api/complaints");
+        complaints = await response.json();
+        renderTable();
+      } catch (error) {
+        alert("Kayıtlar yüklenemedi.");
+      }
     }
 
     function renderTable() {
@@ -897,21 +652,19 @@ app.get("/", (req, res) => {
       var rows = "";
       for (var i = 0; i < filtered.length; i++) {
         var item = filtered[i];
-        var realIndex = complaints.findIndex(function(c) { return c.no === item.no; });
-
-        rows += '<tr>';
-        rows += '<td class="complaint-no">' + item.no + '</td>';
-        rows += '<td>' + item.displayDate + '</td>';
-        rows += '<td>' + item.subject + '</td>';
+        rows += "<tr>";
+        rows += '<td class="complaint-no">' + escapeHtml(item.no) + '</td>';
+        rows += '<td>' + escapeHtml(item.displayDate) + '</td>';
+        rows += '<td>' + escapeHtml(item.subject) + '</td>';
         rows += '<td>' + sourceBadge(item.source) + '</td>';
         rows += '<td>' + getStatusBadge(item.status) + '</td>';
-        rows += '<td>' + item.action + '</td>';
+        rows += '<td>' + escapeHtml(item.action) + '</td>';
         rows += '<td><div class="actions">';
-        rows += '<button class="icon-btn view-btn" onclick="openDetail(' + realIndex + ')">👁</button>';
-        rows += '<button class="icon-btn edit-btn" onclick="openEdit(' + realIndex + ')">✎</button>';
-        rows += '<button class="icon-btn delete-btn" onclick="deleteComplaint(' + realIndex + ')">🗑</button>';
+        rows += '<button class="icon-btn view-btn" onclick="openDetail(' + item.id + ')">👁</button>';
+        rows += '<button class="icon-btn edit-btn" onclick="openEdit(' + item.id + ')">✎</button>';
+        rows += '<button class="icon-btn delete-btn" onclick="deleteComplaint(' + item.id + ')">🗑</button>';
         rows += '</div></td>';
-        rows += '</tr>';
+        rows += "</tr>";
       }
 
       tbody.innerHTML = rows;
@@ -934,29 +687,7 @@ app.get("/", (req, res) => {
       document.getElementById(id).classList.remove("show");
     }
 
-    function formatDisplayDate(dateStr) {
-      if (!dateStr) return "";
-      var parts = dateStr.split("-");
-      return parts[2] + "." + parts[1] + "." + parts[0];
-    }
-
-    function nextComplaintNo() {
-      var next = complaints.length + 1;
-      return "ŞKY-2026-" + String(next).padStart(4, "0");
-    }
-
-    function nowText() {
-      var d = new Date();
-      var gun = String(d.getDate()).padStart(2, "0");
-      var ay = String(d.getMonth() + 1).padStart(2, "0");
-      var yil = d.getFullYear();
-      var saat = String(d.getHours()).padStart(2, "0");
-      var dakika = String(d.getMinutes()).padStart(2, "0");
-      var saniye = String(d.getSeconds()).padStart(2, "0");
-      return gun + "." + ay + "." + yil + " " + saat + ":" + dakika + ":" + saniye;
-    }
-
-    function saveNewComplaint() {
+    async function saveNewComplaint() {
       var date = document.getElementById("newDate").value;
       var subject = document.getElementById("newSubject").value.trim();
       var source = document.getElementById("newSource").value;
@@ -971,44 +702,56 @@ app.get("/", (req, res) => {
         return;
       }
 
-      complaints.unshift({
-        no: nextComplaintNo(),
-        date: date,
-        displayDate: formatDisplayDate(date),
-        subject: subject,
-        source: source,
-        address: address,
-        detail: detail,
-        action: action,
-        status: status,
-        note: note,
-        createdAt: nowText()
-      });
+      try {
+        var response = await fetch("/api/complaints", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date: date,
+            subject: subject,
+            source: source,
+            address: address,
+            detail: detail,
+            action: action,
+            status: status,
+            note: note
+          })
+        });
 
-      closeModal("newModal");
-      renderTable();
+        if (!response.ok) {
+          throw new Error();
+        }
+
+        closeModal("newModal");
+        await loadComplaints();
+      } catch (error) {
+        alert("Kayıt eklenemedi.");
+      }
     }
 
-    function openDetail(index) {
-      var item = complaints[index];
+    function openDetail(id) {
+      var item = getComplaintById(id);
+      if (!item) return;
+
       var html = "";
-      html += "<tr><th>Şikayet No</th><td>" + item.no + "</td></tr>";
-      html += "<tr><th>Tarih</th><td>" + item.displayDate + "</td></tr>";
-      html += "<tr><th>Konu</th><td><strong>" + item.subject + "</strong></td></tr>";
-      html += "<tr><th>Kaynak</th><td>" + item.source + "</td></tr>";
-      html += "<tr><th>Adres</th><td>" + item.address + "</td></tr>";
+      html += "<tr><th>Şikayet No</th><td>" + escapeHtml(item.no) + "</td></tr>";
+      html += "<tr><th>Tarih</th><td>" + escapeHtml(item.displayDate) + "</td></tr>";
+      html += "<tr><th>Konu</th><td><strong>" + escapeHtml(item.subject) + "</strong></td></tr>";
+      html += "<tr><th>Kaynak</th><td>" + escapeHtml(item.source) + "</td></tr>";
+      html += "<tr><th>Adres</th><td>" + escapeHtml(item.address) + "</td></tr>";
       html += "<tr><th>Durum</th><td>" + getStatusBadge(item.status) + "</td></tr>";
-      html += "<tr><th>Detay</th><td>" + item.detail + "</td></tr>";
-      html += "<tr><th>Yapılan İşlem</th><td>" + item.action + "</td></tr>";
-      html += "<tr><th>İşlem Açıklaması</th><td>" + (item.note || "-") + "</td></tr>";
-      html += "<tr><th>Kayıt Tarihi</th><td>" + item.createdAt + "</td></tr>";
+      html += "<tr><th>Detay</th><td>" + escapeHtml(item.detail) + "</td></tr>";
+      html += "<tr><th>Yapılan İşlem</th><td>" + escapeHtml(item.action) + "</td></tr>";
+      html += "<tr><th>İşlem Açıklaması</th><td>" + escapeHtml(item.note || "-") + "</td></tr>";
+      html += "<tr><th>Kayıt Tarihi</th><td>" + escapeHtml(item.createdAt) + "</td></tr>";
       document.getElementById("detailTableBody").innerHTML = html;
       document.getElementById("detailModal").classList.add("show");
     }
 
-    function openEdit(index) {
-      editingIndex = index;
-      var item = complaints[index];
+    function openEdit(id) {
+      editingId = id;
+      var item = getComplaintById(id);
+      if (!item) return;
 
       document.getElementById("editNo").value = item.no;
       document.getElementById("editDate").value = item.date;
@@ -1019,42 +762,75 @@ app.get("/", (req, res) => {
       document.getElementById("editAction").value = item.action;
       document.getElementById("editStatus").value = item.status;
       document.getElementById("editNote").value = item.note;
-
       document.getElementById("editModal").classList.add("show");
     }
 
-    function saveEditComplaint() {
-      if (editingIndex < 0) return;
+    async function saveEditComplaint() {
+      if (!editingId) return;
 
-      var item = complaints[editingIndex];
-      item.date = document.getElementById("editDate").value;
-      item.displayDate = formatDisplayDate(item.date);
-      item.subject = document.getElementById("editSubject").value.trim();
-      item.source = document.getElementById("editSource").value;
-      item.address = document.getElementById("editAddress").value.trim();
-      item.detail = document.getElementById("editDetail").value.trim();
-      item.action = document.getElementById("editAction").value;
-      item.status = document.getElementById("editStatus").value;
-      item.note = document.getElementById("editNote").value.trim();
+      try {
+        var response = await fetch("/api/complaints/" + editingId, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date: document.getElementById("editDate").value,
+            subject: document.getElementById("editSubject").value.trim(),
+            source: document.getElementById("editSource").value,
+            address: document.getElementById("editAddress").value.trim(),
+            detail: document.getElementById("editDetail").value.trim(),
+            action: document.getElementById("editAction").value,
+            status: document.getElementById("editStatus").value,
+            note: document.getElementById("editNote").value.trim()
+          })
+        });
 
-      closeModal("editModal");
-      renderTable();
+        if (!response.ok) {
+          throw new Error();
+        }
+
+        closeModal("editModal");
+        await loadComplaints();
+      } catch (error) {
+        alert("Kayıt güncellenemedi.");
+      }
     }
 
-    function deleteComplaint(index) {
-      var item = complaints[index];
+    async function deleteComplaint(id) {
+      var item = getComplaintById(id);
+      if (!item) return;
+
       var ok = confirm(item.no + " numaralı kaydı silmek istiyor musunuz?");
       if (!ok) return;
-      complaints.splice(index, 1);
-      renderTable();
+
+      try {
+        var response = await fetch("/api/complaints/" + id, {
+          method: "DELETE"
+        });
+
+        if (!response.ok) {
+          throw new Error();
+        }
+
+        await loadComplaints();
+      } catch (error) {
+        alert("Kayıt silinemedi.");
+      }
     }
 
-    renderTable();
+    setTodayText();
+    loadComplaints();
   </script>
 </body>
 </html>`);
 });
 
-app.listen(PORT, () => {
-  console.log("Sunucu çalışıyor: " + PORT);
-});
+initDb()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log("Sunucu çalışıyor: " + PORT);
+    });
+  })
+  .catch((error) => {
+    console.error("Veritabanı başlatılamadı:", error);
+    process.exit(1);
+  });
