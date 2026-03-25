@@ -854,8 +854,13 @@ function renderControlAlerts() {
 
     for (var j = 0; j < overdue.length; j++) {
       html += '<div style="background:#fee2e2; border:1px solid #fecaca; border-radius:12px; padding:12px 14px; margin-bottom:10px;">';
+      html += '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">';
+      html += '<div>';
       html += '<div style="font-weight:700;">' + escapeHtml(overdue[j].no) + ' - ' + escapeHtml(overdue[j].subject) + '</div>';
       html += '<div style="margin-top:4px; color:#7f1d1d;">Kontrol Tarihi: ' + escapeHtml(overdue[j].controlDateText || "-") + '</div>';
+      html += '</div>';
+      html += '<button class="btn btn-danger" onclick="openDetail(' + overdue[j].id + ')">İlgili Kayda Git</button>';
+      html += '</div>';
       html += "</div>";
     }
 
@@ -868,8 +873,13 @@ function renderControlAlerts() {
 
     for (var k = 0; k < dueToday.length; k++) {
       html += '<div style="background:#fef3c7; border:1px solid #fde68a; border-radius:12px; padding:12px 14px; margin-bottom:10px;">';
+      html += '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">';
+      html += '<div>';
       html += '<div style="font-weight:700;">' + escapeHtml(dueToday[k].no) + ' - ' + escapeHtml(dueToday[k].subject) + '</div>';
       html += '<div style="margin-top:4px; color:#92400e;">Kontrol Tarihi: ' + escapeHtml(dueToday[k].controlDateText || "-") + '</div>';
+      html += '</div>';
+      html += '<button class="btn btn-warning" onclick="openDetail(' + dueToday[k].id + ')">İlgili Kayda Git</button>';
+      html += '</div>';
       html += "</div>";
     }
 
