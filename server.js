@@ -440,28 +440,43 @@ app.get("/", (req, res) => {
         </div>
       </div>
 
-      <section class="cards">
-        <div class="card">
-          <div class="card-icon icon-yellow">📁</div>
-          <div class="card-number" id="openCount">0</div>
-          <div class="card-label">Açık Şikayetler</div>
-        </div>
-        <div class="card">
-          <div class="card-icon icon-blue">🕒</div>
-          <div class="card-number" id="reviewCount">0</div>
-          <div class="card-label">İnceleniyor / Süreli</div>
-        </div>
-        <div class="card">
-          <div class="card-icon icon-green">✔</div>
-          <div class="card-number" id="closedCount">0</div>
-          <div class="card-label">Kapanan</div>
-        </div>
-        <div class="card">
-          <div class="card-icon icon-gray">📋</div>
-          <div class="card-number" id="totalCount">0</div>
-          <div class="card-label">Toplam Şikayet</div>
-        </div>
-      </section>
+     <section class="cards">
+  <div class="card">
+    <div class="card-icon icon-yellow">📁</div>
+    <div class="card-number" id="openCount">0</div>
+    <div class="card-label">Açık Şikayetler</div>
+  </div>
+
+  <div class="card">
+    <div class="card-icon icon-blue">🕒</div>
+    <div class="card-number" id="reviewCount">0</div>
+    <div class="card-label">İnceleniyor / Süreli</div>
+  </div>
+
+  <div class="card">
+    <div class="card-icon icon-green">✔</div>
+    <div class="card-number" id="closedCount">0</div>
+    <div class="card-label">Kapanan</div>
+  </div>
+
+  <div class="card">
+    <div class="card-icon icon-gray">📋</div>
+    <div class="card-number" id="totalCount">0</div>
+    <div class="card-label">Toplam Şikayet</div>
+  </div>
+
+  <div class="card">
+    <div class="card-icon icon-blue">📆</div>
+    <div class="card-number" id="dueTodayCount">0</div>
+    <div class="card-label">Bugün Kontrol</div>
+  </div>
+
+  <div class="card">
+    <div class="card-icon icon-yellow">⚠</div>
+    <div class="card-number" id="overdueCount">0</div>
+    <div class="card-label">Geciken</div>
+  </div>
+</section>
 
       <section class="panel">
       <section class="panel" id="controlAlertsPanel" style="display:none;">
