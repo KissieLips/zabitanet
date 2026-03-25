@@ -354,40 +354,41 @@ app.get("/", (req, res) => {
     .btn-danger { background: #ef4444; color: #ffffff; }
     .cards {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .card {
   background: #ffffff;
-  border-radius: 14px;
-  padding: 18px;
+  border-radius: 12px;
+  padding: 14px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-  min-height: 120px;
+  min-height: 96px;
 }
     .card-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: 12px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
-  margin-bottom: 14px;
+  font-size: 18px;
+  margin-bottom: 10px;
 }
     .icon-yellow { background: #fef3c7; }
     .icon-blue { background: #dbeafe; }
     .icon-green { background: #dcfce7; }
     .icon-gray { background: #e5e7eb; }
     .card-number {
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 700;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
-    ..card-label {
-  font-size: 14px;
+    .card-label {
+  font-size: 12px;
   color: #6b7280;
+  line-height: 1.3;
 }
     .panel { background: #ffffff; border-radius: 16px; padding: 22px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-bottom: 24px; }
     .filters { display: grid; grid-template-columns: 200px 1fr 1fr 1.2fr 180px; gap: 16px; align-items: center; }
@@ -427,7 +428,7 @@ app.get("/", (req, res) => {
     .detail-table td, .detail-table th { border: 1px solid #d1d5db; padding: 14px 12px; }
     .detail-table th { width: 230px; background: #f9fafb; font-weight: 700; }
     @media (max-width: 1200px) {
-      .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .filters { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 900px) {
