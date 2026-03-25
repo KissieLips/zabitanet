@@ -758,25 +758,38 @@ app.get("/", (req, res) => {
     }
 
     function updateCards(data) {
-      var openCount = 0;
-      var reviewCount = 0;
-      var closedCount = 0;
+  var openCount = 0;
+  var reviewCount = 0;
+  var closedCount = 0;
+  var dueTodayCount = 0;
+  var overdueCount = 0;
+  var today = todayInputDate();
 
-      for (var i = 0; i < data.length; i++) {
-        if (data[i].status === "Açık") {
-          openCount++;
-        } else if (data[i].status === "İnceleniyor" || data[i].status === "Süre Verildi") {
-          reviewCount++;
-        } else if (data[i].status === "Kapatıldı") {
-          closedCount++;
-        }
-      }
-
-      document.getElementById("openCount").textContent = openCount;
-      document.getElementById("reviewCount").textContent = reviewCount;
-      document.getElementById("closedCount").textContent = closedCount;
-      document.getElementById("totalCount").textContent = data.length;
+  for (var i = 0; i < data.length; i++) {
+    if (data[i].status === "Açık") {
+      openCount++;
+    } else if (data[i].status === "İnceleniyor" || data[i].status === "Süre Verildi") {
+      reviewCount++;
+    } else if (data[i].status === "Kapatıldı") {
+      closedCount++;
     }
+
+    if (data[i].status === "Süre Verildi" && data[i].controlDate) {
+      if (data[i].controlDate === today) {
+        dueTodayCount++;
+      } else if (data[i].controlDate < today) {
+        overdueCount++;
+      }
+    }
+  }
+
+  document.getElementById("openCount").textContent = openCount;
+  document.getElementById("reviewCount").textContent = reviewCount;
+  document.getElementById("closedCount").textContent = closedCount;
+  document.getElementById("totalCount").textContent = data.length;
+  document.getElementById("dueTodayCount").textContent = dueTodayCount;
+  document.getElementById("overdueCount").textContent = overdueCount;
+}
 function renderControlAlerts() {
   var panel = document.getElementById("controlAlertsPanel");
   var list = document.getElementById("controlAlertsList");
