@@ -352,15 +352,43 @@ app.get("/", (req, res) => {
     .btn-warning { background: #f5b301; color: #1f2937; }
     .btn-secondary { background: #6b7280; color: #ffffff; }
     .btn-danger { background: #ef4444; color: #ffffff; }
-    .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; margin-bottom: 24px; }
-    .card { background: #ffffff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); min-height: 150px; }
-    .card-icon { width: 56px; height: 56px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 26px; margin-bottom: 20px; }
+    .cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  min-height: 120px;
+}
+    .card-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin-bottom: 14px;
+}
     .icon-yellow { background: #fef3c7; }
     .icon-blue { background: #dbeafe; }
     .icon-green { background: #dcfce7; }
     .icon-gray { background: #e5e7eb; }
-    .card-number { font-size: 40px; font-weight: 700; margin-bottom: 8px; }
-    .card-label { font-size: 16px; color: #6b7280; }
+    .card-number {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+    ..card-label {
+  font-size: 14px;
+  color: #6b7280;
+}
     .panel { background: #ffffff; border-radius: 16px; padding: 22px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-bottom: 24px; }
     .filters { display: grid; grid-template-columns: 200px 1fr 1fr 1.2fr 180px; gap: 16px; align-items: center; }
     input, select, textarea { width: 100%; border: 1px solid #d1d5db; border-radius: 10px; padding: 13px 14px; font-size: 15px; outline: none; background: #ffffff; }
