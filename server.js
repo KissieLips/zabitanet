@@ -366,6 +366,15 @@ app.get("/", (req, res) => {
   box-shadow: 0 2px 12px rgba(0,0,0,0.06);
   min-height: 96px;
 }
+.card.active-card {
+  border: 2px solid #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.card.active-card-warning {
+  border: 2px solid #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
     .card-icon {
   width: 38px;
   height: 38px;
