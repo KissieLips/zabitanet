@@ -1050,26 +1050,27 @@ function renderControlAlerts() {
     }
 
     function openDetail(id) {
-      var item = getComplaintById(id);
-      if (!item) return;
+  var item = getComplaintById(id);
+  if (!item) return;
 
-      var html = "";
-      html += "<tr><th>Şikayet No</th><td>" + escapeHtml(item.no) + "</td></tr>";
-      html += "<tr><th>Tarih</th><td>" + escapeHtml(item.displayDate) + "</td></tr>";
-      html += "<tr><th>Konu</th><td><strong>" + escapeHtml(item.subject) + "</strong></td></tr>";
-      html += "<tr><th>Kaynak</th><td>" + escapeHtml(item.source) + "</td></tr>";
-      html += "<tr><th>Adres</th><td>" + escapeHtml(item.address) + "</td></tr>";
-      html += "<tr><th>Durum</th><td>" + getStatusBadge(item) + "</td></tr>";
-      html += "<tr><th>Detay</th><td>" + escapeHtml(item.detail) + "</td></tr>";
-      html += "<tr><th>Yapılan İşlem</th><td>" + escapeHtml(item.action) + "</td></tr>";
-      html += "<tr><th>İşlem Açıklaması</th><td>" + escapeHtml(item.note || "-") + "</td></tr>";
-      html += "<tr><th>İşlem Tarihi</th><td>" + escapeHtml(item.processDateText || "-") + "</td></tr>";
-      html += "<tr><th>Kontrol Tarihi</th><td>" + escapeHtml(item.controlDateText || "-") + "</td></tr>";
-      html += "<tr><th>Kapatma Tarihi</th><td>" + escapeHtml(item.closedDateText || "-") + "</td></tr>";
-      html += "<tr><th>Kayıt Tarihi</th><td>" + escapeHtml(item.createdAt) + "</td></tr>";
-      document.getElementById("detailTableBody").innerHTML = html;
-      document.getElementById("detailModal").classList.add("show");
-    }
+  var html = "";
+  html += "<tr><th>Şikayet No</th><td>" + escapeHtml(item.no) + "</td></tr>";
+  html += "<tr><th>Konu</th><td><strong>" + escapeHtml(item.subject) + "</strong></td></tr>";
+  html += "<tr><th>Kaynak</th><td>" + escapeHtml(item.source) + "</td></tr>";
+  html += "<tr><th>Adres</th><td>" + escapeHtml(item.address) + "</td></tr>";
+  html += "<tr><th>Durum</th><td>" + getStatusBadge(item) + "</td></tr>";
+  html += "<tr><th>Yapılan İşlem</th><td>" + escapeHtml(item.action) + "</td></tr>";
+  html += "<tr><th>Detay</th><td>" + escapeHtml(item.detail) + "</td></tr>";
+  html += "<tr><th>İşlem Açıklaması</th><td>" + escapeHtml(item.note || "-") + "</td></tr>";
+  html += "<tr><th>Kayıt Tarihi</th><td><strong>" + escapeHtml(item.displayDate || "-") + "</strong></td></tr>";
+  html += "<tr><th>İşlem Tarihi</th><td><strong>" + escapeHtml(item.processDateText || "-") + "</strong></td></tr>";
+  html += "<tr><th>Kontrol Tarihi</th><td><strong>" + escapeHtml(item.controlDateText || "-") + "</strong></td></tr>";
+  html += "<tr><th>Kapatma Tarihi</th><td><strong>" + escapeHtml(item.closedDateText || "-") + "</strong></td></tr>";
+  html += "<tr><th>Sisteme Kayıt Zamanı</th><td>" + escapeHtml(item.createdAt) + "</td></tr>";
+
+  document.getElementById("detailTableBody").innerHTML = html;
+  document.getElementById("detailModal").classList.add("show");
+}
 
     function openEdit(id) {
       editingId = id;
