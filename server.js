@@ -725,7 +725,7 @@ app.get("/", (req, res) => {
   </div>
 
   <script>
-    var complaints = [];
+        var complaints = [];
     var editingId = null;
     var activeAlertType = "";
 
@@ -788,168 +788,39 @@ app.get("/", (req, res) => {
     }
 
     function updateCards(data) {
-  var openCount = 0;
-  var reviewCount = 0;
-  var closedCount = 0;
-  var dueTodayCount = 0;
-  var overdueCount = 0;
-  var today = todayInputDate();
+      var openCount = 0;
+      var reviewCount = 0;
+      var closedCount = 0;
+      var dueTodayCount = 0;
+      var overdueCount = 0;
+      var today = todayInputDate();
 
-  for (var i = 0; i < data.length; i++) {
-    if (data[i].status === "Açık") {
-      openCount++;
-    } else if (data[i].status === "İnceleniyor" || data[i].status === "Süre Verildi") {
-      reviewCount++;
-    } else if (data[i].status === "Kapatıldı") {
-      closedCount++;
-    }
+      for (var i = 0; i < data.length; i++) {
+        if (data[i].status === "Açık") {
+          openCount++;
+        } else if (data[i].status === "İnceleniyor" || data[i].status === "Süre Verildi") {
+          reviewCount++;
+        } else if (data[i].status === "Kapatıldı") {
+          closedCount++;
+        }
 
-    if (data[i].status === "Süre Verildi" && data[i].controlDate) {
-      if (data[i].controlDate === today) {
-        dueTodayCount++;
-      } else if (data[i].controlDate < today) {
-        overdueCount++;
+        if (data[i].status === "Süre Verildi" && data[i].controlDate) {
+          if (data[i].controlDate === today) {
+            dueTodayCount++;
+          } else if (data[i].controlDate < today) {
+            overdueCount++;
+          }
+        }
       }
-    }
-  }
 
-  document.getElementById("openCount").textContent = openCount;
-  document.getElementById("reviewCount").textContent = reviewCount;
-  document.getElementById("closedCount").textContent = closedCount;
-  document.getElementById("totalCount").textContent = data.length;
-  document.getElementById("dueTodayCount").textContent = dueTodayCount;
-  document.getElementById("overdueCount").textContent = overdueCount;
-}
-function renderControlAlerts() {
-  var panel = document.getElementById("controlAlertsPanel");
-  var list = document.getElementById("controlAlertsList");
-  var today = todayInputDate();
-
-  var dueToday = [];
-  var overdue = [];
-
-  for (var i = 0; i < complaints.length; i++) {
-    var item = complaints[i];
-
-    if (item.status === "Süre Verildi" && item.controlDate) {
-      if (item.controlDate === today) {
-        dueToday.push(item);
-      } else if (item.controlDate < today) {
-        overdue.push(item);
-      }
-    }
-  }
-
-  if (!activeAlertType) {
-    panel.style.display = "none";
-    list.innerHTML = "";
-    return;
-  }
-
-  var html = "";
-
-  if (activeAlertType === "overdue") {
-    if (overdue.length === 0) {
-      html = '<div style="color:#6b7280;">Geciken kontrol kaydı bulunmuyor.</div>';
-    } else {
-      html += '<div style="font-size:18px; font-weight:700; color:#b91c1c; margin-bottom:14px;">Geciken Kontroller</div>';
-
-      for (var j = 0; j < overdue.length; j++) {
-        html += '<div style="background:#fee2e2; border:1px solid #fecaca; border-radius:12px; padding:12px 14px; margin-bottom:10px;">';
-        html += '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">';
-        html += '<div>';
-        html += '<div style="font-weight:700;">' + escapeHtml(overdue[j].no) + ' - ' + escapeHtml(overdue[j].subject) + '</div>';
-        html += '<div style="margin-top:4px; color:#7f1d1d;">Kontrol Tarihi: ' + escapeHtml(overdue[j].controlDateText || "-") + '</div>';
-        html += '</div>';
-        html += '<button class="btn btn-danger" onclick="openDetail(' + overdue[j].id + ')">İlgili Kayda Git</button>';
-        html += '</div>';
-        html += '</div>';
-      }
-    }
-  }
-
-  if (activeAlertType === "today") {
-    if (dueToday.length === 0) {
-      html = '<div style="color:#6b7280;">Bugün kontrol edilecek kayıt bulunmuyor.</div>';
-    } else {
-      html += '<div style="font-size:18px; font-weight:700; color:#92400e; margin-bottom:14px;">Bugün Kontrol Edilecekler</div>';
-
-      for (var k = 0; k < dueToday.length; k++) {
-        html += '<div style="background:#fef3c7; border:1px solid #fde68a; border-radius:12px; padding:12px 14px; margin-bottom:10px;">';
-        html += '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">';
-        html += '<div>';
-        html += '<div style="font-weight:700;">' + escapeHtml(dueToday[k].no) + ' - ' + escapeHtml(dueToday[k].subject) + '</div>';
-        html += '<div style="margin-top:4px; color:#92400e;">Kontrol Tarihi: ' + escapeHtml(dueToday[k].controlDateText || "-") + '</div>';
-        html += '</div>';
-        html += '<button class="btn btn-warning" onclick="openDetail(' + dueToday[k].id + ')">İlgili Kayda Git</button>';
-        html += '</div>';
-        html += '</div>';
-      }
-    }
-  }
-function toggleAlertPanel(type) {
-  if (activeAlertType === type) {
-    activeAlertType = "";
-  } else {
-    activeAlertType = type;
-  }
-
-  renderControlAlerts();
-}
-  panel.style.display = "block";
-  list.innerHTML = html;
-}
-
-  if (dueToday.length === 0 && overdue.length === 0) {
-    panel.style.display = "none";
-    list.innerHTML = "";
-    return;
-  }
-
-  panel.style.display = "block";
-
-  var html = "";
-
-  if (overdue.length > 0) {
-    html += '<div style="margin-bottom:16px;">';
-    html += '<div style="font-weight:700; color:#b91c1c; margin-bottom:10px;">Geciken Kontroller</div>';
-
-    for (var j = 0; j < overdue.length; j++) {
-      html += '<div style="background:#fee2e2; border:1px solid #fecaca; border-radius:12px; padding:12px 14px; margin-bottom:10px;">';
-      html += '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">';
-      html += '<div>';
-      html += '<div style="font-weight:700;">' + escapeHtml(overdue[j].no) + ' - ' + escapeHtml(overdue[j].subject) + '</div>';
-      html += '<div style="margin-top:4px; color:#7f1d1d;">Kontrol Tarihi: ' + escapeHtml(overdue[j].controlDateText || "-") + '</div>';
-      html += '</div>';
-      html += '<button class="btn btn-danger" onclick="openDetail(' + overdue[j].id + ')">İlgili Kayda Git</button>';
-      html += '</div>';
-      html += "</div>";
+      document.getElementById("openCount").textContent = openCount;
+      document.getElementById("reviewCount").textContent = reviewCount;
+      document.getElementById("closedCount").textContent = closedCount;
+      document.getElementById("totalCount").textContent = data.length;
+      document.getElementById("dueTodayCount").textContent = dueTodayCount;
+      document.getElementById("overdueCount").textContent = overdueCount;
     }
 
-    html += "</div>";
-  }
-
-  if (dueToday.length > 0) {
-    html += '<div>';
-    html += '<div style="font-weight:700; color:#92400e; margin-bottom:10px;">Bugün Kontrol Edilecekler</div>';
-
-    for (var k = 0; k < dueToday.length; k++) {
-      html += '<div style="background:#fef3c7; border:1px solid #fde68a; border-radius:12px; padding:12px 14px; margin-bottom:10px;">';
-      html += '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">';
-      html += '<div>';
-      html += '<div style="font-weight:700;">' + escapeHtml(dueToday[k].no) + ' - ' + escapeHtml(dueToday[k].subject) + '</div>';
-      html += '<div style="margin-top:4px; color:#92400e;">Kontrol Tarihi: ' + escapeHtml(dueToday[k].controlDateText || "-") + '</div>';
-      html += '</div>';
-      html += '<button class="btn btn-warning" onclick="openDetail(' + dueToday[k].id + ')">İlgili Kayda Git</button>';
-      html += '</div>';
-      html += "</div>";
-    }
-
-    html += "</div>";
-  }
-
-  list.innerHTML = html;
-}
     function getComplaintById(id) {
       for (var i = 0; i < complaints.length; i++) {
         if (complaints[i].id === id) {
@@ -994,6 +865,88 @@ function toggleAlertPanel(type) {
       }
     }
 
+    function renderControlAlerts() {
+      var panel = document.getElementById("controlAlertsPanel");
+      var list = document.getElementById("controlAlertsList");
+      var today = todayInputDate();
+
+      var dueToday = [];
+      var overdue = [];
+
+      for (var i = 0; i < complaints.length; i++) {
+        var item = complaints[i];
+
+        if (item.status === "Süre Verildi" && item.controlDate) {
+          if (item.controlDate === today) {
+            dueToday.push(item);
+          } else if (item.controlDate < today) {
+            overdue.push(item);
+          }
+        }
+      }
+
+      if (!activeAlertType) {
+        panel.style.display = "none";
+        list.innerHTML = "";
+        return;
+      }
+
+      var html = "";
+
+      if (activeAlertType === "overdue") {
+        if (overdue.length === 0) {
+          html = '<div style="color:#6b7280;">Geciken kontrol kaydı bulunmuyor.</div>';
+        } else {
+          html += '<div style="font-size:18px; font-weight:700; color:#b91c1c; margin-bottom:14px;">Geciken Kontroller</div>';
+
+          for (var j = 0; j < overdue.length; j++) {
+            html += '<div style="background:#fee2e2; border:1px solid #fecaca; border-radius:12px; padding:12px 14px; margin-bottom:10px;">';
+            html += '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">';
+            html += '<div>';
+            html += '<div style="font-weight:700;">' + escapeHtml(overdue[j].no) + ' - ' + escapeHtml(overdue[j].subject) + '</div>';
+            html += '<div style="margin-top:4px; color:#7f1d1d;">Kontrol Tarihi: ' + escapeHtml(overdue[j].controlDateText || "-") + '</div>';
+            html += '</div>';
+            html += '<button class="btn btn-danger" onclick="openDetail(' + overdue[j].id + ')">İlgili Kayda Git</button>';
+            html += '</div>';
+            html += '</div>';
+          }
+        }
+      }
+
+      if (activeAlertType === "today") {
+        if (dueToday.length === 0) {
+          html = '<div style="color:#6b7280;">Bugün kontrol edilecek kayıt bulunmuyor.</div>';
+        } else {
+          html += '<div style="font-size:18px; font-weight:700; color:#92400e; margin-bottom:14px;">Bugün Kontrol Edilecekler</div>';
+
+          for (var k = 0; k < dueToday.length; k++) {
+            html += '<div style="background:#fef3c7; border:1px solid #fde68a; border-radius:12px; padding:12px 14px; margin-bottom:10px;">';
+            html += '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">';
+            html += '<div>';
+            html += '<div style="font-weight:700;">' + escapeHtml(dueToday[k].no) + ' - ' + escapeHtml(dueToday[k].subject) + '</div>';
+            html += '<div style="margin-top:4px; color:#92400e;">Kontrol Tarihi: ' + escapeHtml(dueToday[k].controlDateText || "-") + '</div>';
+            html += '</div>';
+            html += '<button class="btn btn-warning" onclick="openDetail(' + dueToday[k].id + ')">İlgili Kayda Git</button>';
+            html += '</div>';
+            html += '</div>';
+          }
+        }
+      }
+
+      panel.style.display = "block";
+      list.innerHTML = html;
+    }
+
+    function toggleAlertPanel(type) {
+      if (activeAlertType === type) {
+        activeAlertType = "";
+      } else {
+        activeAlertType = type;
+      }
+
+      renderControlAlerts();
+    }
+
     function renderTable() {
       var tbody = document.getElementById("complaintTableBody");
       var emptyNote = document.getElementById("emptyNote");
@@ -1014,8 +967,9 @@ function toggleAlertPanel(type) {
         return dateMatch && sourceMatch && statusMatch && searchMatch;
       });
 
-      updateCards(filtered);
+      updateCards(complaints);
       renderControlAlerts();
+
       if (filtered.length === 0) {
         tbody.innerHTML = "";
         emptyNote.style.display = "block";
@@ -1112,27 +1066,27 @@ function toggleAlertPanel(type) {
     }
 
     function openDetail(id) {
-  var item = getComplaintById(id);
-  if (!item) return;
+      var item = getComplaintById(id);
+      if (!item) return;
 
-  var html = "";
-  html += "<tr><th>Şikayet No</th><td>" + escapeHtml(item.no) + "</td></tr>";
-  html += "<tr><th>Konu</th><td><strong>" + escapeHtml(item.subject) + "</strong></td></tr>";
-  html += "<tr><th>Kaynak</th><td>" + escapeHtml(item.source) + "</td></tr>";
-  html += "<tr><th>Adres</th><td>" + escapeHtml(item.address) + "</td></tr>";
-  html += "<tr><th>Durum</th><td>" + getStatusBadge(item) + "</td></tr>";
-  html += "<tr><th>Yapılan İşlem</th><td>" + escapeHtml(item.action) + "</td></tr>";
-  html += "<tr><th>Detay</th><td>" + escapeHtml(item.detail) + "</td></tr>";
-  html += "<tr><th>İşlem Açıklaması</th><td>" + escapeHtml(item.note || "-") + "</td></tr>";
-  html += "<tr><th>Kayıt Tarihi</th><td><strong>" + escapeHtml(item.displayDate || "-") + "</strong></td></tr>";
-  html += "<tr><th>İşlem Tarihi</th><td><strong>" + escapeHtml(item.processDateText || "-") + "</strong></td></tr>";
-  html += "<tr><th>Kontrol Tarihi</th><td><strong>" + escapeHtml(item.controlDateText || "-") + "</strong></td></tr>";
-  html += "<tr><th>Kapatma Tarihi</th><td><strong>" + escapeHtml(item.closedDateText || "-") + "</strong></td></tr>";
-  html += "<tr><th>Sisteme Kayıt Zamanı</th><td>" + escapeHtml(item.createdAt) + "</td></tr>";
+      var html = "";
+      html += "<tr><th>Şikayet No</th><td>" + escapeHtml(item.no) + "</td></tr>";
+      html += "<tr><th>Konu</th><td><strong>" + escapeHtml(item.subject) + "</strong></td></tr>";
+      html += "<tr><th>Kaynak</th><td>" + escapeHtml(item.source) + "</td></tr>";
+      html += "<tr><th>Adres</th><td>" + escapeHtml(item.address) + "</td></tr>";
+      html += "<tr><th>Durum</th><td>" + getStatusBadge(item) + "</td></tr>";
+      html += "<tr><th>Yapılan İşlem</th><td>" + escapeHtml(item.action) + "</td></tr>";
+      html += "<tr><th>Detay</th><td>" + escapeHtml(item.detail) + "</td></tr>";
+      html += "<tr><th>İşlem Açıklaması</th><td>" + escapeHtml(item.note || "-") + "</td></tr>";
+      html += "<tr><th>Kayıt Tarihi</th><td><strong>" + escapeHtml(item.displayDate || "-") + "</strong></td></tr>";
+      html += "<tr><th>İşlem Tarihi</th><td><strong>" + escapeHtml(item.processDateText || "-") + "</strong></td></tr>";
+      html += "<tr><th>Kontrol Tarihi</th><td><strong>" + escapeHtml(item.controlDateText || "-") + "</strong></td></tr>";
+      html += "<tr><th>Kapatma Tarihi</th><td><strong>" + escapeHtml(item.closedDateText || "-") + "</strong></td></tr>";
+      html += "<tr><th>Sisteme Kayıt Zamanı</th><td>" + escapeHtml(item.createdAt) + "</td></tr>";
 
-  document.getElementById("detailTableBody").innerHTML = html;
-  document.getElementById("detailModal").classList.add("show");
-}
+      document.getElementById("detailTableBody").innerHTML = html;
+      document.getElementById("detailModal").classList.add("show");
+    }
 
     function openEdit(id) {
       editingId = id;
