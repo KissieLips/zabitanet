@@ -727,6 +727,7 @@ app.get("/", (req, res) => {
   <script>
     var complaints = [];
     var editingId = null;
+    var activeAlertType = "";
 
     function escapeHtml(value) {
       if (value === null || value === undefined) return "";
@@ -838,6 +839,66 @@ function renderControlAlerts() {
       }
     }
   }
+
+  if (!activeAlertType) {
+    panel.style.display = "none";
+    list.innerHTML = "";
+    return;
+  }
+
+  var html = "";
+
+  if (activeAlertType === "overdue") {
+    if (overdue.length === 0) {
+      html = '<div style="color:#6b7280;">Geciken kontrol kaydı bulunmuyor.</div>';
+    } else {
+      html += '<div style="font-size:18px; font-weight:700; color:#b91c1c; margin-bottom:14px;">Geciken Kontroller</div>';
+
+      for (var j = 0; j < overdue.length; j++) {
+        html += '<div style="background:#fee2e2; border:1px solid #fecaca; border-radius:12px; padding:12px 14px; margin-bottom:10px;">';
+        html += '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">';
+        html += '<div>';
+        html += '<div style="font-weight:700;">' + escapeHtml(overdue[j].no) + ' - ' + escapeHtml(overdue[j].subject) + '</div>';
+        html += '<div style="margin-top:4px; color:#7f1d1d;">Kontrol Tarihi: ' + escapeHtml(overdue[j].controlDateText || "-") + '</div>';
+        html += '</div>';
+        html += '<button class="btn btn-danger" onclick="openDetail(' + overdue[j].id + ')">İlgili Kayda Git</button>';
+        html += '</div>';
+        html += '</div>';
+      }
+    }
+  }
+
+  if (activeAlertType === "today") {
+    if (dueToday.length === 0) {
+      html = '<div style="color:#6b7280;">Bugün kontrol edilecek kayıt bulunmuyor.</div>';
+    } else {
+      html += '<div style="font-size:18px; font-weight:700; color:#92400e; margin-bottom:14px;">Bugün Kontrol Edilecekler</div>';
+
+      for (var k = 0; k < dueToday.length; k++) {
+        html += '<div style="background:#fef3c7; border:1px solid #fde68a; border-radius:12px; padding:12px 14px; margin-bottom:10px;">';
+        html += '<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">';
+        html += '<div>';
+        html += '<div style="font-weight:700;">' + escapeHtml(dueToday[k].no) + ' - ' + escapeHtml(dueToday[k].subject) + '</div>';
+        html += '<div style="margin-top:4px; color:#92400e;">Kontrol Tarihi: ' + escapeHtml(dueToday[k].controlDateText || "-") + '</div>';
+        html += '</div>';
+        html += '<button class="btn btn-warning" onclick="openDetail(' + dueToday[k].id + ')">İlgili Kayda Git</button>';
+        html += '</div>';
+        html += '</div>';
+      }
+    }
+  }
+function toggleAlertPanel(type) {
+  if (activeAlertType === type) {
+    activeAlertType = "";
+  } else {
+    activeAlertType = type;
+  }
+
+  renderControlAlerts();
+}
+  panel.style.display = "block";
+  list.innerHTML = html;
+}
 
   if (dueToday.length === 0 && overdue.length === 0) {
     panel.style.display = "none";
