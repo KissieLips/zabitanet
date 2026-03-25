@@ -946,15 +946,29 @@ app.get("/", (req, res) => {
       list.innerHTML = html;
     }
 
-    function toggleAlertPanel(type) {
-      if (activeAlertType === type) {
-        activeAlertType = "";
-      } else {
-        activeAlertType = type;
-      }
+   function toggleAlertPanel(type) {
+  var dueTodayCard = document.getElementById("dueTodayCard");
+  var overdueCard = document.getElementById("overdueCard");
 
-      renderControlAlerts();
-    }
+  if (activeAlertType === type) {
+    activeAlertType = "";
+  } else {
+    activeAlertType = type;
+  }
+
+  dueTodayCard.classList.remove("active-card");
+  overdueCard.classList.remove("active-card-warning");
+
+  if (activeAlertType === "today") {
+    dueTodayCard.classList.add("active-card");
+  }
+
+  if (activeAlertType === "overdue") {
+    overdueCard.classList.add("active-card-warning");
+  }
+
+  renderControlAlerts();
+}
 
     function renderTable() {
       var tbody = document.getElementById("complaintTableBody");
