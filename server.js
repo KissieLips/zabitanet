@@ -494,17 +494,17 @@ app.get("/", (req, res) => {
     <div class="card-label">Toplam Şikayet</div>
   </div>
 
-  <div class="card">
-    <div class="card-icon icon-blue">📆</div>
-    <div class="card-number" id="dueTodayCount">0</div>
-    <div class="card-label">Bugün Kontrol</div>
-  </div>
+  <div class="card" id="dueTodayCard" onclick="toggleAlertPanel('today')" style="cursor:pointer;">
+  <div class="card-icon icon-blue">📆</div>
+  <div class="card-number" id="dueTodayCount">0</div>
+  <div class="card-label">Bugün Kontrol</div>
+</div>
 
-  <div class="card">
-    <div class="card-icon icon-yellow">⚠</div>
-    <div class="card-number" id="overdueCount">0</div>
-    <div class="card-label">Geciken</div>
-  </div>
+  <div class="card" id="overdueCard" onclick="toggleAlertPanel('overdue')" style="cursor:pointer;">
+  <div class="card-icon icon-yellow">⚠</div>
+  <div class="card-number" id="overdueCount">0</div>
+  <div class="card-label">Geciken</div>
+</div>
 </section>
 
       <section class="panel">
