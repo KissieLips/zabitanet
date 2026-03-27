@@ -153,6 +153,28 @@ function mapComplaintFile(row) {
   };
 }
 
+function mapInspection(row) {
+  return {
+    id: row.id,
+    no: row.inspection_no,
+    date: toInputDate(row.inspection_date),
+    displayDate: formatDate(row.inspection_date),
+    businessName: row.business_name,
+    authorityName: row.authority_name || "",
+    phone: row.phone || "",
+    address: row.address || "",
+    activitySubject: row.activity_subject || "",
+    inspectionType: row.inspection_type || "",
+    findings: row.findings || "",
+    action: row.action_taken || "",
+    resultStatus: row.result_status || "",
+    note: row.note || "",
+    controlDate: toInputDate(row.control_date),
+    controlDateText: formatDate(row.control_date),
+    createdAt: formatDateTime(row.created_at),
+  };
+}
+
 function safeUnlink(filePath) {
   try {
     if (filePath && fs.existsSync(filePath)) {
@@ -218,6 +240,31 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_complaint_files_complaint_id
     ON complaint_files(complaint_id)
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS inspections (
+      id SERIAL PRIMARY KEY,
+      inspection_no VARCHAR(30) UNIQUE NOT NULL,
+      inspection_date DATE NOT NULL,
+      business_name VARCHAR(255) NOT NULL,
+      authority_name VARCHAR(255),
+      phone VARCHAR(40),
+      address TEXT,
+      activity_subject VARCHAR(255),
+      inspection_type VARCHAR(100) NOT NULL DEFAULT 'Rutin Denetim',
+      findings TEXT,
+      action_taken VARCHAR(150) NOT NULL DEFAULT 'Denetim Yapıldı',
+      result_status VARCHAR(50) NOT NULL DEFAULT 'Uygun',
+      note TEXT,
+      control_date DATE,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_inspections_control_date
+    ON inspections(control_date)
+  `);
 }
 
 async function nextComplaintNo() {
@@ -238,6 +285,26 @@ async function nextComplaintNo() {
   }
 
   return "ŞKY-" + currentYear + "-" + String(nextNumber).padStart(4, "0");
+}
+
+async function nextInspectionNo() {
+  const currentYear = new Date().getFullYear();
+  const result = await pool.query(
+    "SELECT inspection_no FROM inspections WHERE inspection_no LIKE $1 ORDER BY id DESC LIMIT 1",
+    ["DNT-" + currentYear + "-%"]
+  );
+
+  let nextNumber = 1;
+
+  if (result.rows.length > 0) {
+    const lastNo = result.rows[0].inspection_no || "";
+    const match = lastNo.match(/(\d+)$/);
+    if (match) {
+      nextNumber = Number(match[1]) + 1;
+    }
+  }
+
+  return "DNT-" + currentYear + "-" + String(nextNumber).padStart(4, "0");
 }
 
 app.get("/api/complaints", async (req, res) => {
@@ -546,6 +613,184 @@ app.delete("/api/complaint-files/:fileId", async (req, res) => {
   }
 });
 
+app.get("/api/inspections", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM inspections ORDER BY id DESC");
+    res.json(result.rows.map(mapInspection));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Denetim kayıtları alınamadı." });
+  }
+});
+
+app.post("/api/inspections", async (req, res) => {
+  try {
+    const {
+      date,
+      businessName,
+      authorityName,
+      phone,
+      address,
+      activitySubject,
+      inspectionType,
+      findings,
+      action,
+      resultStatus,
+      note,
+      controlDate,
+    } = req.body;
+
+    if (!date || !businessName) {
+      return res.status(400).json({ error: "Zorunlu alanları doldurun." });
+    }
+
+    const inspectionNo = await nextInspectionNo();
+    const finalInspectionType = inspectionType || "Rutin Denetim";
+    const finalAction = action || "Denetim Yapıldı";
+    const finalResultStatus = resultStatus || "Uygun";
+    const finalControlDate = finalResultStatus === "Süre Verildi" ? (controlDate || null) : null;
+
+    const result = await pool.query(
+      `
+        INSERT INTO inspections
+          (
+            inspection_no,
+            inspection_date,
+            business_name,
+            authority_name,
+            phone,
+            address,
+            activity_subject,
+            inspection_type,
+            findings,
+            action_taken,
+            result_status,
+            note,
+            control_date
+          )
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        RETURNING *
+      `,
+      [
+        inspectionNo,
+        date,
+        businessName,
+        authorityName || "",
+        phone || "",
+        address || "",
+        activitySubject || "",
+        finalInspectionType,
+        findings || "",
+        finalAction,
+        finalResultStatus,
+        note || "",
+        finalControlDate,
+      ]
+    );
+
+    res.json(mapInspection(result.rows[0]));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Denetim kaydı eklenemedi." });
+  }
+});
+
+app.put("/api/inspections/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      date,
+      businessName,
+      authorityName,
+      phone,
+      address,
+      activitySubject,
+      inspectionType,
+      findings,
+      action,
+      resultStatus,
+      note,
+      controlDate,
+    } = req.body;
+
+    if (!date || !businessName) {
+      return res.status(400).json({ error: "Zorunlu alanları doldurun." });
+    }
+
+    const existingResult = await pool.query("SELECT * FROM inspections WHERE id = $1", [id]);
+
+    if (existingResult.rows.length === 0) {
+      return res.status(404).json({ error: "Denetim kaydı bulunamadı." });
+    }
+
+    const existing = existingResult.rows[0];
+    const finalInspectionType = inspectionType || "Rutin Denetim";
+    const finalAction = action || "Denetim Yapıldı";
+    const finalResultStatus = resultStatus || "Uygun";
+    const finalControlDate =
+      finalResultStatus === "Süre Verildi"
+        ? (controlDate || toInputDate(existing.control_date) || null)
+        : null;
+
+    const result = await pool.query(
+      `
+        UPDATE inspections
+        SET
+          inspection_date = $1,
+          business_name = $2,
+          authority_name = $3,
+          phone = $4,
+          address = $5,
+          activity_subject = $6,
+          inspection_type = $7,
+          findings = $8,
+          action_taken = $9,
+          result_status = $10,
+          note = $11,
+          control_date = $12
+        WHERE id = $13
+        RETURNING *
+      `,
+      [
+        date,
+        businessName,
+        authorityName || "",
+        phone || "",
+        address || "",
+        activitySubject || "",
+        finalInspectionType,
+        findings || "",
+        finalAction,
+        finalResultStatus,
+        note || "",
+        finalControlDate,
+        id,
+      ]
+    );
+
+    res.json(mapInspection(result.rows[0]));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Denetim kaydı güncellenemedi." });
+  }
+});
+
+app.delete("/api/inspections/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query("DELETE FROM inspections WHERE id = $1", [id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Denetim kaydı silinemedi." });
+  }
+});
+
+app.get("/inspections", (req, res) => {
+  res.sendFile(path.join(__dirname, "inspection-page.html"));
+});
+
 app.get("/", (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="tr">
@@ -731,10 +976,10 @@ app.get("/", (req, res) => {
       </div>
       <nav class="menu">
         <div class="nav-section-title">Genel</div>
-        <a href="#" class="menu-item"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
+        <a href="/" class="menu-item"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
         <div class="nav-section-title">Modüller</div>
-        <a href="#" class="menu-item active"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span></a>
-        <a href="#" class="menu-item"><span class="menu-left"><span>🧾</span><span>İşyeri Denetim</span></span></a>
+        <a href="/" class="menu-item active"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span></a>
+        <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>İşyeri Denetim</span></span></a>
       </nav>
     </aside>
     <main class="main">

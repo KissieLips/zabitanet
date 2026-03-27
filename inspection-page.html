@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zabıta Yönetim Sistemi - İşyeri Denetim</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --panel-soft: #f8fafc;
+      --line: #dbe3ee;
+      --line-strong: #c7d2df;
+      --text: #17202f;
+      --muted: #667085;
+      --navy: #163a63;
+      --navy-2: #1f4c81;
+      --accent: #f5b301;
+      --primary: #2563eb;
+      --danger: #dc2626;
+      --success: #16a34a;
+      --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; font-family: Inter, "Segoe UI", Arial, Helvetica, sans-serif; background: #f3f6fa; color: var(--text); -webkit-font-smoothing: antialiased; }
+    .app { min-height: 100vh; display: grid; grid-template-columns: 208px minmax(0, 1fr); }
+    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #ffffff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 0; height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); z-index: 40; }
+    .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.16); }
+    .brand { font-size: 14px; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; }
+    .menu { display: flex; flex-direction: column; gap: 4px; }
+    .nav-section-title { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.42); margin-top: 6px; margin-bottom: 2px; padding: 0 2px; font-weight: 700; }
+    .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border-radius: 10px; font-size: 12.5px; text-decoration: none; color: rgba(255,255,255,0.84); transition: 0.18s ease; border: 1px solid transparent; font-weight: 500; }
+    .menu-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.08); }
+    .menu-item.active { background: rgba(255,255,255,0.08); color: #ffffff; border-color: rgba(255,255,255,0.1); font-weight: 600; }
+    .menu-left { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+    .sidebar-toggle { display: none; margin-bottom: 14px; border: 1px solid var(--line); background: #ffffff; color: var(--text); border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 700; box-shadow: var(--shadow); cursor: pointer; }
+    .sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); z-index: 30; }
+    .main { padding: 18px 20px; min-width: 0; }
+    .hero { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+    .hero-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .hero-title { margin: 0; font-size: 26px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 700; }
+    .hero-text { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.55; max-width: 760px; }
+    .hero-side { display: flex; align-items: center; gap: 10px; justify-content: flex-end; min-width: 260px; flex: 1; }
+    .date-card { background: #f8fafc; color: var(--text); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; border: 1px solid var(--line); min-width: 210px; }
+    .date-card span { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
+    .date-card strong { font-size: 13px; line-height: 1.35; font-weight: 700; }
+    .section-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+    .btn { border: none; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease; box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06); }
+    .btn:hover { transform: translateY(-1px); opacity: 0.96; }
+    .btn-primary { background: var(--primary); color: #ffffff; }
+    .btn-info { background: #0f172a; color: #ffffff; }
+    .btn-warning { background: var(--accent); color: #1f2937; }
+    .btn-secondary { background: #64748b; color: #ffffff; }
+    .btn-danger { background: var(--danger); color: #ffffff; }
+    .critical-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+    .critical-card { border: 1px solid var(--line); border-radius: 13px; padding: 12px 13px; background: #ffffff; box-shadow: var(--shadow); cursor: pointer; text-align: left; display: grid; gap: 5px; transition: 0.18s ease; width: 100%; }
+    .critical-card.today { background: linear-gradient(135deg, #fffdf6 0%, #ffffff 100%); }
+    .critical-card.overdue { background: linear-gradient(135deg, #fffafa 0%, #ffffff 100%); }
+    .critical-card.active-card { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.14); }
+    .critical-card.active-card-warning { border-color: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14); }
+    .critical-topline { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .critical-title { font-size: 12px; font-weight: 700; }
+    .critical-icon { width: 30px; height: 30px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 14px; background: rgba(255,255,255,0.78); border: 1px solid rgba(148, 163, 184, 0.16); }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+    .card { border: 1px solid var(--line); border-radius: 13px; padding: 14px; background: #ffffff; box-shadow: var(--shadow); display: grid; gap: 8px; }
+    .card-icon { width: 36px; height: 36px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 17px; }
+    .icon-yellow { background: #fff7da; }
+    .icon-blue { background: #dbeafe; }
+    .icon-green { background: #dcfce7; }
+    .icon-gray { background: #e5e7eb; }
+    .card-number { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+    .card-label { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+    .panel { border: 1px solid var(--line); border-radius: 14px; background: #ffffff; box-shadow: var(--shadow); padding: 14px 16px; margin-bottom: 10px; }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .panel-title { font-size: 18px; font-weight: 700; }
+    .filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+    input, select, textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: 10px; padding: 11px 12px; font-size: 13px; color: var(--text); background: #ffffff; outline: none; }
+    input:focus, select:focus, textarea:focus { border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(147,197,253,0.25); }
+    textarea { min-height: 110px; resize: vertical; }
+    .table-wrap { width: 100%; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 960px; }
+    th, td { padding: 12px 10px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: top; }
+    th { text-align: left; color: var(--muted); font-size: 12px; font-weight: 700; }
+    .empty-note { color: var(--muted); font-size: 13px; padding: 8px 0 2px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+    .badge-open { background: #fef3c7; color: #92400e; }
+    .badge-review { background: #dbeafe; color: #1d4ed8; }
+    .badge-success { background: #dcfce7; color: #166534; }
+    .badge-danger { background: #fee2e2; color: #991b1b; }
+    .badge-gray { background: #e5e7eb; color: #374151; }
+    .actions { display: flex; gap: 6px; }
+    .icon-btn { border: none; width: 34px; height: 34px; border-radius: 10px; cursor: pointer; font-size: 14px; color: #ffffff; }
+    .view-btn { background: #0891b2; }
+    .edit-btn { background: #2563eb; }
+    .delete-btn { background: #dc2626; }
+    .record-no { font-weight: 700; color: #0f172a; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 100; backdrop-filter: blur(3px); }
+    .modal-overlay.show { display: flex; }
+    .modal { width: min(1000px, 100%); max-height: calc(100vh - 40px); overflow: auto; background: #ffffff; border-radius: 22px; box-shadow: 0 24px 60px rgba(15,23,42,0.18); }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; border-bottom: 1px solid var(--line); font-size: 18px; font-weight: 700; }
+    .modal-body { padding: 18px 20px; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px 18px; border-top: 1px solid var(--line); }
+    .close-btn { width: 36px; height: 36px; border: none; border-radius: 10px; background: #f3f4f6; color: #111827; font-size: 20px; cursor: pointer; }
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .form-group { display: grid; gap: 7px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-group.hidden { display: none; }
+    .detail-title { font-size: 13px; font-weight: 800; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 12px; }
+    .detail-table { width: 100%; min-width: 0; border-collapse: collapse; }
+    .detail-table th { width: 220px; color: var(--muted); font-size: 12px; }
+    .alert-empty { color: var(--muted); font-size: 13px; padding: 4px 0; }
+    .alert-group-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+    .alert-group-title.today { color: #92400e; }
+    .alert-group-title.overdue { color: #b91c1c; }
+    .alert-list { display: grid; gap: 10px; }
+    .alert-item { border-radius: 10px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; border: 1px solid var(--line); background: #ffffff; }
+    .alert-item.today { border-left: 3px solid #d6a840; border-color: #ebdfb6; }
+    .alert-item.overdue { border-left: 3px solid #d64f4f; border-color: #f0d2d2; }
+    .alert-item-title { font-weight: 700; line-height: 1.45; margin-bottom: 3px; font-size: 12.5px; }
+    .alert-item-meta { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+    @media (max-width: 1280px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 980px) { .app { grid-template-columns: minmax(0, 1fr); } .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: min(84vw, 320px); height: 100vh; transform: translateX(-100%); transition: transform 0.2s ease; } body.sidebar-open .sidebar { transform: translateX(0); } body.sidebar-open .sidebar-backdrop { display: block; } .sidebar-toggle { display: inline-flex; align-items: center; gap: 8px; } .main { padding: 16px; } .hero { padding: 14px; border-radius: 16px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; justify-content: space-between; flex-wrap: wrap; } .critical-grid, .stats-grid, .form-grid, .filters { grid-template-columns: 1fr; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .detail-table th { width: 150px; } }
+    @media (max-width: 640px) { .main { padding: 14px; } .hero-title { font-size: 22px; } .panel-title { font-size: 17px; } .card, .critical-card { padding: 14px; } .section-actions { width: 100%; } .section-actions .btn { flex: 1; } table { min-width: 760px; } .date-card { min-width: 0; width: 100%; } }
+  </style>
+</head>
+<body>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <div class="brand-mark">ZY</div>
+        <div>
+          <div class="brand">Zabıta Yönetim Sistemi</div>
+        </div>
+      </div>
+      <nav class="menu">
+        <div class="nav-section-title">Genel</div>
+        <a href="/" class="menu-item"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
+        <div class="nav-section-title">Modüller</div>
+        <a href="/" class="menu-item"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span></a>
+        <a href="/inspections" class="menu-item active"><span class="menu-left"><span>🧾</span><span>İşyeri Denetim</span></span></a>
+      </nav>
+    </aside>
+    <main class="main">
+      <button class="sidebar-toggle" type="button" onclick="toggleSidebar()">☰ Menü</button>
+      <section class="hero">
+        <div class="hero-copy">
+          <h1 class="hero-title">İşyeri Denetim Modülü</h1>
+          <p class="hero-text">İşyeri denetim kayıtlarını oluşturabilir, eksik verilen işyerlerini takip edebilir ve yaklaşan kontrolleri tek ekranda görebilirsiniz.</p>
+        </div>
+        <div class="hero-side">
+          <div class="date-card"><span>Tarih</span><strong id="todayText"></strong></div>
+          <div class="section-actions">
+            <a href="/" class="btn btn-info" style="text-decoration:none;display:inline-flex;align-items:center;">💬 Şikayet Modülü</a>
+            <button class="btn btn-primary" type="button" onclick="openNewModal()">＋ Yeni Denetim</button>
+          </div>
+        </div>
+      </section>
+      <section class="critical-grid">
+        <button class="critical-card today" id="dueTodayCard" type="button" onclick="toggleAlertPanel('today')">
+          <div class="critical-topline"><div class="critical-title">Bugün Kontrol</div><div class="critical-icon">📆</div></div>
+          <div class="card-number" id="dueTodayCount">0</div>
+          <div class="card-label">Bugün tekrar kontrol edilmesi gereken işyerleri</div>
+        </button>
+        <button class="critical-card overdue" id="overdueCard" type="button" onclick="toggleAlertPanel('overdue')">
+          <div class="critical-topline"><div class="critical-title">Geciken Kontroller</div><div class="critical-icon">⚠</div></div>
+          <div class="card-number" id="overdueCount">0</div>
+          <div class="card-label">Kontrol tarihi geçmiş denetim kayıtları</div>
+        </button>
+      </section>
+      <section class="stats-grid">
+        <div class="card"><div class="card-icon icon-yellow">🟡</div><div class="card-number" id="missingCount">0</div><div class="card-label">Eksiklik tespit edilen / süre verilen kayıtlar</div></div>
+        <div class="card"><div class="card-icon icon-blue">📌</div><div class="card-number" id="actionCount">0</div><div class="card-label">İşlem uygulanan kayıtlar</div></div>
+        <div class="card"><div class="card-icon icon-green">✔</div><div class="card-number" id="okCount">0</div><div class="card-label">Uygun bulunan kayıtlar</div></div>
+        <div class="card"><div class="card-icon icon-gray">📋</div><div class="card-number" id="totalCount">0</div><div class="card-label">Toplam denetim kaydı</div></div>
+      </section>
+      <section class="panel" id="controlAlertsPanel" style="display:none;">
+        <div class="panel-header"><div class="panel-title">Kritik kontrol listesi</div></div>
+        <div id="controlAlertsList"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-header"><div class="panel-title">Kayıt filtreleri</div></div>
+        <div class="filters">
+          <input type="date" id="filterDate" />
+          <select id="filterType">
+            <option value="">Tüm Denetim Türleri</option>
+            <option value="Rutin Denetim">Rutin Denetim</option>
+            <option value="Ruhsat Kontrolü">Ruhsat Kontrolü</option>
+            <option value="Hijyen Denetimi">Hijyen Denetimi</option>
+            <option value="Fiyat Etiketi">Fiyat Etiketi</option>
+            <option value="İşgal Denetimi">İşgal Denetimi</option>
+            <option value="Şikayet Üzerine">Şikayet Üzerine</option>
+            <option value="Diğer">Diğer</option>
+          </select>
+          <select id="filterResultStatus">
+            <option value="">Tüm Sonuçlar</option>
+            <option value="Uygun">Uygun</option>
+            <option value="Eksiklik Tespit Edildi">Eksiklik Tespit Edildi</option>
+            <option value="Süre Verildi">Süre Verildi</option>
+            <option value="İşlem Uygulandı">İşlem Uygulandı</option>
+            <option value="Kapatıldı">Kapatıldı</option>
+          </select>
+          <input type="text" id="searchInput" placeholder="Denetim No veya işyeri ara..." />
+          <button class="btn btn-secondary" type="button" onclick="renderTable()">🔎 Filtrele</button>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="panel-header"><div class="panel-title">İşyeri denetim kayıtları</div></div>
+        <div class="table-wrap"><table><thead><tr><th>Denetim No</th><th>Tarih</th><th>İşyeri</th><th>Denetim Türü</th><th>Sonuç</th><th>Yapılan İşlem</th><th>İşlemler</th></tr></thead><tbody id="inspectionTableBody"></tbody></table></div>
+        <div id="emptyNote" class="empty-note" style="display:none;">Kayıt bulunamadı.</div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="newModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span>Yeni Denetim Ekle</span>
+        <button class="close-btn" onclick="closeModal('newModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Denetim No</label>
+            <input type="text" id="newNo" placeholder="Otomatik oluşturulacak" disabled />
+          </div>
+          <div class="form-group">
+            <label>Denetim Tarihi *</label>
+            <input type="date" id="newDate" />
+          </div>
+          <div class="form-group">
+            <label>İşyeri Ünvanı *</label>
+            <input type="text" id="newBusinessName" placeholder="Örn: Yıldız Market" />
+          </div>
+          <div class="form-group">
+            <label>Yetkili Kişi</label>
+            <input type="text" id="newAuthorityName" placeholder="Ad Soyad" />
+          </div>
+          <div class="form-group">
+            <label>Telefon</label>
+            <input type="text" id="newPhone" placeholder="05xx xxx xx xx" />
+          </div>
+          <div class="form-group">
+            <label>Faaliyet Konusu</label>
+            <input type="text" id="newActivitySubject" placeholder="Bakkal, kafe, kasap vb." />
+          </div>
+          <div class="form-group">
+            <label>Denetim Türü</label>
+            <select id="newInspectionType">
+              <option value="Rutin Denetim">Rutin Denetim</option>
+              <option value="Ruhsat Kontrolü">Ruhsat Kontrolü</option>
+              <option value="Hijyen Denetimi">Hijyen Denetimi</option>
+              <option value="Fiyat Etiketi">Fiyat Etiketi</option>
+              <option value="İşgal Denetimi">İşgal Denetimi</option>
+              <option value="Şikayet Üzerine">Şikayet Üzerine</option>
+              <option value="Diğer">Diğer</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Sonuç / Durum</label>
+            <select id="newResultStatus">
+              <option value="Uygun">Uygun</option>
+              <option value="Eksiklik Tespit Edildi">Eksiklik Tespit Edildi</option>
+              <option value="Süre Verildi">Süre Verildi</option>
+              <option value="İşlem Uygulandı">İşlem Uygulandı</option>
+              <option value="Kapatıldı">Kapatıldı</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Yapılan İşlem</label>
+            <select id="newAction">
+              <option value="Denetim Yapıldı">Denetim Yapıldı</option>
+              <option value="Bilgilendirme Yapıldı">Bilgilendirme Yapıldı</option>
+              <option value="Uyarı Yapıldı">Uyarı Yapıldı</option>
+              <option value="Süre Verildi">Süre Verildi</option>
+              <option value="Tutanak Düzenlendi">Tutanak Düzenlendi</option>
+              <option value="İdari Yaptırım Uygulandı">İdari Yaptırım Uygulandı</option>
+              <option value="Mühürleme Uygulandı">Mühürleme Uygulandı</option>
+            </select>
+          </div>
+          <div class="form-group hidden" id="newControlWrap">
+            <label>Kontrol Tarihi</label>
+            <input type="date" id="newControlDate" />
+          </div>
+          <div class="form-group full">
+            <label>Adres</label>
+            <textarea id="newAddress" placeholder="İşyeri adresi"></textarea>
+          </div>
+          <div class="form-group full">
+            <label>Tespit ve Bulgular</label>
+            <textarea id="newFindings" placeholder="Denetimde tespit edilen hususlar"></textarea>
+          </div>
+          <div class="form-group full">
+            <label>Notlar</label>
+            <textarea id="newNote" placeholder="Ek açıklamalar"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('newModal')">İptal</button>
+        <button class="btn btn-warning" onclick="saveNewInspection()">Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="detailModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span>Denetim Detayı</span>
+        <button class="close-btn" onclick="closeModal('detailModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="detail-title">İŞYERİ DENETİM DETAYI</div>
+        <table class="detail-table"><tbody id="detailTableBody"></tbody></table>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('detailModal')">Kapat</button>
+        <button class="btn btn-primary" onclick="window.print()">🖨 Yazdır / PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="editModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span>Denetim Düzenle</span>
+        <button class="close-btn" onclick="closeModal('editModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Denetim No</label>
+            <input type="text" id="editNo" disabled />
+          </div>
+          <div class="form-group">
+            <label>Denetim Tarihi *</label>
+            <input type="date" id="editDate" />
+          </div>
+          <div class="form-group">
+            <label>İşyeri Ünvanı *</label>
+            <input type="text" id="editBusinessName" />
+          </div>
+          <div class="form-group">
+            <label>Yetkili Kişi</label>
+            <input type="text" id="editAuthorityName" />
+          </div>
+          <div class="form-group">
+            <label>Telefon</label>
+            <input type="text" id="editPhone" />
+          </div>
+          <div class="form-group">
+            <label>Faaliyet Konusu</label>
+            <input type="text" id="editActivitySubject" />
+          </div>
+          <div class="form-group">
+            <label>Denetim Türü</label>
+            <select id="editInspectionType">
+              <option value="Rutin Denetim">Rutin Denetim</option>
+              <option value="Ruhsat Kontrolü">Ruhsat Kontrolü</option>
+              <option value="Hijyen Denetimi">Hijyen Denetimi</option>
+              <option value="Fiyat Etiketi">Fiyat Etiketi</option>
+              <option value="İşgal Denetimi">İşgal Denetimi</option>
+              <option value="Şikayet Üzerine">Şikayet Üzerine</option>
+              <option value="Diğer">Diğer</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Sonuç / Durum</label>
+            <select id="editResultStatus">
+              <option value="Uygun">Uygun</option>
+              <option value="Eksiklik Tespit Edildi">Eksiklik Tespit Edildi</option>
+              <option value="Süre Verildi">Süre Verildi</option>
+              <option value="İşlem Uygulandı">İşlem Uygulandı</option>
+              <option value="Kapatıldı">Kapatıldı</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Yapılan İşlem</label>
+            <select id="editAction">
+              <option value="Denetim Yapıldı">Denetim Yapıldı</option>
+              <option value="Bilgilendirme Yapıldı">Bilgilendirme Yapıldı</option>
+              <option value="Uyarı Yapıldı">Uyarı Yapıldı</option>
+              <option value="Süre Verildi">Süre Verildi</option>
+              <option value="Tutanak Düzenlendi">Tutanak Düzenlendi</option>
+              <option value="İdari Yaptırım Uygulandı">İdari Yaptırım Uygulandı</option>
+              <option value="Mühürleme Uygulandı">Mühürleme Uygulandı</option>
+            </select>
+          </div>
+          <div class="form-group hidden" id="editControlWrap">
+            <label>Kontrol Tarihi</label>
+            <input type="date" id="editControlDate" />
+          </div>
+          <div class="form-group full">
+            <label>Adres</label>
+            <textarea id="editAddress"></textarea>
+          </div>
+          <div class="form-group full">
+            <label>Tespit ve Bulgular</label>
+            <textarea id="editFindings"></textarea>
+          </div>
+          <div class="form-group full">
+            <label>Notlar</label>
+            <textarea id="editNote"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('editModal')">İptal</button>
+        <button class="btn btn-warning" onclick="saveEditInspection()">Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var inspections = [];
+    var editingId = null;
+    var activeAlertType = "";
+
+    function toggleSidebar(forceOpen) {
+      var shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !document.body.classList.contains("sidebar-open");
+      document.body.classList.toggle("sidebar-open", shouldOpen);
+    }
+
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return "";
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function todayInputDate() {
+      var now = new Date();
+      var year = now.getFullYear();
+      var month = String(now.getMonth() + 1).padStart(2, "0");
+      var day = String(now.getDate()).padStart(2, "0");
+      return year + "-" + month + "-" + day;
+    }
+
+    function setTodayText() {
+      var now = new Date();
+      document.getElementById("todayText").textContent = now.toLocaleDateString("tr-TR", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric"
+      });
+    }
+
+    function normalizeDate(value) {
+      return value || "";
+    }
+
+    function getInspectionById(id) {
+      for (var i = 0; i < inspections.length; i++) {
+        if (inspections[i].id === id) return inspections[i];
+      }
+      return null;
+    }
+
+    function isDueInspection(item) {
+      return item.resultStatus === "Süre Verildi" && item.controlDate;
+    }
+
+    function resultBadge(item) {
+      if (item.resultStatus === "Uygun") return '<span class="badge badge-success">✔ Uygun</span>';
+      if (item.resultStatus === "Eksiklik Tespit Edildi") return '<span class="badge badge-open">🟡 Eksiklik</span>';
+      if (item.resultStatus === "Süre Verildi") return '<span class="badge badge-review">🔵 Süre Verildi</span>';
+      if (item.resultStatus === "İşlem Uygulandı") return '<span class="badge badge-danger">⛔ İşlem Uygulandı</span>';
+      if (item.resultStatus === "Kapatıldı") return '<span class="badge badge-gray">📁 Kapatıldı</span>';
+      return '<span class="badge badge-gray">' + escapeHtml(item.resultStatus || '-') + '</span>';
+    }
+
+    function updateCards(data) {
+      var missingCount = 0;
+      var actionCount = 0;
+      var okCount = 0;
+      var dueTodayCount = 0;
+      var overdueCount = 0;
+      var today = todayInputDate();
+
+      for (var i = 0; i < data.length; i++) {
+        var item = data[i];
+        if (item.resultStatus === "Eksiklik Tespit Edildi" || item.resultStatus === "Süre Verildi") missingCount++;
+        if (item.resultStatus === "İşlem Uygulandı" || item.resultStatus === "Kapatıldı") actionCount++;
+        if (item.resultStatus === "Uygun") okCount++;
+        if (isDueInspection(item)) {
+          if (item.controlDate === today) dueTodayCount++;
+          if (item.controlDate < today) overdueCount++;
+        }
+      }
+
+      document.getElementById("missingCount").textContent = missingCount;
+      document.getElementById("actionCount").textContent = actionCount;
+      document.getElementById("okCount").textContent = okCount;
+      document.getElementById("totalCount").textContent = data.length;
+      document.getElementById("dueTodayCount").textContent = dueTodayCount;
+      document.getElementById("overdueCount").textContent = overdueCount;
+    }
+
+    function renderControlAlerts() {
+      var panel = document.getElementById("controlAlertsPanel");
+      var list = document.getElementById("controlAlertsList");
+      var dueToday = [];
+      var overdue = [];
+      var today = todayInputDate();
+
+      for (var i = 0; i < inspections.length; i++) {
+        var item = inspections[i];
+        if (!isDueInspection(item)) continue;
+        if (item.controlDate === today) dueToday.push(item);
+        if (item.controlDate < today) overdue.push(item);
+      }
+
+      document.getElementById("dueTodayCard").classList.toggle("active-card", activeAlertType === "today");
+      document.getElementById("overdueCard").classList.toggle("active-card-warning", activeAlertType === "overdue");
+
+      if (!activeAlertType) {
+        panel.style.display = "none";
+        list.innerHTML = "";
+        return;
+      }
+
+      var selected = activeAlertType === "today" ? dueToday : overdue;
+      if (!selected.length) {
+        panel.style.display = "block";
+        list.innerHTML = '<div class="alert-empty">Bu grupta kayıt bulunmuyor.</div>';
+        return;
+      }
+
+      var groupClass = activeAlertType === "today" ? "today" : "overdue";
+      var groupTitle = activeAlertType === "today" ? "Bugün kontrol edilecek işyerleri" : "Geciken kontrol işyerleri";
+      var html = '<div class="alert-group-title ' + groupClass + '">' + groupTitle + '</div><div class="alert-list">';
+
+      for (var j = 0; j < selected.length; j++) {
+        var item2 = selected[j];
+        html += '<div class="alert-item ' + groupClass + '">';
+        html += '<div><div class="alert-item-title">' + escapeHtml(item2.businessName) + '</div>';
+        html += '<div class="alert-item-meta">' + escapeHtml(item2.no) + ' · ' + escapeHtml(item2.inspectionType) + ' · Kontrol: ' + escapeHtml(item2.controlDateText || item2.controlDate) + '</div></div>';
+        html += '<button class="btn btn-primary" type="button" onclick="openDetail(' + item2.id + ')">Detay</button>';
+        html += '</div>';
+      }
+
+      html += '</div>';
+      panel.style.display = "block";
+      list.innerHTML = html;
+    }
+
+    function toggleAlertPanel(type) {
+      activeAlertType = activeAlertType === type ? "" : type;
+      renderControlAlerts();
+    }
+
+    async function loadInspections() {
+      try {
+        var response = await fetch('/api/inspections');
+        inspections = await response.json();
+        renderTable();
+      } catch (error) {
+        alert('Denetim kayıtları alınamadı.');
+      }
+    }
+
+    function renderTable() {
+      var tbody = document.getElementById('inspectionTableBody');
+      var emptyNote = document.getElementById('emptyNote');
+      var filterDate = normalizeDate(document.getElementById('filterDate').value);
+      var filterType = document.getElementById('filterType').value;
+      var filterResultStatus = document.getElementById('filterResultStatus').value;
+      var query = document.getElementById('searchInput').value.trim().toLowerCase();
+
+      var filtered = inspections.filter(function(item) {
+        if (filterDate && item.date !== filterDate) return false;
+        if (filterType && item.inspectionType !== filterType) return false;
+        if (filterResultStatus && item.resultStatus !== filterResultStatus) return false;
+        if (query) {
+          var haystack = [item.no, item.businessName, item.authorityName, item.activitySubject].join(' ').toLowerCase();
+          if (haystack.indexOf(query) === -1) return false;
+        }
+        return true;
+      });
+
+      updateCards(inspections);
+      renderControlAlerts();
+
+      if (!filtered.length) {
+        tbody.innerHTML = '';
+        emptyNote.style.display = 'block';
+        return;
+      }
+
+      emptyNote.style.display = 'none';
+      var rows = '';
+      for (var i = 0; i < filtered.length; i++) {
+        var item = filtered[i];
+        rows += '<tr>';
+        rows += '<td class="record-no">' + escapeHtml(item.no) + '</td>';
+        rows += '<td>' + escapeHtml(item.displayDate) + '</td>';
+        rows += '<td><strong>' + escapeHtml(item.businessName) + '</strong><br><span style="color:#667085;font-size:12px;">' + escapeHtml(item.activitySubject || '-') + '</span></td>';
+        rows += '<td>' + escapeHtml(item.inspectionType) + '</td>';
+        rows += '<td>' + resultBadge(item) + '</td>';
+        rows += '<td>' + escapeHtml(item.action || '-') + '</td>';
+        rows += '<td><div class="actions">';
+        rows += '<button class="icon-btn view-btn" onclick="openDetail(' + item.id + ')">👁</button>';
+        rows += '<button class="icon-btn edit-btn" onclick="openEdit(' + item.id + ')">✎</button>';
+        rows += '<button class="icon-btn delete-btn" onclick="deleteInspection(' + item.id + ')">🗑</button>';
+        rows += '</div></td>';
+        rows += '</tr>';
+      }
+      tbody.innerHTML = rows;
+    }
+
+    function toggleNewControlDate() {
+      var status = document.getElementById('newResultStatus').value;
+      document.getElementById('newControlWrap').classList.toggle('hidden', status !== 'Süre Verildi');
+      if (status !== 'Süre Verildi') document.getElementById('newControlDate').value = '';
+    }
+
+    function toggleEditControlDate() {
+      var status = document.getElementById('editResultStatus').value;
+      document.getElementById('editControlWrap').classList.toggle('hidden', status !== 'Süre Verildi');
+      if (status !== 'Süre Verildi') document.getElementById('editControlDate').value = '';
+    }
+
+    function openNewModal() {
+      document.getElementById('newNo').value = 'Otomatik oluşturulacak';
+      document.getElementById('newDate').value = todayInputDate();
+      document.getElementById('newBusinessName').value = '';
+      document.getElementById('newAuthorityName').value = '';
+      document.getElementById('newPhone').value = '';
+      document.getElementById('newActivitySubject').value = '';
+      document.getElementById('newInspectionType').value = 'Rutin Denetim';
+      document.getElementById('newResultStatus').value = 'Uygun';
+      document.getElementById('newAction').value = 'Denetim Yapıldı';
+      document.getElementById('newControlDate').value = '';
+      document.getElementById('newAddress').value = '';
+      document.getElementById('newFindings').value = '';
+      document.getElementById('newNote').value = '';
+      toggleNewControlDate();
+      document.getElementById('newModal').classList.add('show');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('show');
+    }
+
+    async function saveNewInspection() {
+      var date = document.getElementById('newDate').value;
+      var businessName = document.getElementById('newBusinessName').value.trim();
+      var resultStatus = document.getElementById('newResultStatus').value;
+      var controlDate = document.getElementById('newControlDate').value;
+
+      if (!date || !businessName) {
+        alert('Lütfen zorunlu alanları doldurun.');
+        return;
+      }
+      if (resultStatus === 'Süre Verildi' && !controlDate) {
+        alert('Süre Verildi durumunda kontrol tarihi girmeniz gerekiyor.');
+        return;
+      }
+
+      try {
+        var response = await fetch('/api/inspections', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: date,
+            businessName: businessName,
+            authorityName: document.getElementById('newAuthorityName').value.trim(),
+            phone: document.getElementById('newPhone').value.trim(),
+            address: document.getElementById('newAddress').value.trim(),
+            activitySubject: document.getElementById('newActivitySubject').value.trim(),
+            inspectionType: document.getElementById('newInspectionType').value,
+            findings: document.getElementById('newFindings').value.trim(),
+            action: document.getElementById('newAction').value,
+            resultStatus: resultStatus,
+            note: document.getElementById('newNote').value.trim(),
+            controlDate: controlDate
+          })
+        });
+        if (!response.ok) throw new Error();
+        closeModal('newModal');
+        await loadInspections();
+      } catch (error) {
+        alert('Denetim kaydı eklenemedi.');
+      }
+    }
+
+    function openDetail(id) {
+      var item = getInspectionById(id);
+      if (!item) return;
+      var html = '';
+      html += '<tr><th>Denetim No</th><td>' + escapeHtml(item.no) + '</td></tr>';
+      html += '<tr><th>Denetim Tarihi</th><td><strong>' + escapeHtml(item.displayDate || '-') + '</strong></td></tr>';
+      html += '<tr><th>İşyeri Ünvanı</th><td><strong>' + escapeHtml(item.businessName) + '</strong></td></tr>';
+      html += '<tr><th>Yetkili Kişi</th><td>' + escapeHtml(item.authorityName || '-') + '</td></tr>';
+      html += '<tr><th>Telefon</th><td>' + escapeHtml(item.phone || '-') + '</td></tr>';
+      html += '<tr><th>Faaliyet Konusu</th><td>' + escapeHtml(item.activitySubject || '-') + '</td></tr>';
+      html += '<tr><th>Denetim Türü</th><td>' + escapeHtml(item.inspectionType || '-') + '</td></tr>';
+      html += '<tr><th>Sonuç / Durum</th><td>' + resultBadge(item) + '</td></tr>';
+      html += '<tr><th>Yapılan İşlem</th><td>' + escapeHtml(item.action || '-') + '</td></tr>';
+      html += '<tr><th>Kontrol Tarihi</th><td><strong>' + escapeHtml(item.controlDateText || '-') + '</strong></td></tr>';
+      html += '<tr><th>Adres</th><td>' + escapeHtml(item.address || '-') + '</td></tr>';
+      html += '<tr><th>Tespit ve Bulgular</th><td>' + escapeHtml(item.findings || '-') + '</td></tr>';
+      html += '<tr><th>Notlar</th><td>' + escapeHtml(item.note || '-') + '</td></tr>';
+      html += '<tr><th>Sisteme Kayıt Zamanı</th><td>' + escapeHtml(item.createdAt || '-') + '</td></tr>';
+      document.getElementById('detailTableBody').innerHTML = html;
+      document.getElementById('detailModal').classList.add('show');
+    }
+
+    function openEdit(id) {
+      editingId = id;
+      var item = getInspectionById(id);
+      if (!item) return;
+      document.getElementById('editNo').value = item.no;
+      document.getElementById('editDate').value = item.date;
+      document.getElementById('editBusinessName').value = item.businessName;
+      document.getElementById('editAuthorityName').value = item.authorityName || '';
+      document.getElementById('editPhone').value = item.phone || '';
+      document.getElementById('editActivitySubject').value = item.activitySubject || '';
+      document.getElementById('editInspectionType').value = item.inspectionType || 'Rutin Denetim';
+      document.getElementById('editResultStatus').value = item.resultStatus || 'Uygun';
+      document.getElementById('editAction').value = item.action || 'Denetim Yapıldı';
+      document.getElementById('editControlDate').value = item.controlDate || '';
+      document.getElementById('editAddress').value = item.address || '';
+      document.getElementById('editFindings').value = item.findings || '';
+      document.getElementById('editNote').value = item.note || '';
+      toggleEditControlDate();
+      document.getElementById('editModal').classList.add('show');
+    }
+
+    async function saveEditInspection() {
+      if (!editingId) return;
+      var date = document.getElementById('editDate').value;
+      var businessName = document.getElementById('editBusinessName').value.trim();
+      var resultStatus = document.getElementById('editResultStatus').value;
+      var controlDate = document.getElementById('editControlDate').value;
+
+      if (!date || !businessName) {
+        alert('Lütfen zorunlu alanları doldurun.');
+        return;
+      }
+      if (resultStatus === 'Süre Verildi' && !controlDate) {
+        alert('Süre Verildi durumunda kontrol tarihi girmeniz gerekiyor.');
+        return;
+      }
+
+      try {
+        var response = await fetch('/api/inspections/' + editingId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: date,
+            businessName: businessName,
+            authorityName: document.getElementById('editAuthorityName').value.trim(),
+            phone: document.getElementById('editPhone').value.trim(),
+            address: document.getElementById('editAddress').value.trim(),
+            activitySubject: document.getElementById('editActivitySubject').value.trim(),
+            inspectionType: document.getElementById('editInspectionType').value,
+            findings: document.getElementById('editFindings').value.trim(),
+            action: document.getElementById('editAction').value,
+            resultStatus: resultStatus,
+            note: document.getElementById('editNote').value.trim(),
+            controlDate: controlDate
+          })
+        });
+        if (!response.ok) throw new Error();
+        closeModal('editModal');
+        await loadInspections();
+      } catch (error) {
+        alert('Denetim kaydı güncellenemedi.');
+      }
+    }
+
+    async function deleteInspection(id) {
+      var item = getInspectionById(id);
+      if (!item) return;
+      if (!confirm(item.no + ' numaralı denetim kaydını silmek istiyor musunuz?')) return;
+      try {
+        var response = await fetch('/api/inspections/' + id, { method: 'DELETE' });
+        if (!response.ok) throw new Error();
+        await loadInspections();
+      } catch (error) {
+        alert('Denetim kaydı silinemedi.');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      setTodayText();
+      loadInspections();
+      document.getElementById('newResultStatus').addEventListener('change', toggleNewControlDate);
+      document.getElementById('editResultStatus').addEventListener('change', toggleEditControlDate);
+      document.getElementById('filterDate').addEventListener('change', renderTable);
+      document.getElementById('filterType').addEventListener('change', renderTable);
+      document.getElementById('filterResultStatus').addEventListener('change', renderTable);
+      document.getElementById('searchInput').addEventListener('input', renderTable);
+      var overlays = document.querySelectorAll('.modal-overlay');
+      for (var i = 0; i < overlays.length; i++) {
+        overlays[i].addEventListener('click', function(event) {
+          if (event.target === this) closeModal(this.id);
+        });
+      }
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+          if (document.body.classList.contains('sidebar-open')) {
+            toggleSidebar(false);
+            return;
+          }
+          var openModal = document.querySelector('.modal-overlay.show');
+          if (openModal) closeModal(openModal.id);
+        }
+      });
+      window.addEventListener('resize', function() {
+        if (window.innerWidth > 980) toggleSidebar(false);
+      });
+    });
+  </script>
+</body>
+</html>
