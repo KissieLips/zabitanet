@@ -426,53 +426,70 @@ app.get("/api/complaints/:id/files", async (req, res) => {
   }
 });
 
-app.post("/api/complaints/:id/files", upload.single("file"), async (req, res) => {
+app.post("/api/complaints/:id/files", upload.any(), async (req, res) => {
   try {
     const { id } = req.params;
     const { fileType, category, description } = req.body;
+    const uploadedFiles = Array.isArray(req.files) ? req.files : (req.file ? [req.file] : []);
 
-    if (!req.file) {
+    if (!uploadedFiles.length) {
       return res.status(400).json({ error: "Dosya seçiniz." });
     }
 
     if (!fileType || !category) {
-      safeUnlink(req.file.path);
+      uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
       return res.status(400).json({ error: "Dosya türü ve kategori seçiniz." });
+    }
+
+    if (fileType === "document" && uploadedFiles.length > 1) {
+      uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
+      return res.status(400).json({ error: "Evrak yüklemede aynı anda sadece 1 dosya seçebilirsiniz." });
     }
 
     const complaintResult = await pool.query("SELECT id FROM complaints WHERE id = $1", [id]);
     if (complaintResult.rows.length === 0) {
-      safeUnlink(req.file.path);
+      uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
       return res.status(404).json({ error: "Şikayet kaydı bulunamadı." });
     }
 
-    const relativePath = "/uploads/complaints/" + id + "/" + req.file.filename;
+    const insertedRows = [];
 
-    const result = await pool.query(
-      `
-        INSERT INTO complaint_files
-          (complaint_id, file_type, category, description, original_name, stored_name, file_path, mime_type, file_size)
-        VALUES
-          ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        RETURNING *
-      `,
-      [
-        id,
-        fileType,
-        category,
-        description || "",
-        req.file.originalname,
-        req.file.filename,
-        relativePath,
-        req.file.mimetype || "",
-        req.file.size || 0,
-      ]
-    );
+    for (const uploadedFile of uploadedFiles) {
+      const relativePath = "/uploads/complaints/" + id + "/" + uploadedFile.filename;
 
-    res.json(mapComplaintFile(result.rows[0]));
+      const result = await pool.query(
+        `
+          INSERT INTO complaint_files
+            (complaint_id, file_type, category, description, original_name, stored_name, file_path, mime_type, file_size)
+          VALUES
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          RETURNING *
+        `,
+        [
+          id,
+          fileType,
+          category,
+          description || "",
+          uploadedFile.originalname,
+          uploadedFile.filename,
+          relativePath,
+          uploadedFile.mimetype || "",
+          uploadedFile.size || 0,
+        ]
+      );
+
+      insertedRows.push(mapComplaintFile(result.rows[0]));
+    }
+
+    res.json({
+      success: true,
+      uploadedCount: insertedRows.length,
+      files: insertedRows
+    });
   } catch (error) {
     console.error(error);
-    if (req.file && req.file.path) safeUnlink(req.file.path);
+    const uploadedFiles = Array.isArray(req.files) ? req.files : (req.file ? [req.file] : []);
+    uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
     res.status(500).json({ error: "Dosya yüklenemedi." });
   }
 });
@@ -862,6 +879,7 @@ app.get("/", (req, res) => {
             <div class="form-group full">
               <label>Dosya Seç</label>
               <input type="file" id="detailFileInput" />
+              <div class="muted" id="detailFileHelp" style="margin-top:8px;">Fotoğraf seçildiğinde aynı anda birden fazla dosya yükleyebilirsiniz.</div>
             </div>
           </div>
           <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
@@ -984,12 +1002,31 @@ app.get("/", (req, res) => {
       var type = document.getElementById("detailFileType").value;
       var categories = fileCategories[type] || [];
       var html = "";
+      var input = document.getElementById("detailFileInput");
+      var help = document.getElementById("detailFileHelp");
 
       for (var i = 0; i < categories.length; i++) {
         html += '<option value="' + escapeHtml(categories[i]) + '">' + escapeHtml(categories[i]) + '</option>';
       }
 
       document.getElementById("detailCategory").innerHTML = html;
+
+      if (input) {
+        input.value = "";
+        if (type === "photo") {
+          input.multiple = true;
+          input.setAttribute("accept", "image/*");
+        } else {
+          input.multiple = false;
+          input.setAttribute("accept", ".pdf,image/*");
+        }
+      }
+
+      if (help) {
+        help.textContent = type === "photo"
+          ? "Fotoğraf seçildiğinde aynı anda birden fazla dosya yükleyebilirsiniz."
+          : "Evrak yüklemede aynı anda 1 dosya seçebilirsiniz. PDF veya görsel yükleyebilirsiniz.";
+      }
     }
 
     async function loadComplaintFiles(complaintId) {
@@ -1045,14 +1082,24 @@ app.get("/", (req, res) => {
       if (!detailComplaintId) return;
 
       var fileInput = document.getElementById("detailFileInput");
-      if (!fileInput.files || !fileInput.files[0]) {
+      var fileType = document.getElementById("detailFileType").value;
+      var selectedFiles = fileInput.files ? Array.from(fileInput.files) : [];
+
+      if (!selectedFiles.length) {
         alert("Lütfen dosya seçin.");
         return;
       }
 
+      if (fileType === "document" && selectedFiles.length > 1) {
+        alert("Evrak yüklemede aynı anda sadece 1 dosya seçebilirsiniz.");
+        return;
+      }
+
       var formData = new FormData();
-      formData.append("file", fileInput.files[0]);
-      formData.append("fileType", document.getElementById("detailFileType").value);
+      for (var i = 0; i < selectedFiles.length; i++) {
+        formData.append("files", selectedFiles[i]);
+      }
+      formData.append("fileType", fileType);
       formData.append("category", document.getElementById("detailCategory").value);
       formData.append("description", document.getElementById("detailFileDescription").value.trim());
 
