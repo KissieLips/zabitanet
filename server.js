@@ -634,12 +634,27 @@ app.get("/", (req, res) => {
     .attachments-section { margin-top: 24px; border: 1px solid #e5e7eb; border-radius: 16px; padding: 18px; background: #fafafa; }
     .section-title { font-size: 18px; font-weight: 800; margin-bottom: 14px; }
     .attachments-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
-    .attachment-card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px; margin-bottom: 12px; }
-    .attachment-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
-    .attachment-name { font-weight: 700; word-break: break-word; }
-    .attachment-meta { color: #6b7280; font-size: 13px; line-height: 1.4; }
-    .attachment-preview { margin-top: 10px; }
-    .attachment-preview img { max-width: 100%; max-height: 220px; border-radius: 12px; border: 1px solid #e5e7eb; }
+    .attachment-groups { display: grid; gap: 18px; }
+    .attachment-group { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 16px; }
+    .attachment-group-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #eef2f7; }
+    .attachment-group-title { font-size: 17px; font-weight: 800; color: #111827; }
+    .attachment-group-count { background: #eff6ff; color: #1d4ed8; border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 800; }
+    .attachment-group-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+    .attachment-card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 12px; display: grid; grid-template-columns: 108px 1fr; gap: 12px; align-items: start; }
+    .attachment-thumb, .attachment-thumb-doc { width: 108px; height: 88px; border-radius: 12px; border: 1px solid #dbe4f0; overflow: hidden; background: #f8fafc; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .attachment-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .attachment-thumb-doc { font-size: 30px; color: #2563eb; font-weight: 700; }
+    .attachment-content { min-width: 0; }
+    .attachment-topline { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+    .attachment-name { font-weight: 800; color: #111827; word-break: break-word; line-height: 1.35; }
+    .attachment-date { color: #6b7280; font-size: 12px; white-space: nowrap; }
+    .attachment-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+    .attachment-tag { background: #f3f4f6; color: #374151; border-radius: 999px; padding: 5px 9px; font-size: 12px; font-weight: 700; }
+    .attachment-description { color: #4b5563; font-size: 13px; line-height: 1.45; margin-bottom: 10px; min-height: 38px; }
+    .attachment-bottom { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .attachment-size { color: #6b7280; font-size: 12px; font-weight: 700; }
+    .attachment-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .attachment-actions .btn { padding: 9px 12px; font-size: 13px; }
     .file-link { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: #2563eb; font-weight: 700; }
     .muted { color: #6b7280; }
     @media (max-width: 1200px) {
@@ -1040,6 +1055,63 @@ app.get("/", (req, res) => {
       }
     }
 
+    function buildAttachmentCard(file) {
+      var html = '';
+      html += '<div class="attachment-card">';
+
+      if (file.isImage) {
+        html += '<a class="attachment-thumb" href="' + encodeURI(file.url) + '" target="_blank" rel="noopener noreferrer">';
+        html += '<img src="' + encodeURI(file.url) + '" alt="Ek görseli" />';
+        html += '</a>';
+      } else {
+        html += '<a class="attachment-thumb-doc" href="' + encodeURI(file.url) + '" target="_blank" rel="noopener noreferrer" title="Belgeyi Aç">📄</a>';
+      }
+
+      html += '<div class="attachment-content">';
+      html += '<div class="attachment-topline">';
+      html += '<div class="attachment-name">' + escapeHtml(file.originalName) + '</div>';
+      html += '<div class="attachment-date">' + escapeHtml(file.createdAt || '-') + '</div>';
+      html += '</div>';
+      html += '<div class="attachment-tags">';
+      html += '<span class="attachment-tag">' + escapeHtml(file.category || '-') + '</span>';
+      html += '<span class="attachment-tag">' + escapeHtml(file.fileType === "photo" ? "Fotoğraf" : "Evrak") + '</span>';
+      html += '</div>';
+      html += '<div class="attachment-description"><strong>Açıklama:</strong> ' + escapeHtml(file.description || '-') + '</div>';
+      html += '<div class="attachment-bottom">';
+      html += '<div class="attachment-size">Boyut: ' + escapeHtml(formatFileSize(file.fileSize)) + '</div>';
+      html += '<div class="attachment-actions">';
+      html += '<a class="btn btn-info" href="' + encodeURI(file.url) + '" target="_blank" rel="noopener noreferrer" style="text-decoration:none; display:inline-flex; align-items:center;">Aç</a>';
+      html += '<button class="btn btn-danger" onclick="deleteComplaintFile(' + file.id + ')">Sil</button>';
+      html += '</div>';
+      html += '</div>';
+      html += '</div>';
+      html += '</div>';
+
+      return html;
+    }
+
+    function renderAttachmentGroup(title, files, emptyText) {
+      var html = '';
+      html += '<div class="attachment-group">';
+      html += '<div class="attachment-group-header">';
+      html += '<div class="attachment-group-title">' + escapeHtml(title) + '</div>';
+      html += '<div class="attachment-group-count">' + files.length + ' adet</div>';
+      html += '</div>';
+
+      if (!files.length) {
+        html += '<div class="muted">' + escapeHtml(emptyText) + '</div>';
+      } else {
+        html += '<div class="attachment-group-grid">';
+        for (var i = 0; i < files.length; i++) {
+          html += buildAttachmentCard(files[i]);
+        }
+        html += '</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
     function renderComplaintFiles() {
       var target = document.getElementById("detailFilesList");
       if (!target) return;
@@ -1049,31 +1121,13 @@ app.get("/", (req, res) => {
         return;
       }
 
-      var html = "";
-      for (var i = 0; i < complaintFiles.length; i++) {
-        var file = complaintFiles[i];
-        html += '<div class="attachment-card">';
-        html += '<div class="attachment-head">';
-        html += '<div>';
-        html += '<div class="attachment-name">' + escapeHtml(file.originalName) + '</div>';
-        html += '<div class="attachment-meta">Tür: ' + escapeHtml(file.fileType === "photo" ? "Fotoğraf" : "Evrak") + ' | Kategori: ' + escapeHtml(file.category) + '</div>';
-        html += '<div class="attachment-meta">Açıklama: ' + escapeHtml(file.description || "-") + '</div>';
-        html += '<div class="attachment-meta">Boyut: ' + escapeHtml(formatFileSize(file.fileSize)) + ' | Tarih: ' + escapeHtml(file.createdAt || "-") + '</div>';
-        html += '</div>';
-        html += '<div class="actions">';
-        html += '<a class="btn btn-info" href="' + encodeURI(file.url) + '" target="_blank" rel="noopener noreferrer" style="text-decoration:none; display:inline-flex; align-items:center;">Aç</a>';
-        html += '<button class="btn btn-danger" onclick="deleteComplaintFile(' + file.id + ')">Sil</button>';
-        html += '</div>';
-        html += '</div>';
+      var photoFiles = complaintFiles.filter(function(file) { return file.fileType === "photo"; });
+      var documentFiles = complaintFiles.filter(function(file) { return file.fileType === "document"; });
 
-        if (file.isImage) {
-          html += '<div class="attachment-preview"><img src="' + encodeURI(file.url) + '" alt="Ek görseli" /></div>';
-        } else {
-          html += '<div class="attachment-preview"><a class="file-link" href="' + encodeURI(file.url) + '" target="_blank" rel="noopener noreferrer">📄 Belgeyi Aç</a></div>';
-        }
-
-        html += '</div>';
-      }
+      var html = '<div class="attachment-groups">';
+      html += renderAttachmentGroup('Fotoğraflar', photoFiles, 'Henüz fotoğraf eklenmemiş.');
+      html += renderAttachmentGroup('Evraklar', documentFiles, 'Henüz evrak eklenmemiş.');
+      html += '</div>';
 
       target.innerHTML = html;
     }
