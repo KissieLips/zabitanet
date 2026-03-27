@@ -727,7 +727,6 @@ app.get("/", (req, res) => {
         <div class="brand-mark">ZY</div>
         <div>
           <div class="brand">Zabıta Yönetim Sistemi</div>
-          <div class="brand-sub">Sade arayüz, hızlı işlem akışı ve yeni modüllere uygun yapı</div>
         </div>
       </div>
       <nav class="menu">
