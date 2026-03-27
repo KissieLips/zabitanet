@@ -1,5 +1,8 @@
 const express = require("express");
 const { Pool } = require("pg");
+const multer = require("multer");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,6 +12,31 @@ app.use(express.json());
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
+
+const uploadsRoot = path.join(__dirname, "uploads");
+const complaintUploadsRoot = path.join(uploadsRoot, "complaints");
+
+fs.mkdirSync(complaintUploadsRoot, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: function(req, file, cb) {
+    const complaintFolder = path.join(complaintUploadsRoot, String(req.params.id));
+    fs.mkdirSync(complaintFolder, { recursive: true });
+    cb(null, complaintFolder);
+  },
+  filename: function(req, file, cb) {
+    const ext = path.extname(file.originalname || "");
+    const base = path.basename(file.originalname || "dosya", ext).replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, "-");
+    cb(null, Date.now() + "-" + base + ext);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 20 * 1024 * 1024 }
+});
+
+app.use("/uploads", express.static(uploadsRoot));
 
 function toInputDate(value) {
   if (!value) return "";
@@ -79,6 +107,32 @@ function mapComplaint(row) {
   };
 }
 
+function mapComplaintFile(row) {
+  return {
+    id: row.id,
+    complaintId: row.complaint_id,
+    fileType: row.file_type,
+    category: row.category,
+    description: row.description || "",
+    originalName: row.original_name,
+    mimeType: row.mime_type || "",
+    fileSize: Number(row.file_size || 0),
+    url: row.file_path ? row.file_path.replace(/\\/g, "/") : "",
+    createdAt: formatDateTime(row.created_at),
+    isImage: (row.mime_type || "").indexOf("image/") === 0
+  };
+}
+
+function safeUnlink(filePath) {
+  try {
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch (error) {
+    console.error("Dosya silinemedi:", error);
+  }
+}
+
 async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS complaints (
@@ -112,6 +166,27 @@ async function initDb() {
   await pool.query(`
     ALTER TABLE complaints
     ADD COLUMN IF NOT EXISTS control_date DATE
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS complaint_files (
+      id SERIAL PRIMARY KEY,
+      complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
+      file_type VARCHAR(20) NOT NULL,
+      category VARCHAR(100) NOT NULL,
+      description TEXT,
+      original_name VARCHAR(255) NOT NULL,
+      stored_name VARCHAR(255) NOT NULL,
+      file_path TEXT NOT NULL,
+      mime_type VARCHAR(120),
+      file_size BIGINT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_complaint_files_complaint_id
+    ON complaint_files(complaint_id)
   `);
 }
 
@@ -313,11 +388,114 @@ app.put("/api/complaints/:id", async (req, res) => {
 app.delete("/api/complaints/:id", async (req, res) => {
   try {
     const { id } = req.params;
+
+    const filesResult = await pool.query("SELECT file_path FROM complaint_files WHERE complaint_id = $1", [id]);
     await pool.query("DELETE FROM complaints WHERE id = $1", [id]);
+
+    for (const row of filesResult.rows) {
+      const absolutePath = path.join(__dirname, row.file_path.replace(/^\/uploads\//, "uploads/"));
+      safeUnlink(absolutePath);
+    }
+
+    const folderPath = path.join(complaintUploadsRoot, String(id));
+    try {
+      fs.rmSync(folderPath, { recursive: true, force: true });
+    } catch (error) {
+      console.error("Klasör silinemedi:", error);
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Kayıt silinemedi." });
+  }
+});
+
+app.get("/api/complaints/:id/files", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `SELECT * FROM complaint_files WHERE complaint_id = $1 ORDER BY id DESC`,
+      [id]
+    );
+
+    res.json(result.rows.map(mapComplaintFile));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Ekler alınamadı." });
+  }
+});
+
+app.post("/api/complaints/:id/files", upload.single("file"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fileType, category, description } = req.body;
+
+    if (!req.file) {
+      return res.status(400).json({ error: "Dosya seçiniz." });
+    }
+
+    if (!fileType || !category) {
+      safeUnlink(req.file.path);
+      return res.status(400).json({ error: "Dosya türü ve kategori seçiniz." });
+    }
+
+    const complaintResult = await pool.query("SELECT id FROM complaints WHERE id = $1", [id]);
+    if (complaintResult.rows.length === 0) {
+      safeUnlink(req.file.path);
+      return res.status(404).json({ error: "Şikayet kaydı bulunamadı." });
+    }
+
+    const relativePath = "/uploads/complaints/" + id + "/" + req.file.filename;
+
+    const result = await pool.query(
+      `
+        INSERT INTO complaint_files
+          (complaint_id, file_type, category, description, original_name, stored_name, file_path, mime_type, file_size)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING *
+      `,
+      [
+        id,
+        fileType,
+        category,
+        description || "",
+        req.file.originalname,
+        req.file.filename,
+        relativePath,
+        req.file.mimetype || "",
+        req.file.size || 0,
+      ]
+    );
+
+    res.json(mapComplaintFile(result.rows[0]));
+  } catch (error) {
+    console.error(error);
+    if (req.file && req.file.path) safeUnlink(req.file.path);
+    res.status(500).json({ error: "Dosya yüklenemedi." });
+  }
+});
+
+app.delete("/api/complaint-files/:fileId", async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const fileResult = await pool.query("SELECT * FROM complaint_files WHERE id = $1", [fileId]);
+
+    if (fileResult.rows.length === 0) {
+      return res.status(404).json({ error: "Dosya bulunamadı." });
+    }
+
+    const fileRow = fileResult.rows[0];
+    const absolutePath = path.join(__dirname, fileRow.file_path.replace(/^\/uploads\//, "uploads/"));
+
+    await pool.query("DELETE FROM complaint_files WHERE id = $1", [fileId]);
+    safeUnlink(absolutePath);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Dosya silinemedi." });
   }
 });
 
@@ -436,6 +614,17 @@ app.get("/", (req, res) => {
     .detail-title { text-align: center; font-size: 22px; font-weight: 800; margin-bottom: 24px; letter-spacing: 0.5px; }
     .detail-table td, .detail-table th { border: 1px solid #d1d5db; padding: 14px 12px; }
     .detail-table th { width: 230px; background: #f9fafb; font-weight: 700; }
+    .attachments-section { margin-top: 24px; border: 1px solid #e5e7eb; border-radius: 16px; padding: 18px; background: #fafafa; }
+    .section-title { font-size: 18px; font-weight: 800; margin-bottom: 14px; }
+    .attachments-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .attachment-card { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+    .attachment-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+    .attachment-name { font-weight: 700; word-break: break-word; }
+    .attachment-meta { color: #6b7280; font-size: 13px; line-height: 1.4; }
+    .attachment-preview { margin-top: 10px; }
+    .attachment-preview img { max-width: 100%; max-height: 220px; border-radius: 12px; border: 1px solid #e5e7eb; }
+    .file-link { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: #2563eb; font-weight: 700; }
+    .muted { color: #6b7280; }
     @media (max-width: 1200px) {
       .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .filters { grid-template-columns: 1fr 1fr; }
@@ -651,6 +840,35 @@ app.get("/", (req, res) => {
         <table class="detail-table">
           <tbody id="detailTableBody"></tbody>
         </table>
+
+        <div class="attachments-section">
+          <div class="section-title">Ekler / Belgeler</div>
+          <div class="attachments-grid">
+            <div class="form-group">
+              <label>Dosya Türü</label>
+              <select id="detailFileType">
+                <option value="photo">Fotoğraf</option>
+                <option value="document">Evrak</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Kategori</label>
+              <select id="detailCategory"></select>
+            </div>
+            <div class="form-group full">
+              <label>Açıklama</label>
+              <input type="text" id="detailFileDescription" placeholder="Örn: İlk tespit fotoğrafı / Tutanak örneği" />
+            </div>
+            <div class="form-group full">
+              <label>Dosya Seç</label>
+              <input type="file" id="detailFileInput" />
+            </div>
+          </div>
+          <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
+            <button class="btn btn-primary" onclick="uploadDetailFile()">Dosya Yükle</button>
+          </div>
+          <div id="detailFilesList" class="muted">Henüz ek bulunmuyor.</div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('detailModal')">Kapat</button>
@@ -737,6 +955,13 @@ app.get("/", (req, res) => {
         var complaints = [];
     var editingId = null;
     var activeAlertType = "";
+    var detailComplaintId = null;
+    var complaintFiles = [];
+
+    var fileCategories = {
+      photo: ["Öncesi", "Sonrası", "Genel Saha Fotoğrafı"],
+      document: ["Tutanak", "Ceza", "Tebligat", "Savunma", "Diğer Belge"]
+    };
 
     function escapeHtml(value) {
       if (value === null || value === undefined) return "";
@@ -746,6 +971,124 @@ app.get("/", (req, res) => {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
+    }
+
+    function formatFileSize(bytes) {
+      var size = Number(bytes || 0);
+      if (size < 1024) return size + " B";
+      if (size < 1024 * 1024) return (size / 1024).toFixed(1) + " KB";
+      return (size / (1024 * 1024)).toFixed(1) + " MB";
+    }
+
+    function refreshCategoryOptions() {
+      var type = document.getElementById("detailFileType").value;
+      var categories = fileCategories[type] || [];
+      var html = "";
+
+      for (var i = 0; i < categories.length; i++) {
+        html += '<option value="' + escapeHtml(categories[i]) + '">' + escapeHtml(categories[i]) + '</option>';
+      }
+
+      document.getElementById("detailCategory").innerHTML = html;
+    }
+
+    async function loadComplaintFiles(complaintId) {
+      try {
+        var response = await fetch("/api/complaints/" + complaintId + "/files");
+        if (!response.ok) throw new Error();
+        complaintFiles = await response.json();
+        renderComplaintFiles();
+      } catch (error) {
+        document.getElementById("detailFilesList").innerHTML = '<div class="muted">Ekler yüklenemedi.</div>';
+      }
+    }
+
+    function renderComplaintFiles() {
+      var target = document.getElementById("detailFilesList");
+      if (!target) return;
+
+      if (!complaintFiles.length) {
+        target.innerHTML = '<div class="muted">Henüz ek bulunmuyor.</div>';
+        return;
+      }
+
+      var html = "";
+      for (var i = 0; i < complaintFiles.length; i++) {
+        var file = complaintFiles[i];
+        html += '<div class="attachment-card">';
+        html += '<div class="attachment-head">';
+        html += '<div>';
+        html += '<div class="attachment-name">' + escapeHtml(file.originalName) + '</div>';
+        html += '<div class="attachment-meta">Tür: ' + escapeHtml(file.fileType === "photo" ? "Fotoğraf" : "Evrak") + ' | Kategori: ' + escapeHtml(file.category) + '</div>';
+        html += '<div class="attachment-meta">Açıklama: ' + escapeHtml(file.description || "-") + '</div>';
+        html += '<div class="attachment-meta">Boyut: ' + escapeHtml(formatFileSize(file.fileSize)) + ' | Tarih: ' + escapeHtml(file.createdAt || "-") + '</div>';
+        html += '</div>';
+        html += '<div class="actions">';
+        html += '<a class="btn btn-info" href="' + encodeURI(file.url) + '" target="_blank" rel="noopener noreferrer" style="text-decoration:none; display:inline-flex; align-items:center;">Aç</a>';
+        html += '<button class="btn btn-danger" onclick="deleteComplaintFile(' + file.id + ')">Sil</button>';
+        html += '</div>';
+        html += '</div>';
+
+        if (file.isImage) {
+          html += '<div class="attachment-preview"><img src="' + encodeURI(file.url) + '" alt="Ek görseli" /></div>';
+        } else {
+          html += '<div class="attachment-preview"><a class="file-link" href="' + encodeURI(file.url) + '" target="_blank" rel="noopener noreferrer">📄 Belgeyi Aç</a></div>';
+        }
+
+        html += '</div>';
+      }
+
+      target.innerHTML = html;
+    }
+
+    async function uploadDetailFile() {
+      if (!detailComplaintId) return;
+
+      var fileInput = document.getElementById("detailFileInput");
+      if (!fileInput.files || !fileInput.files[0]) {
+        alert("Lütfen dosya seçin.");
+        return;
+      }
+
+      var formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+      formData.append("fileType", document.getElementById("detailFileType").value);
+      formData.append("category", document.getElementById("detailCategory").value);
+      formData.append("description", document.getElementById("detailFileDescription").value.trim());
+
+      try {
+        var response = await fetch("/api/complaints/" + detailComplaintId + "/files", {
+          method: "POST",
+          body: formData
+        });
+
+        var result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || "Dosya yüklenemedi.");
+        }
+
+        document.getElementById("detailFileInput").value = "";
+        document.getElementById("detailFileDescription").value = "";
+        await loadComplaintFiles(detailComplaintId);
+      } catch (error) {
+        alert(error.message || "Dosya yüklenemedi.");
+      }
+    }
+
+    async function deleteComplaintFile(fileId) {
+      var ok = confirm("Bu eki silmek istiyor musunuz?");
+      if (!ok) return;
+
+      try {
+        var response = await fetch("/api/complaint-files/" + fileId, {
+          method: "DELETE"
+        });
+
+        if (!response.ok) throw new Error();
+        await loadComplaintFiles(detailComplaintId);
+      } catch (error) {
+        alert("Ek silinemedi.");
+      }
     }
 
     function todayInputDate() {
@@ -1039,6 +1382,10 @@ app.get("/", (req, res) => {
 
     function closeModal(id) {
       document.getElementById(id).classList.remove("show");
+      if (id === "detailModal") {
+        detailComplaintId = null;
+        complaintFiles = [];
+      }
     }
 
     async function saveNewComplaint() {
@@ -1088,9 +1435,15 @@ app.get("/", (req, res) => {
       }
     }
 
-    function openDetail(id) {
+    async function openDetail(id) {
       var item = getComplaintById(id);
       if (!item) return;
+
+      detailComplaintId = id;
+      refreshCategoryOptions();
+      document.getElementById("detailFileDescription").value = "";
+      document.getElementById("detailFileInput").value = "";
+      document.getElementById("detailFilesList").innerHTML = '<div class="muted">Ekler yükleniyor...</div>';
 
       var html = "";
       html += "<tr><th>Şikayet No</th><td>" + escapeHtml(item.no) + "</td></tr>";
@@ -1109,6 +1462,7 @@ app.get("/", (req, res) => {
 
       document.getElementById("detailTableBody").innerHTML = html;
       document.getElementById("detailModal").classList.add("show");
+      await loadComplaintFiles(id);
     }
 
     function openEdit(id) {
@@ -1193,6 +1547,8 @@ app.get("/", (req, res) => {
 
       document.getElementById("newStatus").addEventListener("change", toggleNewControlDate);
       document.getElementById("editStatus").addEventListener("change", toggleEditControlDate);
+      document.getElementById("detailFileType").addEventListener("change", refreshCategoryOptions);
+      refreshCategoryOptions();
     });
   </script>
 </body>
