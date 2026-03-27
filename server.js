@@ -573,35 +573,35 @@ app.get("/", (req, res) => {
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
     body { margin: 0; font-family: Inter, "Segoe UI", Arial, Helvetica, sans-serif; background: #f3f6fa; color: var(--text); -webkit-font-smoothing: antialiased; }
-    .app { min-height: 100vh; display: grid; grid-template-columns: 228px minmax(0, 1fr); }
-    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #ffffff; padding: 18px 14px; display: flex; flex-direction: column; gap: 16px; position: sticky; top: 0; height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); z-index: 40; }
-    .sidebar-top { display: flex; align-items: center; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-    .brand-mark { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; flex-shrink: 0; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.18); }
-    .brand { font-size: 15px; font-weight: 700; line-height: 1.3; margin-bottom: 2px; letter-spacing: -0.01em; }
-    .brand-sub { font-size: 11.5px; color: rgba(255,255,255,0.64); line-height: 1.45; }
-    .menu { display: flex; flex-direction: column; gap: 6px; }
+    .app { min-height: 100vh; display: grid; grid-template-columns: 208px minmax(0, 1fr); }
+    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #ffffff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 0; height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); z-index: 40; }
+    .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.16); }
+    .brand { font-size: 14px; font-weight: 700; line-height: 1.3; margin-bottom: 2px; letter-spacing: -0.01em; }
+    .brand-sub { font-size: 10.5px; color: rgba(255,255,255,0.62); line-height: 1.45; }
+    .menu { display: flex; flex-direction: column; gap: 4px; }
     .nav-section-title { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.42); margin-top: 6px; margin-bottom: 2px; padding: 0 2px; font-weight: 700; }
-    .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 11px; border-radius: 12px; font-size: 13px; text-decoration: none; color: rgba(255,255,255,0.86); transition: 0.18s ease; border: 1px solid transparent; font-weight: 500; }
+    .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border-radius: 10px; font-size: 12.5px; text-decoration: none; color: rgba(255,255,255,0.84); transition: 0.18s ease; border: 1px solid transparent; font-weight: 500; }
     .menu-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.08); }
-    .menu-item.active { background: rgba(245, 179, 1, 0.14); color: #ffffff; border-color: rgba(245, 179, 1, 0.22); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04); font-weight: 600; }
+    .menu-item.active { background: rgba(255, 255, 255, 0.08); color: #ffffff; border-color: rgba(255,255,255,0.1); box-shadow: none; font-weight: 600; }
     .menu-left { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-    .menu-badge { display: inline-flex; align-items: center; justify-content: center; padding: 3px 7px; border-radius: 999px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); font-size: 10px; font-weight: 700; white-space: nowrap; }
-    .sidebar-footer { margin-top: auto; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); border-radius: 14px; padding: 12px; }
-    .sidebar-footer-title { font-size: 12px; font-weight: 700; margin-bottom: 5px; }
-    .sidebar-footer-text { font-size: 12px; line-height: 1.55; color: rgba(255,255,255,0.68); }
+    .menu-badge { display: none; }
+    .sidebar-footer { display: none; }
+    .sidebar-footer-title { display: none; }
+    .sidebar-footer-text { display: none; }
     .sidebar-toggle { display: none; margin-bottom: 14px; border: 1px solid var(--line); background: #ffffff; color: var(--text); border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 700; box-shadow: var(--shadow); cursor: pointer; }
     .sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); z-index: 30; }
-    .main { padding: 20px 22px; min-width: 0; }
-    .hero { background: #ffffff; border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); padding: 18px 20px; display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
-    .hero-copy { max-width: 820px; }
-    .hero-eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; background: #eff5fb; color: #35516f; font-size: 11px; font-weight: 700; margin-bottom: 10px; border: 1px solid #deebf7; }
-    .hero-title { margin: 0 0 8px 0; font-size: 24px; line-height: 1.18; letter-spacing: -0.02em; font-weight: 700; }
-    .hero-text { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.65; max-width: 760px; }
-    .hero-side { display: grid; gap: 10px; min-width: 250px; flex: 1; max-width: 320px; }
-    .date-card { background: linear-gradient(135deg, #1c3d61 0%, #274f79 100%); color: #ffffff; border-radius: 14px; padding: 12px 14px; display: grid; gap: 2px; box-shadow: 0 10px 20px rgba(22, 58, 99, 0.14); }
-    .date-card span { font-size: 11px; font-weight: 700; opacity: 0.78; letter-spacing: 0.05em; text-transform: uppercase; }
-    .date-card strong { font-size: 15px; line-height: 1.4; font-weight: 700; }
-    .section-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .main { padding: 18px 20px; min-width: 0; }
+    .hero { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+    .hero-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .hero-eyebrow { display: none; }
+    .hero-title { margin: 0; font-size: 26px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 700; }
+    .hero-text { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.55; max-width: 760px; }
+    .hero-side { display: flex; align-items: center; gap: 10px; justify-content: flex-end; min-width: 260px; flex: 1; }
+    .date-card { background: #f8fafc; color: var(--text); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; box-shadow: none; border: 1px solid var(--line); min-width: 210px; }
+    .date-card span { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; opacity: 1; }
+    .date-card strong { font-size: 13px; line-height: 1.35; font-weight: 700; }
+    .section-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
     .btn { border: none; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease; box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06); }
     .btn:hover { transform: translateY(-1px); opacity: 0.96; }
     .btn-primary { background: var(--primary); color: #ffffff; }
@@ -609,31 +609,31 @@ app.get("/", (req, res) => {
     .btn-warning { background: var(--accent); color: #1f2937; }
     .btn-secondary { background: #64748b; color: #ffffff; }
     .btn-danger { background: var(--danger); color: #ffffff; }
-    .critical-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
-    .critical-card { border: 1px solid var(--line); border-radius: 16px; padding: 14px 15px; background: #ffffff; box-shadow: var(--shadow); cursor: pointer; text-align: left; display: grid; gap: 6px; transition: 0.18s ease; width: 100%; }
+    .critical-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+    .critical-card { border: 1px solid var(--line); border-radius: 13px; padding: 12px 13px; background: #ffffff; box-shadow: var(--shadow); cursor: pointer; text-align: left; display: grid; gap: 5px; transition: 0.18s ease; width: 100%; }
     .critical-card.today { background: linear-gradient(135deg, #fffdf6 0%, #ffffff 100%); }
     .critical-card.overdue { background: linear-gradient(135deg, #fffafa 0%, #ffffff 100%); }
     .critical-card.active-card { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.14); }
     .critical-card.active-card-warning { border-color: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14); }
     .critical-topline { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-    .critical-title { font-size: 13px; font-weight: 700; }
-    .critical-icon { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 15px; background: rgba(255,255,255,0.78); border: 1px solid rgba(148, 163, 184, 0.18); }
-    .critical-card .card-number { font-size: 24px; font-weight: 700; margin: 0; }
-    .critical-card .card-label { font-size: 12px; color: var(--muted); line-height: 1.45; margin: 0; }
-    .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
-    .card { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); min-height: 102px; display: grid; gap: 8px; align-content: start; }
-    .card-icon { width: 36px; height: 36px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .critical-title { font-size: 12px; font-weight: 700; }
+    .critical-icon { width: 30px; height: 30px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 14px; background: rgba(255,255,255,0.78); border: 1px solid rgba(148, 163, 184, 0.16); }
+    .critical-card .card-number { font-size: 22px; font-weight: 700; margin: 0; }
+    .critical-card .card-label { font-size: 11.5px; color: var(--muted); line-height: 1.4; margin: 0; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .card { background: #ffffff; border: 1px solid var(--line); border-radius: 12px; padding: 12px; box-shadow: var(--shadow); min-height: 92px; display: grid; gap: 7px; align-content: start; }
+    .card-icon { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
     .icon-yellow { background: #fff4cf; }
     .icon-blue { background: #e0efff; }
     .icon-green { background: #dcfce7; }
     .icon-gray { background: #edf2f7; }
-    .card-number { font-size: 23px; font-weight: 700; line-height: 1; margin: 0; }
-    .card-label { font-size: 12px; color: var(--muted); line-height: 1.5; }
-    .panel { background: #ffffff; border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); margin-bottom: 14px; }
-    .panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
-    .panel-kicker { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 5px; }
-    .panel-title { font-size: 18px; font-weight: 700; line-height: 1.25; }
-    .panel-note { font-size: 12px; color: var(--muted); line-height: 1.55; max-width: 360px; }
+    .card-number { font-size: 21px; font-weight: 700; line-height: 1; margin: 0; }
+    .card-label { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+    .panel { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); margin-bottom: 12px; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .panel-kicker { display: none; }
+    .panel-title { font-size: 16px; font-weight: 700; line-height: 1.25; }
+    .panel-note { display: none; }
     .filters { display: grid; grid-template-columns: 150px 150px 150px minmax(220px, 1fr) 130px; gap: 10px; align-items: center; }
     input, select, textarea { width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; background: #ffffff; color: var(--text); transition: border-color 0.15s ease, box-shadow 0.15s ease; }
     input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
@@ -706,17 +706,17 @@ app.get("/", (req, res) => {
     .alert-group-title.today { color: #92400e; }
     .alert-group-title.overdue { color: #b91c1c; }
     .alert-list { display: grid; gap: 10px; }
-    .alert-item { border-radius: 12px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; border: 1px solid var(--line); background: #ffffff; }
+    .alert-item { border-radius: 10px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; border: 1px solid var(--line); background: #ffffff; }
     .alert-item.today { border-left: 3px solid #d6a840; border-color: #ebdfb6; background: #ffffff; }
     .alert-item.overdue { border-left: 3px solid #d64f4f; border-color: #f0d2d2; background: #ffffff; }
-    .alert-item-title { font-weight: 700; line-height: 1.45; margin-bottom: 3px; font-size: 13px; }
-    .alert-item-meta { font-size: 12px; color: var(--muted); line-height: 1.45; }
+    .alert-item-title { font-weight: 700; line-height: 1.45; margin-bottom: 3px; font-size: 12.5px; }
+    .alert-item-meta { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
     .alert-item.overdue .alert-item-meta { color: #8a4a4a; }
     .alert-item.today .alert-item-meta { color: #7c6030; }
     @media (max-width: 1280px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     .alert-item .btn { padding: 8px 10px; font-size: 12px; box-shadow: none; }
-    @media (max-width: 980px) { .app { grid-template-columns: minmax(0, 1fr); } .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: min(84vw, 320px); height: 100vh; transform: translateX(-100%); transition: transform 0.2s ease; } body.sidebar-open .sidebar { transform: translateX(0); } body.sidebar-open .sidebar-backdrop { display: block; } .sidebar-toggle { display: inline-flex; align-items: center; gap: 8px; } .main { padding: 16px; } .hero { padding: 18px; border-radius: 22px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; } .critical-grid, .stats-grid, .attachments-grid, .form-grid, .filters { grid-template-columns: 1fr; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .detail-table th { width: 150px; } }
-    @media (max-width: 640px) { .main { padding: 14px; } .hero-title { font-size: 22px; } .panel-title { font-size: 19px; } .card, .critical-card { padding: 16px; } .section-actions { width: 100%; } .section-actions .btn { flex: 1; } .attachment-card { grid-template-columns: 1fr; } .attachment-thumb, .attachment-thumb-doc { width: 100%; height: 180px; } table { min-width: 760px; } }
+    @media (max-width: 980px) { .app { grid-template-columns: minmax(0, 1fr); } .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: min(84vw, 320px); height: 100vh; transform: translateX(-100%); transition: transform 0.2s ease; } body.sidebar-open .sidebar { transform: translateX(0); } body.sidebar-open .sidebar-backdrop { display: block; } .sidebar-toggle { display: inline-flex; align-items: center; gap: 8px; } .main { padding: 16px; } .hero { padding: 14px; border-radius: 16px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; justify-content: space-between; flex-wrap: wrap; } .critical-grid, .stats-grid, .attachments-grid, .form-grid, .filters { grid-template-columns: 1fr; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .detail-table th { width: 150px; } }
+    @media (max-width: 640px) { .main { padding: 14px; } .hero-title { font-size: 22px; } .panel-title { font-size: 17px; } .card, .critical-card { padding: 14px; } .section-actions { width: 100%; } .section-actions .btn { flex: 1; } .attachment-card { grid-template-columns: 1fr; } .attachment-thumb, .attachment-thumb-doc { width: 100%; height: 180px; } table { min-width: 760px; } .date-card { min-width: 0; width: 100%; } }
   </style>
 </head>
 <body>
@@ -734,24 +734,19 @@ app.get("/", (req, res) => {
         <div class="nav-section-title">Genel</div>
         <a href="#" class="menu-item"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
         <div class="nav-section-title">Modüller</div>
-        <a href="#" class="menu-item active"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span><span class="menu-badge">Aktif</span></a>
-        <a href="#" class="menu-item"><span class="menu-left"><span>🧾</span><span>İşyeri Denetim</span></span><span class="menu-badge">Sıradaki</span></a>
+        <a href="#" class="menu-item active"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span></a>
+        <a href="#" class="menu-item"><span class="menu-left"><span>🧾</span><span>İşyeri Denetim</span></span></a>
       </nav>
-      <div class="sidebar-footer">
-        <div class="sidebar-footer-title">Tasarım notu</div>
-        <div class="sidebar-footer-text">Daha ince menü, daha geniş çalışma alanı ve sade kritik liste yapısı ile günlük kullanım hızlandırıldı.</div>
-      </div>
     </aside>
     <main class="main">
       <button class="sidebar-toggle" type="button" onclick="toggleSidebar()">☰ Menü</button>
       <section class="hero">
         <div class="hero-copy">
-          <div class="hero-eyebrow">Şikayet modülü tamamlandı • sade ve modern görünüm varyasyonu</div>
-          <h1 class="hero-title">Daha zarif, daha hafif ve daha geniş çalışma alanı sunan görünüm</h1>
-          <p class="hero-text">Bu varyasyonda sol menü inceltildi, yazı ve kart yoğunluğu hafifletildi, işlem alanı genişletildi ve kritik takip listesi daha sade-modern bir yapıya taşındı. Aynı iskelet, işyeri denetim modülü için de doğrudan temel olabilir.</p>
+          <h1 class="hero-title">Zabıta Yönetim Sistemi</h1>
+          <p class="hero-text">Şikayet yönetimi ekranı</p>
         </div>
         <div class="hero-side">
-          <div class="date-card"><span>Bugün</span><strong id="todayText"></strong></div>
+          <div class="date-card"><span>Tarih</span><strong id="todayText"></strong></div>
           <div class="section-actions">
             <button class="btn btn-info" type="button">📊 İstatistikler</button>
             <button class="btn btn-primary" type="button" onclick="openNewModal()">＋ Yeni Şikayet</button>
@@ -777,11 +772,11 @@ app.get("/", (req, res) => {
         <div class="card"><div class="card-icon icon-gray">📋</div><div class="card-number" id="totalCount">0</div><div class="card-label">Toplam şikayet kaydı</div></div>
       </section>
       <section class="panel" id="controlAlertsPanel" style="display:none;">
-        <div class="panel-header"><div><div class="panel-kicker">Öncelikli takip</div><div class="panel-title">Kritik kontrol listesi</div></div><div class="panel-note">Liste sade tutuldu; karttan ilgili kayda hızlı geçiş yapılır.</div></div>
+        <div class="panel-header"><div class="panel-title">Kritik kontrol listesi</div></div>
         <div id="controlAlertsList"></div>
       </section>
       <section class="panel">
-        <div class="panel-header"><div><div class="panel-kicker">Hızlı filtreleme</div><div class="panel-title">Kayıt filtreleri</div></div><div class="panel-note">Tarih, kaynak, durum ve arama alanı ile kayıt listesi anında daraltılır.</div></div>
+        <div class="panel-header"><div class="panel-title">Kayıt filtreleri</div></div>
         <div class="filters">
           <input type="date" id="filterDate" />
           <select id="filterSource"><option value="">Tüm Kaynaklar</option><option value="CİMER">CİMER</option><option value="Şeffaf Masa">Şeffaf Masa</option><option value="Büro Telefonu">Büro Telefonu</option><option value="Vatandaş Talebi">Vatandaş Talebi</option></select>
@@ -791,7 +786,7 @@ app.get("/", (req, res) => {
         </div>
       </section>
       <section class="panel table-panel">
-        <div class="panel-header"><div><div class="panel-kicker">Çalışma listesi</div><div class="panel-title">Şikayet kayıtları</div></div><div class="panel-note">Detay görüntüleme, düzenleme ve silme işlemleri aynı satırdan yapılır.</div></div>
+        <div class="panel-header"><div class="panel-title">Şikayet kayıtları</div></div>
         <div class="table-wrap"><table><thead><tr><th>Şikayet No</th><th>Tarih</th><th>Konu</th><th>Kaynak</th><th>Durum</th><th>Yapılan İşlem</th><th>İşlemler</th></tr></thead><tbody id="complaintTableBody"></tbody></table></div>
         <div id="emptyNote" class="empty-note" style="display:none;">Kayıt bulunamadı.</div>
       </section>
