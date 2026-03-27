@@ -6,6 +6,7 @@ const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const DISPLAY_TIME_ZONE = process.env.DISPLAY_TIME_ZONE || "Europe/Istanbul";
 
 app.use(express.json());
 
@@ -18,6 +19,31 @@ const complaintUploadsRoot = path.join(uploadsRoot, "complaints");
 
 fs.mkdirSync(complaintUploadsRoot, { recursive: true });
 
+function normalizeStoredText(value) {
+  if (value === null || value === undefined) return "";
+
+  const text = String(value);
+  if (!/[ÃÄÅÐÞð]/.test(text)) return text;
+
+  try {
+    const fixed = Buffer.from(text, "latin1").toString("utf8");
+    return fixed || text;
+  } catch (error) {
+    return text;
+  }
+}
+
+function decodeUploadFilename(value) {
+  if (!value) return "dosya";
+
+  try {
+    const fixed = Buffer.from(String(value), "latin1").toString("utf8");
+    return fixed || String(value);
+  } catch (error) {
+    return String(value);
+  }
+}
+
 const storage = multer.diskStorage({
   destination: function(req, file, cb) {
     const complaintFolder = path.join(complaintUploadsRoot, String(req.params.id));
@@ -25,8 +51,9 @@ const storage = multer.diskStorage({
     cb(null, complaintFolder);
   },
   filename: function(req, file, cb) {
-    const ext = path.extname(file.originalname || "");
-    const base = path.basename(file.originalname || "dosya", ext).replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, "-");
+    const decodedOriginalName = decodeUploadFilename(file.originalname || "dosya");
+    const ext = path.extname(decodedOriginalName || "");
+    const base = path.basename(decodedOriginalName || "dosya", ext).replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, "-");
     cb(null, Date.now() + "-" + base + ext);
   }
 });
@@ -65,7 +92,9 @@ function formatDate(value) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
 
-  return new Intl.DateTimeFormat("tr-TR").format(d);
+  return new Intl.DateTimeFormat("tr-TR", {
+    timeZone: DISPLAY_TIME_ZONE,
+  }).format(d);
 }
 
 function formatDateTime(value) {
@@ -75,6 +104,7 @@ function formatDateTime(value) {
   if (Number.isNaN(d.getTime())) return String(value);
 
   return new Intl.DateTimeFormat("tr-TR", {
+    timeZone: DISPLAY_TIME_ZONE,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -469,8 +499,8 @@ app.post("/api/complaints/:id/files", upload.any(), async (req, res) => {
           id,
           fileType,
           category,
-          description || "",
-          uploadedFile.originalname,
+          normalizeStoredText(description || ""),
+          decodeUploadFilename(uploadedFile.originalname),
           uploadedFile.filename,
           relativePath,
           uploadedFile.mimetype || "",
