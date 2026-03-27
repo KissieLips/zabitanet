@@ -153,24 +153,50 @@ function mapComplaintFile(row) {
   };
 }
 
-function mapInspection(row) {
+function mapBusinessCategory(row) {
   return {
     id: row.id,
-    no: row.inspection_no,
-    date: toInputDate(row.inspection_date),
-    displayDate: formatDate(row.inspection_date),
-    businessName: row.business_name,
-    authorityName: row.authority_name || "",
-    phone: row.phone || "",
-    address: row.address || "",
-    activitySubject: row.activity_subject || "",
-    inspectionType: row.inspection_type || "",
-    findings: row.findings || "",
-    action: row.action_taken || "",
-    resultStatus: row.result_status || "",
-    note: row.note || "",
-    controlDate: toInputDate(row.control_date),
-    controlDateText: formatDate(row.control_date),
+    name: row.name,
+    createdAt: formatDateTime(row.created_at),
+  };
+}
+
+function buildBusinessAddress(row) {
+  const parts = [];
+
+  if (row.neighborhood) parts.push(row.neighborhood + ' Mah.');
+  if (row.street) parts.push(row.street);
+  if (row.door_no) parts.push('No: ' + row.door_no);
+
+  return parts.join(', ');
+}
+
+function buildMapsUrl(lat, lng) {
+  if (lat === null || lat === undefined || lng === null || lng === undefined) return '';
+  return 'https://www.google.com/maps?q=' + lat + ',' + lng;
+}
+
+function mapBusiness(row) {
+  const lat = row.location_lat !== null && row.location_lat !== undefined ? Number(row.location_lat) : null;
+  const lng = row.location_lng !== null && row.location_lng !== undefined ? Number(row.location_lng) : null;
+
+  return {
+    id: row.id,
+    categoryId: row.category_id,
+    categoryName: row.category_name || '',
+    tradeName: row.trade_name,
+    ownerName: row.owner_name,
+    phone: row.phone || '',
+    neighborhood: row.neighborhood || '',
+    street: row.street || '',
+    doorNo: row.door_no || '',
+    ada: row.ada || '',
+    parcel: row.parcel || '',
+    addressText: buildBusinessAddress(row),
+    locationLat: lat,
+    locationLng: lng,
+    locationText: lat !== null && lng !== null ? (lat + ', ' + lng) : '',
+    mapsUrl: buildMapsUrl(lat, lng),
     createdAt: formatDateTime(row.created_at),
   };
 }
@@ -242,29 +268,115 @@ async function initDb() {
   `);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS inspections (
+    CREATE TABLE IF NOT EXISTS business_categories (
       id SERIAL PRIMARY KEY,
-      inspection_no VARCHAR(30) UNIQUE NOT NULL,
-      inspection_date DATE NOT NULL,
-      business_name VARCHAR(255) NOT NULL,
-      authority_name VARCHAR(255),
-      phone VARCHAR(40),
-      address TEXT,
-      activity_subject VARCHAR(255),
-      inspection_type VARCHAR(100) NOT NULL DEFAULT 'Rutin Denetim',
-      findings TEXT,
-      action_taken VARCHAR(150) NOT NULL DEFAULT 'Denetim Yapıldı',
-      result_status VARCHAR(50) NOT NULL DEFAULT 'Uygun',
-      note TEXT,
-      control_date DATE,
+      name VARCHAR(120) UNIQUE NOT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
   await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_inspections_control_date
-    ON inspections(control_date)
+    CREATE TABLE IF NOT EXISTS businesses (
+      id SERIAL PRIMARY KEY,
+      category_id INTEGER REFERENCES business_categories(id) ON DELETE SET NULL,
+      trade_name VARCHAR(255) NOT NULL,
+      owner_name VARCHAR(255) NOT NULL,
+      phone VARCHAR(30),
+      neighborhood VARCHAR(120),
+      street VARCHAR(150),
+      door_no VARCHAR(50),
+      ada VARCHAR(50),
+      parcel VARCHAR(50),
+      location_lat NUMERIC(10, 7),
+      location_lng NUMERIC(10, 7),
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
   `);
+
+  await pool.query(`
+    ALTER TABLE businesses
+    ADD COLUMN IF NOT EXISTS category_id INTEGER
+  `);
+
+  await pool.query(`
+    ALTER TABLE businesses
+    ADD COLUMN IF NOT EXISTS trade_name VARCHAR(255)
+  `);
+
+  await pool.query(`
+    ALTER TABLE businesses
+    ADD COLUMN IF NOT EXISTS owner_name VARCHAR(255)
+  `);
+
+  await pool.query(`
+    ALTER TABLE businesses
+    ADD COLUMN IF NOT EXISTS phone VARCHAR(30)
+  `);
+
+  await pool.query(`
+    ALTER TABLE businesses
+    ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(120)
+  `);
+
+  await pool.query(`
+    ALTER TABLE businesses
+    ADD COLUMN IF NOT EXISTS street VARCHAR(150)
+  `);
+
+  await pool.query(`
+    ALTER TABLE businesses
+    ADD COLUMN IF NOT EXISTS door_no VARCHAR(50)
+  `);
+
+  await pool.query(`
+    ALTER TABLE businesses
+    ADD COLUMN IF NOT EXISTS ada VARCHAR(50)
+  `);
+
+  await pool.query(`
+    ALTER TABLE businesses
+    ADD COLUMN IF NOT EXISTS parcel VARCHAR(50)
+  `);
+
+  await pool.query(`
+    ALTER TABLE businesses
+    ADD COLUMN IF NOT EXISTS location_lat NUMERIC(10, 7)
+  `);
+
+  await pool.query(`
+    ALTER TABLE businesses
+    ADD COLUMN IF NOT EXISTS location_lng NUMERIC(10, 7)
+  `);
+
+  await pool.query(`
+    ALTER TABLE businesses
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_businesses_category_id
+    ON businesses(category_id)
+  `);
+
+  const defaultCategories = [
+    'Market / Bakkal',
+    'Pastahane / Tatlıcı',
+    'Fırın',
+    'Kasap',
+    'Manav',
+    'Kafe / Kahvehane',
+    'Restoran / Lokanta',
+    'Tekel Bayii',
+    'Berber / Kuaför',
+    'Kuruyemişçi'
+  ];
+
+  for (const categoryName of defaultCategories) {
+    await pool.query(
+      'INSERT INTO business_categories (name) VALUES ($1) ON CONFLICT (name) DO NOTHING',
+      [categoryName]
+    );
+  }
 }
 
 async function nextComplaintNo() {
@@ -285,26 +397,6 @@ async function nextComplaintNo() {
   }
 
   return "ŞKY-" + currentYear + "-" + String(nextNumber).padStart(4, "0");
-}
-
-async function nextInspectionNo() {
-  const currentYear = new Date().getFullYear();
-  const result = await pool.query(
-    "SELECT inspection_no FROM inspections WHERE inspection_no LIKE $1 ORDER BY id DESC LIMIT 1",
-    ["DNT-" + currentYear + "-%"]
-  );
-
-  let nextNumber = 1;
-
-  if (result.rows.length > 0) {
-    const lastNo = result.rows[0].inspection_no || "";
-    const match = lastNo.match(/(\d+)$/);
-    if (match) {
-      nextNumber = Number(match[1]) + 1;
-    }
-  }
-
-  return "DNT-" + currentYear + "-" + String(nextNumber).padStart(4, "0");
 }
 
 app.get("/api/complaints", async (req, res) => {
@@ -613,182 +705,837 @@ app.delete("/api/complaint-files/:fileId", async (req, res) => {
   }
 });
 
-app.get("/api/inspections", async (req, res) => {
+
+app.get("/api/business-categories", async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM inspections ORDER BY id DESC");
-    res.json(result.rows.map(mapInspection));
+    const result = await pool.query("SELECT * FROM business_categories ORDER BY name ASC");
+    res.json(result.rows.map(mapBusinessCategory));
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Denetim kayıtları alınamadı." });
+    res.status(500).json({ error: "Kategoriler alınamadı." });
   }
 });
 
-app.post("/api/inspections", async (req, res) => {
+app.post("/api/business-categories", async (req, res) => {
   try {
-    const {
-      date,
-      businessName,
-      authorityName,
-      phone,
-      address,
-      activitySubject,
-      inspectionType,
-      findings,
-      action,
-      resultStatus,
-      note,
-      controlDate,
-    } = req.body;
+    const name = (req.body && req.body.name ? String(req.body.name) : "").trim();
 
-    if (!date || !businessName) {
-      return res.status(400).json({ error: "Zorunlu alanları doldurun." });
+    if (!name) {
+      return res.status(400).json({ error: "Kategori adı giriniz." });
     }
-
-    const inspectionNo = await nextInspectionNo();
-    const finalInspectionType = inspectionType || "Rutin Denetim";
-    const finalAction = action || "Denetim Yapıldı";
-    const finalResultStatus = resultStatus || "Uygun";
-    const finalControlDate = finalResultStatus === "Süre Verildi" ? (controlDate || null) : null;
 
     const result = await pool.query(
       `
-        INSERT INTO inspections
+        INSERT INTO business_categories (name)
+        VALUES ($1)
+        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+        RETURNING *
+      `,
+      [name]
+    );
+
+    res.json(mapBusinessCategory(result.rows[0]));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Kategori kaydedilemedi." });
+  }
+});
+
+app.get("/api/businesses", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+        SELECT
+          b.*, bc.name AS category_name
+        FROM businesses b
+        LEFT JOIN business_categories bc ON bc.id = b.category_id
+        ORDER BY b.id DESC
+      `
+    );
+
+    res.json(result.rows.map(mapBusiness));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "İşyerleri alınamadı." });
+  }
+});
+
+app.post("/api/businesses", async (req, res) => {
+  try {
+    const {
+      categoryId,
+      tradeName,
+      ownerName,
+      phone,
+      neighborhood,
+      street,
+      doorNo,
+      ada,
+      parcel,
+      locationLat,
+      locationLng,
+    } = req.body || {};
+
+    if (!categoryId || !tradeName || !ownerName) {
+      return res.status(400).json({ error: "Kategori, işyeri ünvanı ve işyeri sahibi zorunludur." });
+    }
+
+    const result = await pool.query(
+      `
+        INSERT INTO businesses
           (
-            inspection_no,
-            inspection_date,
-            business_name,
-            authority_name,
+            category_id,
+            trade_name,
+            owner_name,
             phone,
-            address,
-            activity_subject,
-            inspection_type,
-            findings,
-            action_taken,
-            result_status,
-            note,
-            control_date
+            neighborhood,
+            street,
+            door_no,
+            ada,
+            parcel,
+            location_lat,
+            location_lng
           )
         VALUES
-          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *
       `,
       [
-        inspectionNo,
-        date,
-        businessName,
-        authorityName || "",
-        phone || "",
-        address || "",
-        activitySubject || "",
-        finalInspectionType,
-        findings || "",
-        finalAction,
-        finalResultStatus,
-        note || "",
-        finalControlDate,
+        Number(categoryId),
+        String(tradeName).trim(),
+        String(ownerName).trim(),
+        phone ? String(phone).trim() : "",
+        neighborhood ? String(neighborhood).trim() : "",
+        street ? String(street).trim() : "",
+        doorNo ? String(doorNo).trim() : "",
+        ada ? String(ada).trim() : "",
+        parcel ? String(parcel).trim() : "",
+        locationLat !== "" && locationLat !== null && locationLat !== undefined ? Number(locationLat) : null,
+        locationLng !== "" && locationLng !== null && locationLng !== undefined ? Number(locationLng) : null,
       ]
     );
 
-    res.json(mapInspection(result.rows[0]));
+    const fullResult = await pool.query(
+      `
+        SELECT
+          b.*, bc.name AS category_name
+        FROM businesses b
+        LEFT JOIN business_categories bc ON bc.id = b.category_id
+        WHERE b.id = $1
+      `,
+      [result.rows[0].id]
+    );
+
+    res.json(mapBusiness(fullResult.rows[0]));
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Denetim kaydı eklenemedi." });
+    res.status(500).json({ error: "İşyeri kaydedilemedi." });
   }
 });
 
-app.put("/api/inspections/:id", async (req, res) => {
+app.put("/api/businesses/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const {
-      date,
-      businessName,
-      authorityName,
+      categoryId,
+      tradeName,
+      ownerName,
       phone,
-      address,
-      activitySubject,
-      inspectionType,
-      findings,
-      action,
-      resultStatus,
-      note,
-      controlDate,
-    } = req.body;
+      neighborhood,
+      street,
+      doorNo,
+      ada,
+      parcel,
+      locationLat,
+      locationLng,
+    } = req.body || {};
 
-    if (!date || !businessName) {
-      return res.status(400).json({ error: "Zorunlu alanları doldurun." });
+    if (!categoryId || !tradeName || !ownerName) {
+      return res.status(400).json({ error: "Kategori, işyeri ünvanı ve işyeri sahibi zorunludur." });
     }
 
-    const existingResult = await pool.query("SELECT * FROM inspections WHERE id = $1", [id]);
-
-    if (existingResult.rows.length === 0) {
-      return res.status(404).json({ error: "Denetim kaydı bulunamadı." });
+    const exists = await pool.query("SELECT id FROM businesses WHERE id = $1", [id]);
+    if (exists.rows.length === 0) {
+      return res.status(404).json({ error: "İşyeri bulunamadı." });
     }
 
-    const existing = existingResult.rows[0];
-    const finalInspectionType = inspectionType || "Rutin Denetim";
-    const finalAction = action || "Denetim Yapıldı";
-    const finalResultStatus = resultStatus || "Uygun";
-    const finalControlDate =
-      finalResultStatus === "Süre Verildi"
-        ? (controlDate || toInputDate(existing.control_date) || null)
-        : null;
-
-    const result = await pool.query(
+    await pool.query(
       `
-        UPDATE inspections
+        UPDATE businesses
         SET
-          inspection_date = $1,
-          business_name = $2,
-          authority_name = $3,
+          category_id = $1,
+          trade_name = $2,
+          owner_name = $3,
           phone = $4,
-          address = $5,
-          activity_subject = $6,
-          inspection_type = $7,
-          findings = $8,
-          action_taken = $9,
-          result_status = $10,
-          note = $11,
-          control_date = $12
-        WHERE id = $13
-        RETURNING *
+          neighborhood = $5,
+          street = $6,
+          door_no = $7,
+          ada = $8,
+          parcel = $9,
+          location_lat = $10,
+          location_lng = $11
+        WHERE id = $12
       `,
       [
-        date,
-        businessName,
-        authorityName || "",
-        phone || "",
-        address || "",
-        activitySubject || "",
-        finalInspectionType,
-        findings || "",
-        finalAction,
-        finalResultStatus,
-        note || "",
-        finalControlDate,
+        Number(categoryId),
+        String(tradeName).trim(),
+        String(ownerName).trim(),
+        phone ? String(phone).trim() : "",
+        neighborhood ? String(neighborhood).trim() : "",
+        street ? String(street).trim() : "",
+        doorNo ? String(doorNo).trim() : "",
+        ada ? String(ada).trim() : "",
+        parcel ? String(parcel).trim() : "",
+        locationLat !== "" && locationLat !== null && locationLat !== undefined ? Number(locationLat) : null,
+        locationLng !== "" && locationLng !== null && locationLng !== undefined ? Number(locationLng) : null,
         id,
       ]
     );
 
-    res.json(mapInspection(result.rows[0]));
+    const fullResult = await pool.query(
+      `
+        SELECT
+          b.*, bc.name AS category_name
+        FROM businesses b
+        LEFT JOIN business_categories bc ON bc.id = b.category_id
+        WHERE b.id = $1
+      `,
+      [id]
+    );
+
+    res.json(mapBusiness(fullResult.rows[0]));
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Denetim kaydı güncellenemedi." });
+    res.status(500).json({ error: "İşyeri güncellenemedi." });
   }
 });
 
-app.delete("/api/inspections/:id", async (req, res) => {
+app.delete("/api/businesses/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    await pool.query("DELETE FROM inspections WHERE id = $1", [id]);
+    await pool.query("DELETE FROM businesses WHERE id = $1", [id]);
     res.json({ success: true });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Denetim kaydı silinemedi." });
+    res.status(500).json({ error: "İşyeri silinemedi." });
   }
 });
 
-app.get("/inspections", (req, res) => {
-  res.sendFile(path.join(__dirname, "inspection-page.html"));
+app.get("/businesses", (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zabıta Yönetim Sistemi - Firma Listesi</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --panel-soft: #f8fafc;
+      --line: #dbe3ee;
+      --text: #17202f;
+      --muted: #667085;
+      --navy: #163a63;
+      --navy-2: #1f4c81;
+      --accent: #f5b301;
+      --primary: #2563eb;
+      --danger: #dc2626;
+      --success: #16a34a;
+      --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, "Segoe UI", Arial, Helvetica, sans-serif; background: #f3f6fa; color: var(--text); }
+    .app { min-height: 100vh; display: grid; grid-template-columns: 208px minmax(0, 1fr); }
+    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #fff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 0; height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); z-index: 20; }
+    .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.16); }
+    .brand { font-size: 14px; font-weight: 700; line-height: 1.3; }
+    .brand-sub { font-size: 10.5px; color: rgba(255,255,255,0.62); line-height: 1.45; }
+    .nav-section-title { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.42); margin-top: 6px; padding: 0 2px; font-weight: 700; }
+    .menu { display: flex; flex-direction: column; gap: 4px; }
+    .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border-radius: 10px; font-size: 12.5px; text-decoration: none; color: rgba(255,255,255,0.84); transition: 0.18s ease; border: 1px solid transparent; font-weight: 500; }
+    .menu-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.08); }
+    .menu-item.active { background: rgba(255,255,255,0.08); color: #ffffff; border-color: rgba(255,255,255,0.1); font-weight: 600; }
+    .menu-left { display: inline-flex; align-items: center; gap: 8px; }
+    .main { padding: 18px 20px; min-width: 0; }
+    .hero { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+    .hero-title { margin: 0; font-size: 26px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 700; }
+    .hero-text { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.55; max-width: 780px; }
+    .date-card { background: #f8fafc; color: var(--text); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; border: 1px solid var(--line); min-width: 210px; }
+    .date-card span { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
+    .date-card strong { font-size: 13px; line-height: 1.35; font-weight: 700; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .card { background: #ffffff; border: 1px solid var(--line); border-radius: 12px; padding: 12px; box-shadow: var(--shadow); min-height: 92px; display: grid; gap: 7px; align-content: start; }
+    .card-number { font-size: 21px; font-weight: 700; line-height: 1; margin: 0; }
+    .card-label { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+    .card-icon { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+    .icon-blue { background: #e0efff; }
+    .icon-yellow { background: #fff4cf; }
+    .icon-green { background: #dcfce7; }
+    .icon-gray { background: #edf2f7; }
+    .content-grid { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 12px; }
+    .panel { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); margin-bottom: 12px; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .panel-title { font-size: 16px; font-weight: 700; line-height: 1.25; }
+    .panel-subtitle { font-size: 12px; color: var(--muted); }
+    .btn { border: none; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: transform 0.15s ease, opacity 0.15s ease; }
+    .btn:hover { transform: translateY(-1px); opacity: 0.96; }
+    .btn-primary { background: var(--primary); color: #ffffff; }
+    .btn-warning { background: var(--accent); color: #1f2937; }
+    .btn-secondary { background: #64748b; color: #ffffff; }
+    .btn-danger { background: var(--danger); color: #ffffff; }
+    .btn-ghost { background: #eef2ff; color: #1d4ed8; border: 1px solid #dbe7ff; }
+    .btn-success { background: var(--success); color: #ffffff; }
+    input, select, textarea { width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; background: #ffffff; color: var(--text); transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+    .category-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 12px; }
+    .category-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .category-pill { display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 999px; background: #f8fafc; border: 1px solid var(--line); font-size: 12px; font-weight: 600; color: #334155; }
+    .filters { display: grid; grid-template-columns: 220px minmax(220px, 1fr) 150px; gap: 10px; align-items: center; margin-bottom: 12px; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+    table { width: 100%; border-collapse: collapse; min-width: 1020px; background: #ffffff; }
+    th { text-align: left; padding: 13px 12px; font-size: 12px; color: #475569; border-bottom: 1px solid var(--line); font-weight: 700; letter-spacing: 0.02em; background: #f8fafc; }
+    td { padding: 13px 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; vertical-align: top; }
+    tbody tr:hover { background: #f8fbff; }
+    .badge { display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #eff6ff; color: #1d4ed8; }
+    .muted { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .cell-title { font-weight: 700; color: #0f172a; line-height: 1.45; }
+    .cell-sub { color: var(--muted); font-size: 12px; line-height: 1.45; margin-top: 4px; }
+    .action-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .mini-btn { border: 1px solid var(--line); background: #ffffff; color: #1f2937; padding: 7px 9px; border-radius: 9px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .mini-btn:hover { background: #f8fafc; }
+    .mini-btn.primary { color: #1d4ed8; border-color: #bfdbfe; background: #eff6ff; }
+    .mini-btn.danger { color: #dc2626; border-color: #fecaca; background: #fff1f2; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 80; }
+    .modal-overlay.show { display: flex; }
+    .modal { width: min(920px, 100%); max-height: calc(100vh - 40px); overflow: auto; background: #ffffff; border-radius: 16px; box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18); border: 1px solid rgba(219, 227, 238, 0.9); }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); font-size: 16px; font-weight: 700; }
+    .close-btn { border: none; background: #f8fafc; color: #475569; width: 32px; height: 32px; border-radius: 10px; cursor: pointer; font-size: 20px; }
+    .modal-body { padding: 18px; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 18px; border-top: 1px solid var(--line); }
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .form-group { display: grid; gap: 6px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .location-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+    .empty-state { border: 1px dashed var(--line); border-radius: 14px; padding: 18px; text-align: center; color: var(--muted); background: #fafcff; }
+    @media (max-width: 1100px) {
+      .content-grid { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 720px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { position: relative; height: auto; }
+      .filters, .form-grid, .location-row { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <div class="brand-mark">ZB</div>
+        <div>
+          <div class="brand">Zabıta Yönetim Sistemi</div>
+          <div class="brand-sub">Kurumsal takip ve saha yönetimi</div>
+        </div>
+      </div>
+      <div class="nav-section-title">Modüller</div>
+      <nav class="menu">
+        <a href="/" class="menu-item"><span class="menu-left"><span>📌</span><span>Şikayet Takip</span></span></a>
+        <a href="/businesses" class="menu-item active"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <section class="hero">
+        <div>
+          <h1 class="hero-title">İşyeri Denetim Modülü · Firma Listesi</h1>
+          <p class="hero-text">Denetim kısmına geçmeden önce işyerlerini sağlam bir temel ile oluşturur. Kategori tanımları, işyeri bilgileri, ada/parsel ve konum ekleme bu ekranda yönetilir. Konum eklenen kayıtlar için tek tıkla haritada yol tarifi açılabilir.</p>
+        </div>
+        <div class="date-card">
+          <span>Bugün</span>
+          <strong id="todayText"></strong>
+        </div>
+      </section>
+
+      <section class="stats-grid">
+        <div class="card">
+          <div class="card-icon icon-blue">🏪</div>
+          <div class="card-number" id="statBusinessCount">0</div>
+          <div class="card-label">Toplam işyeri kaydı</div>
+        </div>
+        <div class="card">
+          <div class="card-icon icon-yellow">🗂️</div>
+          <div class="card-number" id="statCategoryCount">0</div>
+          <div class="card-label">Tanımlı kategori</div>
+        </div>
+        <div class="card">
+          <div class="card-icon icon-green">📍</div>
+          <div class="card-number" id="statLocatedCount">0</div>
+          <div class="card-label">Konumu eklenmiş işyeri</div>
+        </div>
+        <div class="card">
+          <div class="card-icon icon-gray">🧭</div>
+          <div class="card-number" id="statMissingLocationCount">0</div>
+          <div class="card-label">Konum bekleyen işyeri</div>
+        </div>
+      </section>
+
+      <section class="content-grid">
+        <div>
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-title">Kategori Yönetimi</div>
+                <div class="panel-subtitle">Önce işyeri türlerini tanımlayın. Sonra firmaları bu kategorilere bağlayın.</div>
+              </div>
+            </div>
+            <div class="category-input-row">
+              <input type="text" id="categoryNameInput" placeholder="Örn: Market / Bakkal" />
+              <button class="btn btn-warning" onclick="saveCategory()">Kategori Ekle</button>
+            </div>
+            <div id="categoryList" class="category-list"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-title">Firma Listesi</div>
+                <div class="panel-subtitle">Kategoriye bağlı işyeri kayıtları burada tutulur.</div>
+              </div>
+              <button class="btn btn-primary" onclick="openNewBusinessModal()">+ Yeni Firma Ekle</button>
+            </div>
+            <div class="filters">
+              <select id="filterCategory" onchange="renderBusinessTable()"></select>
+              <input type="text" id="searchInput" placeholder="Ünvan, sahip, telefon, mahalle ara" oninput="renderBusinessTable()" />
+              <select id="locationFilter" onchange="renderBusinessTable()">
+                <option value="all">Tüm Konumlar</option>
+                <option value="with">Konumu Olanlar</option>
+                <option value="without">Konumu Olmayanlar</option>
+              </select>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Kategori / Ünvan</th>
+                    <th>İşyeri Sahibi</th>
+                    <th>Telefon</th>
+                    <th>Adres</th>
+                    <th>Ada / Parsel</th>
+                    <th>Konum</th>
+                    <th>İşlemler</th>
+                  </tr>
+                </thead>
+                <tbody id="businessTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="businessModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span id="businessModalTitle">Yeni Firma Ekle</span>
+        <button class="close-btn" onclick="closeModal('businessModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Kategori *</label>
+            <select id="businessCategory"></select>
+          </div>
+          <div class="form-group">
+            <label>İşyeri Ünvanı *</label>
+            <input type="text" id="businessTradeName" placeholder="İşyeri ünvanı" />
+          </div>
+          <div class="form-group">
+            <label>İşyeri Sahibinin Adı Soyadı *</label>
+            <input type="text" id="businessOwnerName" placeholder="Ad Soyad" />
+          </div>
+          <div class="form-group">
+            <label>Telefon Numarası</label>
+            <input type="text" id="businessPhone" placeholder="05xx xxx xx xx" />
+          </div>
+          <div class="form-group">
+            <label>Mahalle</label>
+            <input type="text" id="businessNeighborhood" placeholder="Mahalle" />
+          </div>
+          <div class="form-group">
+            <label>Cadde / Sokak</label>
+            <input type="text" id="businessStreet" placeholder="Cadde / Sokak" />
+          </div>
+          <div class="form-group">
+            <label>Kapı No</label>
+            <input type="text" id="businessDoorNo" placeholder="No" />
+          </div>
+          <div class="form-group">
+            <label>Ada</label>
+            <input type="text" id="businessAda" placeholder="Ada" />
+          </div>
+          <div class="form-group">
+            <label>Parsel</label>
+            <input type="text" id="businessParcel" placeholder="Parsel" />
+          </div>
+          <div class="form-group full">
+            <label>Konum</label>
+            <div class="location-row">
+              <input type="text" id="businessLocationLat" placeholder="Enlem (Latitude)" />
+              <input type="text" id="businessLocationLng" placeholder="Boylam (Longitude)" />
+              <button class="btn btn-success" type="button" onclick="fillCurrentLocation()">Konum Al</button>
+            </div>
+            <div class="muted" style="margin-top:8px;">İşyerindeyken “Konum Al” butonuna basarsanız cihazın mevcut konumu kayda eklenir. Daha sonra tablo içinden “Haritada Aç” ile yol tarifi alabilirsiniz.</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('businessModal')">İptal</button>
+        <button class="btn btn-primary" onclick="saveBusiness()">Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var categories = [];
+    var businesses = [];
+    var editingBusinessId = null;
+
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return "";
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function setTodayText() {
+      var now = new Date();
+      document.getElementById("todayText").textContent = now.toLocaleDateString("tr-TR", {
+        weekday: "long",
+        day: "2-digit",
+        month: "long",
+        year: "numeric"
+      });
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove("show");
+    }
+
+    function openModal(id) {
+      document.getElementById(id).classList.add("show");
+    }
+
+    function getCategoryName(categoryId) {
+      for (var i = 0; i < categories.length; i++) {
+        if (String(categories[i].id) === String(categoryId)) return categories[i].name;
+      }
+      return "";
+    }
+
+    function renderCategoryOptions() {
+      var options = '<option value="">Tüm Kategoriler</option>';
+      var formOptions = '<option value="">Seçiniz</option>';
+
+      for (var i = 0; i < categories.length; i++) {
+        options += '<option value="' + categories[i].id + '">' + escapeHtml(categories[i].name) + '</option>';
+        formOptions += '<option value="' + categories[i].id + '">' + escapeHtml(categories[i].name) + '</option>';
+      }
+
+      document.getElementById("filterCategory").innerHTML = options;
+      document.getElementById("businessCategory").innerHTML = formOptions;
+    }
+
+    function renderCategoryList() {
+      var el = document.getElementById("categoryList");
+
+      if (!categories.length) {
+        el.innerHTML = '<div class="empty-state" style="width:100%;">Henüz kategori eklenmemiş.</div>';
+        return;
+      }
+
+      var html = "";
+      for (var i = 0; i < categories.length; i++) {
+        html += '<span class="category-pill">🗂️ ' + escapeHtml(categories[i].name) + '</span>';
+      }
+      el.innerHTML = html;
+    }
+
+    function renderStats() {
+      var locatedCount = 0;
+      for (var i = 0; i < businesses.length; i++) {
+        if (businesses[i].locationLat !== null && businesses[i].locationLng !== null) {
+          locatedCount += 1;
+        }
+      }
+
+      document.getElementById("statBusinessCount").textContent = businesses.length;
+      document.getElementById("statCategoryCount").textContent = categories.length;
+      document.getElementById("statLocatedCount").textContent = locatedCount;
+      document.getElementById("statMissingLocationCount").textContent = businesses.length - locatedCount;
+    }
+
+    function getFilteredBusinesses() {
+      var search = document.getElementById("searchInput").value.trim().toLocaleLowerCase("tr-TR");
+      var categoryId = document.getElementById("filterCategory").value;
+      var locationFilter = document.getElementById("locationFilter").value;
+
+      return businesses.filter(function(item) {
+        var matchesCategory = !categoryId || String(item.categoryId) === String(categoryId);
+        var hasLocation = item.locationLat !== null && item.locationLng !== null;
+        var matchesLocation = locationFilter === "all" || (locationFilter === "with" ? hasLocation : !hasLocation);
+        var text = [item.categoryName, item.tradeName, item.ownerName, item.phone, item.neighborhood, item.street, item.doorNo, item.ada, item.parcel].join(" ").toLocaleLowerCase("tr-TR");
+        var matchesSearch = !search || text.indexOf(search) !== -1;
+        return matchesCategory && matchesLocation && matchesSearch;
+      });
+    }
+
+    function renderBusinessTable() {
+      var rows = getFilteredBusinesses();
+      var body = document.getElementById("businessTableBody");
+
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="7"><div class="empty-state">Bu filtreye uygun işyeri kaydı bulunmuyor.</div></td></tr>';
+        return;
+      }
+
+      var html = "";
+      for (var i = 0; i < rows.length; i++) {
+        var item = rows[i];
+        html += '<tr>' +
+          '<td>' +
+            '<div class="badge">' + escapeHtml(item.categoryName || "Kategori Yok") + '</div>' +
+            '<div class="cell-title" style="margin-top:8px;">' + escapeHtml(item.tradeName) + '</div>' +
+            '<div class="cell-sub">Kayıt Tarihi: ' + escapeHtml(item.createdAt || "") + '</div>' +
+          '</td>' +
+          '<td><div class="cell-title">' + escapeHtml(item.ownerName) + '</div></td>' +
+          '<td>' + (item.phone ? '<div class="cell-title">' + escapeHtml(item.phone) + '</div>' : '<span class="muted">Belirtilmedi</span>') + '</td>' +
+          '<td>' + (item.addressText ? '<div class="cell-title">' + escapeHtml(item.addressText) + '</div>' : '<span class="muted">Adres girilmedi</span>') + '</td>' +
+          '<td>' +
+            '<div class="cell-title">Ada: ' + escapeHtml(item.ada || '-') + '</div>' +
+            '<div class="cell-sub">Parsel: ' + escapeHtml(item.parcel || '-') + '</div>' +
+          '</td>' +
+          '<td>' +
+            (item.locationText
+              ? '<div class="cell-title">' + escapeHtml(item.locationText) + '</div><div class="cell-sub"><a href="' + escapeHtml(item.mapsUrl) + '" target="_blank" rel="noopener noreferrer">Haritada Aç</a></div>'
+              : '<span class="muted">Konum eklenmedi</span>') +
+          '</td>' +
+          '<td>' +
+            '<div class="action-row">' +
+              '<button class="mini-btn primary" onclick="editBusiness(' + item.id + ')">Düzenle</button>' +
+              (item.mapsUrl ? '<a class="mini-btn" href="' + escapeHtml(item.mapsUrl) + '" target="_blank" rel="noopener noreferrer">Haritada Aç</a>' : '') +
+              '<button class="mini-btn danger" onclick="deleteBusiness(' + item.id + ')">Sil</button>' +
+            '</div>' +
+          '</td>' +
+        '</tr>';
+      }
+
+      body.innerHTML = html;
+    }
+
+    async function loadCategories() {
+      var response = await fetch('/api/business-categories');
+      if (!response.ok) throw new Error();
+      categories = await response.json();
+      renderCategoryOptions();
+      renderCategoryList();
+      renderStats();
+    }
+
+    async function loadBusinesses() {
+      var response = await fetch('/api/businesses');
+      if (!response.ok) throw new Error();
+      businesses = await response.json();
+      renderStats();
+      renderBusinessTable();
+    }
+
+    async function saveCategory() {
+      var input = document.getElementById('categoryNameInput');
+      var name = input.value.trim();
+      if (!name) {
+        alert('Kategori adı giriniz.');
+        return;
+      }
+
+      try {
+        var response = await fetch('/api/business-categories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name })
+        });
+
+        if (!response.ok) throw new Error();
+
+        input.value = '';
+        await loadCategories();
+      } catch (error) {
+        alert('Kategori kaydedilemedi.');
+      }
+    }
+
+    function resetBusinessForm() {
+      editingBusinessId = null;
+      document.getElementById('businessModalTitle').textContent = 'Yeni Firma Ekle';
+      document.getElementById('businessCategory').value = '';
+      document.getElementById('businessTradeName').value = '';
+      document.getElementById('businessOwnerName').value = '';
+      document.getElementById('businessPhone').value = '';
+      document.getElementById('businessNeighborhood').value = '';
+      document.getElementById('businessStreet').value = '';
+      document.getElementById('businessDoorNo').value = '';
+      document.getElementById('businessAda').value = '';
+      document.getElementById('businessParcel').value = '';
+      document.getElementById('businessLocationLat').value = '';
+      document.getElementById('businessLocationLng').value = '';
+    }
+
+    function openNewBusinessModal() {
+      resetBusinessForm();
+      openModal('businessModal');
+    }
+
+    function editBusiness(id) {
+      var item = null;
+      for (var i = 0; i < businesses.length; i++) {
+        if (String(businesses[i].id) === String(id)) {
+          item = businesses[i];
+          break;
+        }
+      }
+
+      if (!item) return;
+
+      editingBusinessId = id;
+      document.getElementById('businessModalTitle').textContent = 'Firma Düzenle';
+      document.getElementById('businessCategory').value = item.categoryId || '';
+      document.getElementById('businessTradeName').value = item.tradeName || '';
+      document.getElementById('businessOwnerName').value = item.ownerName || '';
+      document.getElementById('businessPhone').value = item.phone || '';
+      document.getElementById('businessNeighborhood').value = item.neighborhood || '';
+      document.getElementById('businessStreet').value = item.street || '';
+      document.getElementById('businessDoorNo').value = item.doorNo || '';
+      document.getElementById('businessAda').value = item.ada || '';
+      document.getElementById('businessParcel').value = item.parcel || '';
+      document.getElementById('businessLocationLat').value = item.locationLat !== null ? item.locationLat : '';
+      document.getElementById('businessLocationLng').value = item.locationLng !== null ? item.locationLng : '';
+      openModal('businessModal');
+    }
+
+    async function saveBusiness() {
+      var payload = {
+        categoryId: document.getElementById('businessCategory').value,
+        tradeName: document.getElementById('businessTradeName').value.trim(),
+        ownerName: document.getElementById('businessOwnerName').value.trim(),
+        phone: document.getElementById('businessPhone').value.trim(),
+        neighborhood: document.getElementById('businessNeighborhood').value.trim(),
+        street: document.getElementById('businessStreet').value.trim(),
+        doorNo: document.getElementById('businessDoorNo').value.trim(),
+        ada: document.getElementById('businessAda').value.trim(),
+        parcel: document.getElementById('businessParcel').value.trim(),
+        locationLat: document.getElementById('businessLocationLat').value.trim(),
+        locationLng: document.getElementById('businessLocationLng').value.trim()
+      };
+
+      if (!payload.categoryId || !payload.tradeName || !payload.ownerName) {
+        alert('Kategori, işyeri ünvanı ve işyeri sahibi zorunludur.');
+        return;
+      }
+
+      try {
+        var url = editingBusinessId ? ('/api/businesses/' + editingBusinessId) : '/api/businesses';
+        var method = editingBusinessId ? 'PUT' : 'POST';
+
+        var response = await fetch(url, {
+          method: method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error();
+
+        closeModal('businessModal');
+        await loadBusinesses();
+      } catch (error) {
+        alert('İşyeri kaydı kaydedilemedi.');
+      }
+    }
+
+    async function deleteBusiness(id) {
+      var item = null;
+      for (var i = 0; i < businesses.length; i++) {
+        if (String(businesses[i].id) === String(id)) {
+          item = businesses[i];
+          break;
+        }
+      }
+
+      if (!item) return;
+      var ok = confirm(item.tradeName + ' kaydını silmek istiyor musunuz?');
+      if (!ok) return;
+
+      try {
+        var response = await fetch('/api/businesses/' + id, { method: 'DELETE' });
+        if (!response.ok) throw new Error();
+        await loadBusinesses();
+      } catch (error) {
+        alert('İşyeri silinemedi.');
+      }
+    }
+
+    function fillCurrentLocation() {
+      if (!navigator.geolocation) {
+        alert('Bu cihaz konum hizmetini desteklemiyor.');
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(function(position) {
+        document.getElementById('businessLocationLat').value = position.coords.latitude.toFixed(6);
+        document.getElementById('businessLocationLng').value = position.coords.longitude.toFixed(6);
+      }, function() {
+        alert('Konum alınamadı. Tarayıcı konum izni verildiğinden emin olun.');
+      }, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', async function() {
+      setTodayText();
+      try {
+        await loadCategories();
+        await loadBusinesses();
+      } catch (error) {
+        alert('Veriler yüklenemedi.');
+      }
+
+      var overlays = document.querySelectorAll('.modal-overlay');
+      for (var i = 0; i < overlays.length; i++) {
+        overlays[i].addEventListener('click', function(event) {
+          if (event.target === this) closeModal(this.id);
+        });
+      }
+
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+          var open = document.querySelector('.modal-overlay.show');
+          if (open) closeModal(open.id);
+        }
+      });
+    });
+  </script>
+</body>
+</html>`);
 });
 
 app.get("/", (req, res) => {
@@ -976,10 +1723,10 @@ app.get("/", (req, res) => {
       </div>
       <nav class="menu">
         <div class="nav-section-title">Genel</div>
-        <a href="/" class="menu-item"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
+        <a href="#" class="menu-item"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
         <div class="nav-section-title">Modüller</div>
-        <a href="/" class="menu-item active"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span></a>
-        <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>İşyeri Denetim</span></span></a>
+        <a href="#" class="menu-item active"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span></a>
+        <a href="/businesses" class="menu-item"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
       </nav>
     </aside>
     <main class="main">
