@@ -228,6 +228,96 @@ function buildMapsUrl(lat, lng) {
   return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(String(lat) + ',' + String(lng));
 }
 
+function buildBusinessMapsSearchUrl(row) {
+  const addressParts = [];
+  if (row.trade_name) addressParts.push(row.trade_name);
+  if (row.neighborhood) addressParts.push(row.neighborhood + ' Mahallesi');
+  if (row.street) addressParts.push(row.street);
+  if (row.door_no) addressParts.push('No: ' + row.door_no);
+  if (row.ada || row.parcel) addressParts.push([row.ada ? 'Ada ' + row.ada : '', row.parcel ? 'Parsel ' + row.parcel : ''].filter(Boolean).join(' '));
+  addressParts.push('Bucak', 'Burdur', 'Türkiye');
+  const query = addressParts.filter(Boolean).join(', ');
+  if (!query) return '';
+  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(query);
+}
+
+function extractCoordinatesFromGoogleMapsUrl(rawValue) {
+  if (!rawValue) return null;
+  let value = String(rawValue).trim();
+  try {
+    value = decodeURIComponent(value);
+  } catch (error) {}
+
+  const patterns = [
+    /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
+    /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/,
+    /[?&](?:q|query|ll|center)=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
+    /(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/
+  ];
+
+  for (const pattern of patterns) {
+    const match = value.match(pattern);
+    if (match) {
+      const lat = Number(match[1]);
+      const lng = Number(match[2]);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        return { lat, lng };
+      }
+    }
+  }
+
+  return null;
+}
+
+function isGoogleMapsHost(hostname) {
+  return hostname === 'google.com'
+    || hostname.endsWith('.google.com')
+    || hostname === 'goo.gl'
+    || hostname.endsWith('.goo.gl')
+    || hostname === 'maps.app.goo.gl';
+}
+
+function resolveRedirectUrl(url, depth = 0) {
+  return new Promise((resolve, reject) => {
+    if (depth > 5) {
+      reject(new Error('Çok fazla yönlendirme var.'));
+      return;
+    }
+
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch (error) {
+      reject(new Error('Geçersiz bağlantı.'));
+      return;
+    }
+
+    const request = https.get(parsed, {
+      headers: {
+        "User-Agent": "ZabitaYonetimSistemi/1.0 (google-maps-resolve)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      }
+    }, (response) => {
+      const statusCode = Number(response.statusCode || 0);
+      const location = response.headers.location;
+      response.resume();
+
+      if (location && statusCode >= 300 && statusCode < 400) {
+        const nextUrl = new URL(location, parsed).toString();
+        resolve(resolveRedirectUrl(nextUrl, depth + 1));
+        return;
+      }
+
+      resolve(parsed.toString());
+    });
+
+    request.on('error', reject);
+    request.setTimeout(12000, () => {
+      request.destroy(new Error('Bağlantı çözümlenemedi.'));
+    });
+  });
+}
+
 function mapBusiness(row) {
   const lat = row.location_lat !== null && row.location_lat !== undefined ? Number(row.location_lat) : null;
   const lng = row.location_lng !== null && row.location_lng !== undefined ? Number(row.location_lng) : null;
@@ -249,6 +339,7 @@ function mapBusiness(row) {
     locationLng: lng,
     locationText: lat !== null && lng !== null ? (formatCoordinate(lat) + ', ' + formatCoordinate(lng)) : '',
     mapsUrl: buildMapsUrl(lat, lng),
+    addressMapsUrl: buildBusinessMapsSearchUrl(row),
     createdAt: formatDateTime(row.created_at),
   };
 }
@@ -997,6 +1088,48 @@ app.get("/api/geocode/reverse", async (req, res) => {
   }
 });
 
+app.get("/api/maps/resolve-link", async (req, res) => {
+  try {
+    const rawUrl = String(req.query.url || '').trim();
+    if (!rawUrl) {
+      return res.status(400).json({ error: 'Bağlantı gerekli.' });
+    }
+
+    let parsed;
+    try {
+      parsed = new URL(rawUrl);
+    } catch (error) {
+      return res.status(400).json({ error: 'Geçersiz bağlantı formatı.' });
+    }
+
+    if (!isGoogleMapsHost(parsed.hostname)) {
+      return res.status(400).json({ error: 'Lütfen Google Maps bağlantısı yapıştırın.' });
+    }
+
+    let coords = extractCoordinatesFromGoogleMapsUrl(rawUrl);
+    let finalUrl = rawUrl;
+
+    if (!coords) {
+      finalUrl = await resolveRedirectUrl(rawUrl);
+      coords = extractCoordinatesFromGoogleMapsUrl(finalUrl);
+    }
+
+    if (!coords) {
+      return res.status(422).json({ error: 'Bağlantıdan koordinat çıkarılamadı. Google Maps uygulamasından konuma uzun basıp o bağlantıyı tekrar kopyalayın.' });
+    }
+
+    res.json({
+      ok: true,
+      lat: Number(coords.lat).toFixed(6),
+      lng: Number(coords.lng).toFixed(6),
+      mapsUrl: buildMapsUrl(coords.lat, coords.lng),
+      finalUrl,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Google Maps bağlantısı çözümlenemedi.' });
+  }
+});
+
 app.get("/businesses", (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="tr">
@@ -1101,12 +1234,13 @@ app.get("/businesses", (req, res) => {
     .form-group.full { grid-column: 1 / -1; }
     .parcel-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; grid-column: 1 / -1; }
     .location-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; gap: 8px; align-items: end; }
+    .google-link-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; margin-top: 8px; }
     .empty-state { border: 1px dashed var(--line); border-radius: 14px; padding: 18px; text-align: center; color: var(--muted); background: #fafcff; }
     @media (max-width: 1100px) {
       .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 840px) {
-      .filters, .form-grid, .location-row, .parcel-row { grid-template-columns: 1fr; }
+      .filters, .form-grid, .location-row, .parcel-row, .google-link-row { grid-template-columns: 1fr; }
     }
     @media (max-width: 720px) {
       .app { grid-template-columns: 1fr; }
@@ -1114,8 +1248,6 @@ app.get("/businesses", (req, res) => {
       .stats-grid { grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 </head>
 <body>
   <div class="app">
@@ -1261,9 +1393,13 @@ app.get("/businesses", (req, res) => {
               <input type="text" id="businessLocationLat" placeholder="Enlem (Latitude)" />
               <input type="text" id="businessLocationLng" placeholder="Boylam (Longitude)" />
               <button class="btn btn-success" id="getLocationBtn" type="button" onclick="fillCurrentLocation()">Konum Al</button>
-              <button class="btn btn-ghost" type="button" onclick="openMapPicker()">Haritadan Seç</button>
+              <button class="btn btn-ghost" type="button" onclick="openCurrentLocationInGoogleMaps()">Google Maps Aç</button>
             </div>
-            <div class="location-note" id="locationInfoText">İşyerindeyken “Konum Al” butonuna basarsanız cihazın mevcut konumu alınır. Konum yaklaşık çıkarsa “Haritadan Seç” ile noktayı elle düzeltebilirsiniz.</div>
+            <div class="google-link-row">
+              <input type="text" id="businessGoogleMapsLink" placeholder="Google Maps bağlantısını buraya yapıştırın" />
+              <button class="btn btn-ghost" type="button" onclick="fillLocationFromGoogleMapsLink()">Linkten Al</button>
+            </div>
+            <div class="location-note" id="locationInfoText">Konumu telefondan alabilirsiniz. Telefon yanlış konum verirse Google Maps uygulamasında işyerine uzun basıp bağlantıyı kopyalayın ve buraya yapıştırın.</div>
             <div class="map-preview" id="locationPreviewRow"></div>
             <div class="location-note" id="locationResolvedText"></div>
           </div>
@@ -1433,13 +1569,13 @@ app.get("/businesses", (req, res) => {
           '<td><div class="cell-title compact">Ada: ' + escapeHtml(item.ada || '-') + ' · Parsel: ' + escapeHtml(item.parcel || '-') + '</div></td>' +
           '<td>' +
             (item.locationText
-              ? '<div class="stack"><div class="cell-title compact">' + escapeHtml(item.locationText) + '</div><div class="cell-sub"><a href="' + escapeHtml(item.mapsUrl) + '" target="_blank" rel="noopener noreferrer">Haritada Aç</a></div></div>'
-              : '<span class="muted">Konum eklenmedi</span>') +
+              ? '<div class="stack"><div class="cell-title compact">' + escapeHtml(item.locationText) + '</div><div class="cell-sub"><a href="' + escapeHtml(item.mapsUrl) + '" target="_blank" rel="noopener noreferrer">Google Maps Aç</a></div></div>'
+              : (item.addressMapsUrl ? '<div class="stack"><div class="muted">Koordinat yok</div><div class="cell-sub"><a href="' + escapeHtml(item.addressMapsUrl) + '" target="_blank" rel="noopener noreferrer">Adrese göre Google Maps Aç</a></div></div>' : '<span class="muted">Konum eklenmedi</span>')) +
           '</td>' +
           '<td>' +
             '<div class="action-row">' +
               '<button class="mini-btn primary" onclick="editBusiness(' + item.id + ')">Düzenle</button>' +
-              (item.mapsUrl ? '<a class="mini-btn" href="' + escapeHtml(item.mapsUrl) + '" target="_blank" rel="noopener noreferrer">Haritada Aç</a>' : '') +
+              ((item.mapsUrl || item.addressMapsUrl) ? '<a class="mini-btn" href="' + escapeHtml(item.mapsUrl || item.addressMapsUrl) + '" target="_blank" rel="noopener noreferrer">Google Maps Aç</a>' : '') +
               '<button class="mini-btn danger" onclick="deleteBusiness(' + item.id + ')">Sil</button>' +
             '</div>' +
           '</td>' +
@@ -1479,7 +1615,8 @@ app.get("/businesses", (req, res) => {
       document.getElementById('businessParcel').value = '';
       document.getElementById('businessLocationLat').value = '';
       document.getElementById('businessLocationLng').value = '';
-      document.getElementById('locationInfoText').textContent = 'İşyerindeyken “Konum Al” butonuna basarsanız cihazın mevcut konumu alınır. Konum yaklaşık çıkarsa “Haritadan Seç” ile noktayı elle düzeltebilirsiniz.';
+      document.getElementById('businessGoogleMapsLink').value = '';
+      document.getElementById('locationInfoText').textContent = 'Konumu telefondan alabilirsiniz. Telefon yanlış konum verirse Google Maps uygulamasında işyerine uzun basıp bağlantıyı kopyalayın ve buraya yapıştırın.';
       document.getElementById('locationResolvedText').textContent = '';
       document.getElementById('locationPreviewRow').innerHTML = '';
       selectedMapCoords = null;
@@ -1523,6 +1660,7 @@ app.get("/businesses", (req, res) => {
       document.getElementById('businessParcel').value = item.parcel || '';
       document.getElementById('businessLocationLat').value = item.locationLat !== null ? item.locationLat : '';
       document.getElementById('businessLocationLng').value = item.locationLng !== null ? item.locationLng : '';
+      document.getElementById('businessGoogleMapsLink').value = item.mapsUrl || item.addressMapsUrl || '';
       updateLocationPreview();
       openModal('businessModal');
     }
@@ -1548,6 +1686,73 @@ app.get("/businesses", (req, res) => {
       }
     }
 
+    function getCurrentBusinessAddressQuery() {
+      var parts = [];
+      var tradeName = document.getElementById('businessTradeName').value.trim();
+      var neighborhood = document.getElementById('businessNeighborhood').value.trim();
+      var street = document.getElementById('businessStreet').value.trim();
+      var doorNo = document.getElementById('businessDoorNo').value.trim();
+      var ada = document.getElementById('businessAda').value.trim();
+      var parcel = document.getElementById('businessParcel').value.trim();
+
+      if (tradeName) parts.push(tradeName);
+      if (neighborhood) parts.push(neighborhood + ' Mahallesi');
+      if (street) parts.push(street);
+      if (doorNo) parts.push('No: ' + doorNo);
+      if (ada || parcel) parts.push((ada ? 'Ada ' + ada : '') + (ada && parcel ? ' ' : '') + (parcel ? 'Parsel ' + parcel : ''));
+      parts.push('Bucak', 'Burdur', 'Türkiye');
+      return parts.filter(Boolean).join(', ');
+    }
+
+    function buildCurrentMapsUrl() {
+      var lat = document.getElementById('businessLocationLat').value.trim();
+      var lng = document.getElementById('businessLocationLng').value.trim();
+      if (lat && lng) {
+        return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(lat + ',' + lng);
+      }
+      var addressQuery = getCurrentBusinessAddressQuery();
+      if (!addressQuery) return '';
+      return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addressQuery);
+    }
+
+    function openCurrentLocationInGoogleMaps() {
+      var url = buildCurrentMapsUrl();
+      if (!url) {
+        alert('Önce adres veya konum bilgisi girin.');
+        return;
+      }
+      window.open(url, '_blank', 'noopener');
+    }
+
+    async function fillLocationFromGoogleMapsLink() {
+      var input = document.getElementById('businessGoogleMapsLink');
+      var rawUrl = input.value.trim();
+      if (!rawUrl) {
+        alert('Lütfen Google Maps bağlantısını yapıştırın.');
+        return;
+      }
+
+      try {
+        document.getElementById('locationInfoText').textContent = 'Google Maps bağlantısı çözümleniyor...';
+        var response = await fetch('/api/maps/resolve-link?url=' + encodeURIComponent(rawUrl));
+        var data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Bağlantı çözümlenemedi.');
+        }
+
+        document.getElementById('businessLocationLat').value = data.lat;
+        document.getElementById('businessLocationLng').value = data.lng;
+        input.value = data.finalUrl || rawUrl;
+        updateLocationPreview();
+        var resolvedText = await resolveLocationText(data.lat, data.lng);
+        setResolvedLocationText(resolvedText, false);
+        document.getElementById('locationInfoText').textContent = 'Konum Google Maps bağlantısından alındı ve koordinatlar dolduruldu.';
+      } catch (error) {
+        document.getElementById('locationInfoText').textContent = 'Google Maps bağlantısı çözümlenemedi.';
+        alert(error.message || 'Google Maps bağlantısı çözümlenemedi.');
+      }
+    }
+
     function openMapPickerAt(lat, lng, noteText) {
       if (!ensureMapPickerReady()) return;
       openModal('mapPickerModal');
@@ -1561,17 +1766,18 @@ app.get("/businesses", (req, res) => {
     }
 
     function updateLocationPreview() {
+      var preview = document.getElementById('locationPreviewRow');
+      var url = buildCurrentMapsUrl();
       var lat = document.getElementById('businessLocationLat').value.trim();
       var lng = document.getElementById('businessLocationLng').value.trim();
-      var preview = document.getElementById('locationPreviewRow');
 
-      if (!lat || !lng) {
+      if (!url) {
         preview.innerHTML = '';
         return;
       }
 
-      var url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(lat + ',' + lng);
-      preview.innerHTML = '<a class="mini-btn" href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">Seçilen Konumu Haritada Kontrol Et</a>';
+      var text = (lat && lng) ? 'Seçilen Konumu Google Maps'te Kontrol Et' : 'Adrese Göre Google Maps'te Aç';
+      preview.innerHTML = '<a class="mini-btn" href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
     }
 
     function getBestCurrentPosition() {
@@ -1655,9 +1861,8 @@ app.get("/businesses", (req, res) => {
           document.getElementById('businessLocationLng').value = '';
           selectedMapCoords = null;
           updateLocationPreview();
-          info.textContent = 'Cihaz yaklaşık konum verdi (±' + accuracy + ' m). Yanlış kayıt olmaması için harita açılıyor; lütfen işyerinin tam noktasına dokunup “Seçimi Kullan” butonuna basın.';
+          info.textContent = 'Cihaz yaklaşık konum verdi (±' + accuracy + ' m). Yanlış kayıt olmaması için bu koordinat yazılmadı. Google Maps'te doğru noktayı açıp bağlantıyı yapıştırın.';
           setResolvedLocationText(resolvedText || 'Yaklaşık konum bulundu.', true);
-          openMapPickerAt(Number(lat), Number(lng), 'Yaklaşık konum merkeze alındı. Lütfen işyerinin tam yerini haritada seçin.');
           return;
         }
 
@@ -1675,7 +1880,7 @@ app.get("/businesses", (req, res) => {
       } catch (error) {
         info.textContent = 'Konum alınamadı. Tarayıcı konum izni ve telefondaki “kesin konum” ayarını kontrol edin.';
         setResolvedLocationText('', false);
-        alert('Konum alınamadı. Telefonda tarayıcı izinlerinde konum ve mümkünse “kesin konum” açık olmalı. İstersen Haritadan Seç ile de işaretleyebilirsin.');
+        alert('Konum alınamadı. Telefonda tarayıcı izinlerinde konum ve mümkünse “kesin konum” açık olmalı. İstersen Google Maps bağlantısını yapıştırarak da konum alabilirsin.');
       } finally {
         button.disabled = false;
         button.textContent = 'Konum Al';
