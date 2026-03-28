@@ -1014,7 +1014,7 @@ app.get("/businesses", (req, res) => {
     .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     .form-group { display: grid; gap: 6px; }
     .form-group.full { grid-column: 1 / -1; }
-    .parcel-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1fr); gap: 12px; grid-column: 1 / -1; }
+    .parcel-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; grid-column: 1 / -1; }
     .location-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; }
     .empty-state { border: 1px dashed var(--line); border-radius: 14px; padding: 18px; text-align: center; color: var(--muted); background: #fafcff; }
     @media (max-width: 1100px) {
@@ -1044,7 +1044,6 @@ app.get("/businesses", (req, res) => {
       <nav class="menu">
         <a href="/" class="menu-item"><span class="menu-left"><span>📌</span><span>Şikayet Takip</span></span></a>
         <a href="/businesses" class="menu-item active"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
-        <a href="/business-categories" class="menu-item"><span class="menu-left"><span>🗂️</span><span>Kategori Yönetimi</span></span></a>
       </nav>
     </aside>
 
@@ -1052,7 +1051,7 @@ app.get("/businesses", (req, res) => {
       <section class="hero">
         <div>
           <h1 class="hero-title">İşyeri Denetim Modülü · Firma Listesi</h1>
-          <p class="hero-text">Bu ekranda önce firma kayıtları oluşturulur. Kategori tanımları ayrı sayfadan yönetilir. İşyerine ait iletişim, adres, ada/parsel ve konum bilgileri burada düzenlenir.</p>
+          <p class="hero-text">Bu ekranda önce firma kayıtları oluşturulur. Kategori tanımları açılır pencere üzerinden eklenir. İşyerine ait iletişim, adres, ada/parsel ve konum bilgileri burada düzenlenir.</p>
         </div>
         <div class="date-card">
           <span>Bugün</span>
@@ -1087,10 +1086,10 @@ app.get("/businesses", (req, res) => {
         <div class="panel-header">
           <div>
             <div class="panel-title">Firma Listesi</div>
-            <div class="panel-subtitle">Firmaları kategoriye bağlı şekilde yönetin. Yeni kategori eklemek için ayrı sayfayı kullanın.</div>
+            <div class="panel-subtitle">Firmaları kategoriye bağlı şekilde yönetin. Yeni kategori eklemek için üstteki butonu kullanın.</div>
           </div>
           <div class="toolbar-actions">
-            <a href="/business-categories" class="btn btn-ghost">Kategori Ekle</a>
+            <button class="btn btn-ghost" onclick="openCategoryModal()">Kategori Ekle</button>
             <button class="btn btn-primary" onclick="openNewBusinessModal()">+ Yeni Firma Ekle</button>
           </div>
         </div>
@@ -1183,6 +1182,28 @@ app.get("/businesses", (req, res) => {
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('businessModal')">İptal</button>
         <button class="btn btn-primary" onclick="saveBusiness()">Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="categoryModal">
+    <div class="modal" style="width:min(560px,100%);">
+      <div class="modal-header">
+        <span>Yeni Kategori Ekle</span>
+        <button class="close-btn" onclick="closeModal('categoryModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid" style="grid-template-columns:1fr;">
+          <div class="form-group">
+            <label>Kategori Adı *</label>
+            <input type="text" id="categoryNameInput" placeholder="Örnek: Market / Bakkal" />
+          </div>
+          <div class="muted">Kategori adı kaydedildiğinde firma formundaki kategori seçim alanına otomatik olarak eklenecektir.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('categoryModal')">İptal</button>
+        <button class="btn btn-primary" onclick="saveCategory()">Kaydet</button>
       </div>
     </div>
   </div>
@@ -1342,6 +1363,15 @@ app.get("/businesses", (req, res) => {
       openModal('businessModal');
     }
 
+    function openCategoryModal() {
+      document.getElementById('categoryNameInput').value = '';
+      openModal('categoryModal');
+      setTimeout(function() {
+        var input = document.getElementById('categoryNameInput');
+        if (input) input.focus();
+      }, 40);
+    }
+
     function editBusiness(id) {
       var item = null;
       for (var i = 0; i < businesses.length; i++) {
@@ -1367,6 +1397,31 @@ app.get("/businesses", (req, res) => {
       document.getElementById('businessLocationLat').value = item.locationLat !== null ? item.locationLat : '';
       document.getElementById('businessLocationLng').value = item.locationLng !== null ? item.locationLng : '';
       openModal('businessModal');
+    }
+
+    async function saveCategory() {
+      var input = document.getElementById('categoryNameInput');
+      var name = input.value.trim();
+
+      if (!name) {
+        alert('Kategori adı giriniz.');
+        return;
+      }
+
+      try {
+        var response = await fetch('/api/business-categories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name })
+        });
+
+        if (!response.ok) throw new Error();
+
+        closeModal('categoryModal');
+        await loadCategories();
+      } catch (error) {
+        alert('Kategori kaydedilemedi.');
+      }
     }
 
     async function saveBusiness() {
@@ -1468,6 +1523,15 @@ app.get("/businesses", (req, res) => {
         if (event.key === 'Escape') {
           var open = document.querySelector('.modal-overlay.show');
           if (open) closeModal(open.id);
+          return;
+        }
+
+        if (event.key === 'Enter') {
+          var categoryModal = document.getElementById('categoryModal');
+          if (categoryModal && categoryModal.classList.contains('show') && event.target && event.target.id === 'categoryNameInput') {
+            event.preventDefault();
+            saveCategory();
+          }
         }
       });
     });
