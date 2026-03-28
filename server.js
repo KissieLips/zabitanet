@@ -171,9 +171,15 @@ function buildBusinessAddress(row) {
   return parts.join(', ');
 }
 
+function formatCoordinate(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '';
+  return num.toFixed(6);
+}
+
 function buildMapsUrl(lat, lng) {
   if (lat === null || lat === undefined || lng === null || lng === undefined) return '';
-  return 'https://www.google.com/maps?q=' + lat + ',' + lng;
+  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(String(lat) + ',' + String(lng));
 }
 
 function mapBusiness(row) {
@@ -195,7 +201,7 @@ function mapBusiness(row) {
     addressText: buildBusinessAddress(row),
     locationLat: lat,
     locationLng: lng,
-    locationText: lat !== null && lng !== null ? (lat + ', ' + lng) : '',
+    locationText: lat !== null && lng !== null ? (formatCoordinate(lat) + ', ' + formatCoordinate(lng)) : '',
     mapsUrl: buildMapsUrl(lat, lng),
     createdAt: formatDateTime(row.created_at),
   };
@@ -991,6 +997,7 @@ app.get("/businesses", (req, res) => {
     input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
     .filters { display: grid; grid-template-columns: 220px minmax(220px, 1fr) 150px; gap: 10px; align-items: center; margin-bottom: 12px; }
     .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+    .table-wrap table td:first-child { min-width: 230px; }
     table { width: 100%; border-collapse: collapse; min-width: 1020px; background: #ffffff; }
     th { text-align: left; padding: 13px 12px; font-size: 12px; color: #475569; border-bottom: 1px solid var(--line); font-weight: 700; letter-spacing: 0.02em; background: #f8fafc; }
     td { padding: 13px 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; vertical-align: top; }
@@ -998,7 +1005,14 @@ app.get("/businesses", (req, res) => {
     .badge { display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #eff6ff; color: #1d4ed8; }
     .muted { color: var(--muted); font-size: 12px; line-height: 1.5; }
     .cell-title { font-weight: 700; color: #0f172a; line-height: 1.45; }
+    .cell-title.compact { line-height: 1.35; }
     .cell-sub { color: var(--muted); font-size: 12px; line-height: 1.45; margin-top: 4px; }
+    .stack { display: grid; gap: 4px; }
+    .address-stack { display: grid; gap: 4px; min-width: 220px; }
+    .location-note { margin-top: 8px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .map-preview { margin-top: 10px; min-height: 18px; }
+    .map-box { height: 420px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #f8fafc; }
+    .map-help { margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.55; }
     .action-row { display: flex; flex-wrap: wrap; gap: 8px; }
     .mini-btn { border: 1px solid var(--line); background: #ffffff; color: #1f2937; padding: 7px 9px; border-radius: 9px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; }
     .mini-btn:hover { background: #f8fafc; }
@@ -1015,7 +1029,7 @@ app.get("/businesses", (req, res) => {
     .form-group { display: grid; gap: 6px; }
     .form-group.full { grid-column: 1 / -1; }
     .parcel-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; grid-column: 1 / -1; }
-    .location-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+    .location-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; gap: 8px; align-items: end; }
     .empty-state { border: 1px dashed var(--line); border-radius: 14px; padding: 18px; text-align: center; color: var(--muted); background: #fafcff; }
     @media (max-width: 1100px) {
       .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1029,6 +1043,8 @@ app.get("/businesses", (req, res) => {
       .stats-grid { grid-template-columns: 1fr; }
     }
   </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 </head>
 <body>
   <div class="app">
@@ -1173,9 +1189,11 @@ app.get("/businesses", (req, res) => {
             <div class="location-row">
               <input type="text" id="businessLocationLat" placeholder="Enlem (Latitude)" />
               <input type="text" id="businessLocationLng" placeholder="Boylam (Longitude)" />
-              <button class="btn btn-success" type="button" onclick="fillCurrentLocation()">Konum Al</button>
+              <button class="btn btn-success" id="getLocationBtn" type="button" onclick="fillCurrentLocation()">Konum Al</button>
+              <button class="btn btn-ghost" type="button" onclick="openMapPicker()">Haritadan Seç</button>
             </div>
-            <div class="muted" style="margin-top:8px;">İşyerindeyken “Konum Al” butonuna basarsanız cihazın mevcut konumu kayda eklenir. Daha sonra tablo içinden “Haritada Aç” ile yol tarifi alabilirsiniz.</div>
+            <div class="location-note" id="locationInfoText">İşyerindeyken “Konum Al” butonuna basarsanız cihazın mevcut konumu alınır. Konum yaklaşık çıkarsa “Haritadan Seç” ile noktayı elle düzeltebilirsiniz.</div>
+            <div class="map-preview" id="locationPreviewRow"></div>
           </div>
         </div>
       </div>
@@ -1208,10 +1226,32 @@ app.get("/businesses", (req, res) => {
     </div>
   </div>
 
+  <div class="modal-overlay" id="mapPickerModal">
+    <div class="modal" style="width:min(860px,100%);">
+      <div class="modal-header">
+        <span>Haritadan Konum Seç</span>
+        <button class="close-btn" onclick="closeModal('mapPickerModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="map-box" id="mapPickerCanvas"></div>
+        <div class="map-help">Haritada işyerinin bulunduğu noktaya tıklayın. Seçilen konum enlem ve boylam alanlarına otomatik yazılır.</div>
+        <div class="map-preview" id="mapPickerSelectionText"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('mapPickerModal')">İptal</button>
+        <button class="btn btn-ghost" type="button" onclick="centerMapOnCurrentLocation()">Mevcut Konumumla Ortala</button>
+        <button class="btn btn-primary" onclick="applyMapSelection()">Seçimi Kullan</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     var categories = [];
     var businesses = [];
     var editingBusinessId = null;
+    var mapPicker = null;
+    var mapMarker = null;
+    var selectedMapCoords = null;
 
     function escapeHtml(value) {
       if (value === null || value === undefined) return "";
@@ -1295,22 +1335,31 @@ app.get("/businesses", (req, res) => {
       var html = "";
       for (var i = 0; i < rows.length; i++) {
         var item = rows[i];
+        var neighborhoodText = item.neighborhood ? escapeHtml(item.neighborhood + ' Mah.') : '';
+        var streetText = [];
+        if (item.street) streetText.push(escapeHtml(item.street));
+        if (item.doorNo) streetText.push('No: ' + escapeHtml(item.doorNo));
+        var addressHtml = '<span class="muted">Adres girilmedi</span>';
+        if (neighborhoodText || streetText.length) {
+          addressHtml = '<div class="address-stack">' +
+            (neighborhoodText ? '<div class="cell-title compact">' + neighborhoodText + '</div>' : '') +
+            (streetText.length ? '<div class="cell-sub">' + streetText.join(', ') + '</div>' : '') +
+            '<div class="cell-sub">Kayıt Tarihi: ' + escapeHtml(item.createdAt || '') + '</div>' +
+          '</div>';
+        }
+
         html += '<tr>' +
           '<td>' +
             '<div class="badge">' + escapeHtml(item.categoryName || "Kategori Yok") + '</div>' +
             '<div class="cell-title" style="margin-top:8px;">' + escapeHtml(item.tradeName) + '</div>' +
-            '<div class="cell-sub">Kayıt Tarihi: ' + escapeHtml(item.createdAt || "") + '</div>' +
           '</td>' +
-          '<td><div class="cell-title">' + escapeHtml(item.ownerName) + '</div></td>' +
+          '<td><div class="stack"><div class="cell-title">' + escapeHtml(item.ownerName) + '</div><div class="cell-sub">Yetkili / İşletme sahibi</div></div></td>' +
           '<td>' + (item.phone ? '<div class="cell-title">' + escapeHtml(item.phone) + '</div>' : '<span class="muted">Belirtilmedi</span>') + '</td>' +
-          '<td>' + (item.addressText ? '<div class="cell-title">' + escapeHtml(item.addressText) + '</div>' : '<span class="muted">Adres girilmedi</span>') + '</td>' +
-          '<td>' +
-            '<div class="cell-title">Ada: ' + escapeHtml(item.ada || '-') + '</div>' +
-            '<div class="cell-sub">Parsel: ' + escapeHtml(item.parcel || '-') + '</div>' +
-          '</td>' +
+          '<td>' + addressHtml + '</td>' +
+          '<td><div class="cell-title compact">Ada: ' + escapeHtml(item.ada || '-') + ' · Parsel: ' + escapeHtml(item.parcel || '-') + '</div></td>' +
           '<td>' +
             (item.locationText
-              ? '<div class="cell-title">' + escapeHtml(item.locationText) + '</div><div class="cell-sub"><a href="' + escapeHtml(item.mapsUrl) + '" target="_blank" rel="noopener noreferrer">Haritada Aç</a></div>'
+              ? '<div class="stack"><div class="cell-title compact">' + escapeHtml(item.locationText) + '</div><div class="cell-sub"><a href="' + escapeHtml(item.mapsUrl) + '" target="_blank" rel="noopener noreferrer">Haritada Aç</a></div></div>'
               : '<span class="muted">Konum eklenmedi</span>') +
           '</td>' +
           '<td>' +
@@ -1356,6 +1405,9 @@ app.get("/businesses", (req, res) => {
       document.getElementById('businessParcel').value = '';
       document.getElementById('businessLocationLat').value = '';
       document.getElementById('businessLocationLng').value = '';
+      document.getElementById('locationInfoText').textContent = 'İşyerindeyken “Konum Al” butonuna basarsanız cihazın mevcut konumu alınır. Konum yaklaşık çıkarsa “Haritadan Seç” ile noktayı elle düzeltebilirsiniz.';
+      document.getElementById('locationPreviewRow').innerHTML = '';
+      selectedMapCoords = null;
     }
 
     function openNewBusinessModal() {
@@ -1396,7 +1448,198 @@ app.get("/businesses", (req, res) => {
       document.getElementById('businessParcel').value = item.parcel || '';
       document.getElementById('businessLocationLat').value = item.locationLat !== null ? item.locationLat : '';
       document.getElementById('businessLocationLng').value = item.locationLng !== null ? item.locationLng : '';
+      updateLocationPreview();
       openModal('businessModal');
+    }
+
+    function updateLocationPreview() {
+      var lat = document.getElementById('businessLocationLat').value.trim();
+      var lng = document.getElementById('businessLocationLng').value.trim();
+      var preview = document.getElementById('locationPreviewRow');
+
+      if (!lat || !lng) {
+        preview.innerHTML = '';
+        return;
+      }
+
+      var url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(lat + ',' + lng);
+      preview.innerHTML = '<a class="mini-btn" href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">Seçilen Konumu Haritada Kontrol Et</a>';
+    }
+
+    function getBestCurrentPosition() {
+      return new Promise(function(resolve, reject) {
+        if (!navigator.geolocation) {
+          reject(new Error('Geolocation desteklenmiyor.'));
+          return;
+        }
+
+        var bestPosition = null;
+        var finished = false;
+        var options = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
+        var fallbackTimer = null;
+        var watchId = null;
+
+        function cleanup() {
+          if (fallbackTimer) clearTimeout(fallbackTimer);
+          if (watchId !== null) {
+            try { navigator.geolocation.clearWatch(watchId); } catch (error) {}
+          }
+        }
+
+        function finishWithSuccess() {
+          if (finished) return;
+          finished = true;
+          cleanup();
+          if (bestPosition) {
+            resolve(bestPosition);
+          } else {
+            reject(new Error('Konum alınamadı.'));
+          }
+        }
+
+        function consider(position) {
+          if (!position || !position.coords) return;
+          if (!bestPosition || Number(position.coords.accuracy || 999999) < Number(bestPosition.coords.accuracy || 999999)) {
+            bestPosition = position;
+          }
+          if (bestPosition && Number(bestPosition.coords.accuracy || 999999) <= 40) {
+            finishWithSuccess();
+          }
+        }
+
+        function fail(error) {
+          if (!bestPosition && !finished && error && error.code !== 3) {
+            finished = true;
+            cleanup();
+            reject(error);
+          }
+        }
+
+        fallbackTimer = setTimeout(finishWithSuccess, 10000);
+        watchId = navigator.geolocation.watchPosition(consider, fail, options);
+        navigator.geolocation.getCurrentPosition(consider, fail, options);
+      });
+    }
+
+    async function fillCurrentLocation() {
+      var button = document.getElementById('getLocationBtn');
+      var info = document.getElementById('locationInfoText');
+
+      if (!navigator.geolocation) {
+        alert('Bu cihaz konum hizmetini desteklemiyor.');
+        return;
+      }
+
+      try {
+        button.disabled = true;
+        button.textContent = 'Alınıyor...';
+        info.textContent = 'Cihazın daha doğru konum verisi bekleniyor. Lütfen birkaç saniye sabit kalın.';
+
+        var position = await getBestCurrentPosition();
+        var lat = Number(position.coords.latitude).toFixed(6);
+        var lng = Number(position.coords.longitude).toFixed(6);
+        var accuracy = position.coords.accuracy ? Math.round(position.coords.accuracy) : null;
+
+        document.getElementById('businessLocationLat').value = lat;
+        document.getElementById('businessLocationLng').value = lng;
+        selectedMapCoords = { lat: Number(lat), lng: Number(lng) };
+        updateLocationPreview();
+
+        if (accuracy !== null && accuracy > 150) {
+          info.textContent = 'Konum alındı ancak cihaz yaklaşık konum verdi (±' + accuracy + ' m). En doğru kayıt için telefonda GPS açıkken tekrar deneyin veya Haritadan Seç ile noktayı düzeltin.';
+        } else if (accuracy !== null) {
+          info.textContent = 'Konum başarıyla alındı. Yaklaşık doğruluk: ±' + accuracy + ' m.';
+        } else {
+          info.textContent = 'Konum başarıyla alındı.';
+        }
+      } catch (error) {
+        info.textContent = 'Konum alınamadı. Tarayıcı konum izni verildiğinden emin olun.';
+        alert('Konum alınamadı. Bilgisayarlarda konum bazen yaklaşık gelebilir; mümkünse telefondan deneyin veya Haritadan Seç ile işaretleyin.');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Konum Al';
+      }
+    }
+
+    function ensureMapPickerReady() {
+      if (!window.L) {
+        alert('Harita bileşeni yüklenemedi. İnternet bağlantısını kontrol edin.');
+        return false;
+      }
+
+      if (!mapPicker) {
+        mapPicker = L.map('mapPickerCanvas');
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap katkıları'
+        }).addTo(mapPicker);
+
+        mapPicker.on('click', function(event) {
+          setMapSelection(event.latlng.lat, event.latlng.lng);
+        });
+      }
+
+      return true;
+    }
+
+    function setMapSelection(lat, lng) {
+      if (!mapPicker) return;
+      selectedMapCoords = { lat: Number(lat), lng: Number(lng) };
+
+      if (!mapMarker) {
+        mapMarker = L.marker([lat, lng]).addTo(mapPicker);
+      } else {
+        mapMarker.setLatLng([lat, lng]);
+      }
+
+      mapPicker.setView([lat, lng], Math.max(mapPicker.getZoom(), 18));
+      document.getElementById('mapPickerSelectionText').innerHTML = '<div class="cell-title compact">Seçilen konum: ' + escapeHtml(Number(lat).toFixed(6) + ', ' + Number(lng).toFixed(6)) + '</div>';
+    }
+
+    function openMapPicker() {
+      if (!ensureMapPickerReady()) return;
+
+      openModal('mapPickerModal');
+      var lat = parseFloat(document.getElementById('businessLocationLat').value);
+      var lng = parseFloat(document.getElementById('businessLocationLng').value);
+
+      setTimeout(function() {
+        mapPicker.invalidateSize();
+
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          setMapSelection(lat, lng);
+        } else {
+          selectedMapCoords = null;
+          document.getElementById('mapPickerSelectionText').innerHTML = '<div class="muted">Henüz konum seçilmedi.</div>';
+          mapPicker.setView([37.4, 30.6], 11);
+          if (mapMarker) {
+            mapPicker.removeLayer(mapMarker);
+            mapMarker = null;
+          }
+        }
+      }, 80);
+    }
+
+    async function centerMapOnCurrentLocation() {
+      if (!ensureMapPickerReady()) return;
+      try {
+        var position = await getBestCurrentPosition();
+        setMapSelection(position.coords.latitude, position.coords.longitude);
+      } catch (error) {
+        alert('Mevcut konum ile harita ortalanamadı.');
+      }
+    }
+
+    function applyMapSelection() {
+      if (!selectedMapCoords) {
+        alert('Lütfen haritada bir nokta seçin.');
+        return;
+      }
+
+      document.getElementById('businessLocationLat').value = Number(selectedMapCoords.lat).toFixed(6);
+      document.getElementById('businessLocationLng').value = Number(selectedMapCoords.lng).toFixed(6);
+      document.getElementById('locationInfoText').textContent = 'Konum haritadan seçildi. Kaydetmeden önce isterseniz “Seçilen Konumu Haritada Kontrol Et” bağlantısından doğrulayabilirsiniz.';
+      updateLocationPreview();
+      closeModal('mapPickerModal');
     }
 
     async function saveCategory() {
@@ -1484,25 +1727,6 @@ app.get("/businesses", (req, res) => {
         alert('İşyeri silinemedi.');
       }
     }
-
-    function fillCurrentLocation() {
-      if (!navigator.geolocation) {
-        alert('Bu cihaz konum hizmetini desteklemiyor.');
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(function(position) {
-        document.getElementById('businessLocationLat').value = position.coords.latitude.toFixed(6);
-        document.getElementById('businessLocationLng').value = position.coords.longitude.toFixed(6);
-      }, function() {
-        alert('Konum alınamadı. Tarayıcı konum izni verildiğinden emin olun.');
-      }, {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
-      });
-    }
-
     document.addEventListener('DOMContentLoaded', async function() {
       setTodayText();
       try {
@@ -1518,6 +1742,9 @@ app.get("/businesses", (req, res) => {
           if (event.target === this) closeModal(this.id);
         });
       }
+
+      document.getElementById('businessLocationLat').addEventListener('input', updateLocationPreview);
+      document.getElementById('businessLocationLng').addEventListener('input', updateLocationPreview);
 
       document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') {
@@ -1541,221 +1768,7 @@ app.get("/businesses", (req, res) => {
 });
 
 app.get("/business-categories", (req, res) => {
-  res.send(`<!DOCTYPE html>
-<html lang="tr">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Zabıta Yönetim Sistemi - Kategori Yönetimi</title>
-  <style>
-    :root {
-      --line: #dbe3ee;
-      --text: #17202f;
-      --muted: #667085;
-      --accent: #f5b301;
-      --primary: #2563eb;
-      --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-    }
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: Inter, "Segoe UI", Arial, Helvetica, sans-serif; background: #f3f6fa; color: var(--text); }
-    .app { min-height: 100vh; display: grid; grid-template-columns: 208px minmax(0, 1fr); }
-    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #fff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 0; height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); }
-    .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-    .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.16); }
-    .brand { font-size: 14px; font-weight: 700; line-height: 1.3; }
-    .brand-sub { font-size: 10.5px; color: rgba(255,255,255,0.62); line-height: 1.45; }
-    .nav-section-title { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.42); margin-top: 6px; padding: 0 2px; font-weight: 700; }
-    .menu { display: flex; flex-direction: column; gap: 4px; }
-    .menu-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; font-size: 12.5px; text-decoration: none; color: rgba(255,255,255,0.84); transition: 0.18s ease; border: 1px solid transparent; font-weight: 500; }
-    .menu-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.08); }
-    .menu-item.active { background: rgba(255,255,255,0.08); color: #ffffff; border-color: rgba(255,255,255,0.1); font-weight: 600; }
-    .main { padding: 18px 20px; }
-    .hero, .panel, .stat-card { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
-    .hero { padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
-    .hero-title { margin: 0; font-size: 26px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 700; }
-    .hero-text { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.55; max-width: 760px; }
-    .date-card { background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; min-width: 210px; }
-    .date-card span { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-    .date-card strong { font-size: 13px; line-height: 1.35; }
-    .page-grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 12px; }
-    .panel { padding: 14px; }
-    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
-    .panel-title { font-size: 16px; font-weight: 700; }
-    .panel-subtitle { font-size: 12px; color: var(--muted); }
-    .stat-card { padding: 12px; display: grid; gap: 6px; margin-bottom: 12px; }
-    .stat-number { font-size: 24px; font-weight: 700; }
-    .stat-label { font-size: 12px; color: var(--muted); }
-    .btn { border: none; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
-    .btn-primary { background: var(--primary); color: #ffffff; }
-    .btn-warning { background: var(--accent); color: #1f2937; }
-    .btn-ghost { background: #eef2ff; color: #1d4ed8; border: 1px solid #dbe7ff; }
-    input { width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; }
-    input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
-    .form-stack { display: grid; gap: 10px; }
-    .muted { color: var(--muted); font-size: 12px; line-height: 1.5; }
-    .list-wrap { display: grid; gap: 10px; }
-    .category-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: #f8fafc; }
-    .category-name { font-size: 14px; font-weight: 700; }
-    .category-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
-    .empty-state { border: 1px dashed var(--line); border-radius: 14px; padding: 18px; text-align: center; color: var(--muted); background: #fafcff; }
-    @media (max-width: 920px) {
-      .page-grid { grid-template-columns: 1fr; }
-    }
-    @media (max-width: 720px) {
-      .app { grid-template-columns: 1fr; }
-      .sidebar { position: relative; height: auto; }
-    }
-  </style>
-</head>
-<body>
-  <div class="app">
-    <aside class="sidebar">
-      <div class="sidebar-top">
-        <div class="brand-mark">ZB</div>
-        <div>
-          <div class="brand">Zabıta Yönetim Sistemi</div>
-          <div class="brand-sub">Kurumsal takip ve saha yönetimi</div>
-        </div>
-      </div>
-      <div class="nav-section-title">Modüller</div>
-      <nav class="menu">
-        <a href="/" class="menu-item"><span>📌</span><span>Şikayet Takip</span></a>
-        <a href="/businesses" class="menu-item"><span>🏪</span><span>Firma Listesi</span></a>
-        <a href="/business-categories" class="menu-item active"><span>🗂️</span><span>Kategori Yönetimi</span></a>
-      </nav>
-    </aside>
-    <main class="main">
-      <section class="hero">
-        <div>
-          <h1 class="hero-title">Kategori Yönetimi</h1>
-          <p class="hero-text">Firma listesindeki kategori alanı bu sayfadan yönetilir. Yeni kategori ekledikten sonra firma formunda otomatik görünür.</p>
-        </div>
-        <div class="date-card">
-          <span>Bugün</span>
-          <strong id="todayText"></strong>
-        </div>
-      </section>
-
-      <div class="page-grid">
-        <div>
-          <div class="stat-card">
-            <div class="stat-number" id="categoryCount">0</div>
-            <div class="stat-label">Toplam kategori</div>
-          </div>
-          <div class="panel">
-            <div class="panel-header">
-              <div>
-                <div class="panel-title">Yeni Kategori Ekle</div>
-                <div class="panel-subtitle">Örnek: Market / Bakkal, Pastahane / Tatlıcı, Fırın</div>
-              </div>
-            </div>
-            <div class="form-stack">
-              <input type="text" id="categoryNameInput" placeholder="Kategori adı giriniz" />
-              <button class="btn btn-warning" onclick="saveCategory()">Kaydet</button>
-              <a href="/businesses" class="btn btn-ghost">Firma Listesine Dön</a>
-            </div>
-          </div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-header">
-            <div>
-              <div class="panel-title">Kayıtlı Kategoriler</div>
-              <div class="panel-subtitle">Burada eklenen kategoriler firma ekleme ekranında listelenir.</div>
-            </div>
-          </div>
-          <div id="categoryList" class="list-wrap"></div>
-        </div>
-      </div>
-    </main>
-  </div>
-
-  <script>
-    var categories = [];
-
-    function escapeHtml(value) {
-      if (value === null || value === undefined) return "";
-      return String(value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/\"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-    }
-
-    function setTodayText() {
-      var now = new Date();
-      document.getElementById("todayText").textContent = now.toLocaleDateString("tr-TR", {
-        weekday: "long",
-        day: "2-digit",
-        month: "long",
-        year: "numeric"
-      });
-    }
-
-    function renderCategories() {
-      document.getElementById('categoryCount').textContent = categories.length;
-      var el = document.getElementById('categoryList');
-
-      if (!categories.length) {
-        el.innerHTML = '<div class="empty-state">Henüz kategori eklenmemiş.</div>';
-        return;
-      }
-
-      var html = '';
-      for (var i = 0; i < categories.length; i++) {
-        html += '<div class="category-item">' +
-          '<div>' +
-            '<div class="category-name">🗂️ ' + escapeHtml(categories[i].name) + '</div>' +
-            '<div class="category-meta">Eklenme: ' + escapeHtml(categories[i].createdAt || '') + '</div>' +
-          '</div>' +
-        '</div>';
-      }
-      el.innerHTML = html;
-    }
-
-    async function loadCategories() {
-      var response = await fetch('/api/business-categories');
-      if (!response.ok) throw new Error();
-      categories = await response.json();
-      renderCategories();
-    }
-
-    async function saveCategory() {
-      var input = document.getElementById('categoryNameInput');
-      var name = input.value.trim();
-      if (!name) {
-        alert('Kategori adı giriniz.');
-        return;
-      }
-
-      try {
-        var response = await fetch('/api/business-categories', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name })
-        });
-
-        if (!response.ok) throw new Error();
-
-        input.value = '';
-        await loadCategories();
-      } catch (error) {
-        alert('Kategori kaydedilemedi.');
-      }
-    }
-
-    document.addEventListener('DOMContentLoaded', async function() {
-      setTodayText();
-      try {
-        await loadCategories();
-      } catch (error) {
-        alert('Kategori listesi yüklenemedi.');
-      }
-    });
-  </script>
-</body>
-</html>`);
+  res.redirect("/businesses");
 });
 
 app.get("/", (req, res) => {
@@ -1852,6 +1865,7 @@ app.get("/", (req, res) => {
     textarea { resize: vertical; min-height: 88px; }
     .table-panel { padding-bottom: 12px; }
     .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+    .table-wrap table td:first-child { min-width: 230px; }
     table { width: 100%; border-collapse: collapse; min-width: 860px; background: #ffffff; }
     thead th { position: sticky; top: 0; background: #f8fafc; z-index: 2; }
     th { text-align: left; padding: 13px 12px; font-size: 12px; color: #475569; border-bottom: 1px solid var(--line); font-weight: 700; letter-spacing: 0.02em; }
@@ -1930,6 +1944,8 @@ app.get("/", (req, res) => {
     @media (max-width: 980px) { .app { grid-template-columns: minmax(0, 1fr); } .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: min(84vw, 320px); height: 100vh; transform: translateX(-100%); transition: transform 0.2s ease; } body.sidebar-open .sidebar { transform: translateX(0); } body.sidebar-open .sidebar-backdrop { display: block; } .sidebar-toggle { display: inline-flex; align-items: center; gap: 8px; } .main { padding: 16px; } .hero { padding: 14px; border-radius: 16px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; justify-content: space-between; flex-wrap: wrap; } .critical-grid, .stats-grid, .attachments-grid, .form-grid, .filters { grid-template-columns: 1fr; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .detail-table th { width: 150px; } }
     @media (max-width: 640px) { .main { padding: 14px; } .hero-title { font-size: 22px; } .panel-title { font-size: 17px; } .card, .critical-card { padding: 14px; } .section-actions { width: 100%; } .section-actions .btn { flex: 1; } .attachment-card { grid-template-columns: 1fr; } .attachment-thumb, .attachment-thumb-doc { width: 100%; height: 180px; } table { min-width: 760px; } .date-card { min-width: 0; width: 100%; } }
   </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 </head>
 <body>
   <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
