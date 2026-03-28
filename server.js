@@ -210,7 +210,8 @@ function mapBusinessCategory(row) {
 function buildBusinessAddress(row) {
   const parts = [];
 
-  if (row.neighborhood) parts.push(row.neighborhood + ' Mah.');
+  const neighborhood = getCanonicalBusinessNeighborhood(row.neighborhood);
+  if (neighborhood) parts.push(neighborhood + ' Mah.');
   if (row.street) parts.push(row.street);
   if (row.door_no) parts.push('No: ' + row.door_no);
 
@@ -231,7 +232,8 @@ function buildMapsUrl(lat, lng) {
 function buildBusinessMapsSearchUrl(row) {
   const addressParts = [];
   if (row.trade_name) addressParts.push(row.trade_name);
-  if (row.neighborhood) addressParts.push(row.neighborhood + ' Mahallesi');
+  const neighborhood = getCanonicalBusinessNeighborhood(row.neighborhood);
+  if (neighborhood) addressParts.push(neighborhood + ' Mahallesi');
   if (row.street) addressParts.push(row.street);
   if (row.door_no) addressParts.push('No: ' + row.door_no);
   if (row.ada || row.parcel) addressParts.push([row.ada ? 'Ada ' + row.ada : '', row.parcel ? 'Parsel ' + row.parcel : ''].filter(Boolean).join(' '));
@@ -240,6 +242,39 @@ function buildBusinessMapsSearchUrl(row) {
   if (!query) return '';
   return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(query);
 }
+
+
+const BUSINESS_NEIGHBORHOOD_ALIASES = {
+  'barboros': 'Barbaros',
+  'barbaros': 'Barbaros',
+  'camii': 'Cami',
+  'cami': 'Cami',
+  'alaattin': 'Alaattin',
+  'alaaddin': 'Alaattin',
+  '70 evler': 'Yetmiş Evler',
+  'yetmis evler': 'Yetmiş Evler',
+  'yetmiş evler': 'Yetmiş Evler'
+};
+
+function normalizeTurkishKey(value) {
+  return String(value || '')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function getCanonicalBusinessNeighborhood(value) {
+  if (!value) return '';
+  const normalized = normalizeTurkishKey(value);
+  return BUSINESS_NEIGHBORHOOD_ALIASES[normalized] || String(value);
+}
+
 
 function extractCoordinatesFromGoogleMapsUrl(rawValue) {
   if (!rawValue) return null;
@@ -329,7 +364,7 @@ function mapBusiness(row) {
     tradeName: row.trade_name,
     ownerName: row.owner_name,
     phone: row.phone || '',
-    neighborhood: row.neighborhood || '',
+    neighborhood: getCanonicalBusinessNeighborhood(row.neighborhood || ''),
     street: row.street || '',
     doorNo: row.door_no || '',
     ada: row.ada || '',
@@ -1305,7 +1340,7 @@ app.get("/businesses", (req, res) => {
         <div class="panel-header">
           <div>
             <div class="panel-title">Firma Listesi</div>
-            <div class="panel-subtitle">Firmaları kategoriye bağlı şekilde yönetin. Adres alanları Burdur / Bucak için seçimli yapıdadır.</div>
+            <div class="panel-subtitle">Firmaları kategoriye bağlı şekilde yönetin. Mahalle alanı Bucak'ın resmi mahalle listesine göre düzenlendi; cadde / sokak ve kapı no alanlarında önerili + manuel giriş yapısı kullanılır.</div>
           </div>
           <div class="toolbar-actions">
             <button class="btn btn-ghost" onclick="openCategoryModal()">Kategori Ekle</button>
@@ -1385,16 +1420,16 @@ app.get("/businesses", (req, res) => {
           </div>
           <div class="form-group">
             <label>Cadde / Sokak</label>
-            <select id="businessStreet" onchange="handleStreetChange()">
-              <option value="">Önce mahalle seçiniz</option>
-            </select>
+            <input type="text" id="businessStreet" list="businessStreetList" placeholder="Önce mahalle seçiniz" oninput="handleStreetInput()" />
+            <datalist id="businessStreetList"></datalist>
+            <div class="muted">Listede yoksa yazabilirsiniz.</div>
           </div>
           <div class="parcel-row">
             <div class="form-group">
               <label>Kapı No</label>
-              <select id="businessDoorNo" onchange="updateLocationPreview()">
-                <option value="">Önce cadde / sokak seçiniz</option>
-              </select>
+              <input type="text" id="businessDoorNo" list="businessDoorNoList" placeholder="Önce cadde / sokak seçiniz" oninput="updateLocationPreview()" />
+              <datalist id="businessDoorNoList"></datalist>
+              <div class="muted">Resmi listede yoksa manuel girebilirsiniz.</div>
             </div>
             <div class="form-group">
               <label>Ada</label>
@@ -1480,141 +1515,219 @@ app.get("/businesses", (req, res) => {
     var selectedMapCoords = null;
     var ADDRESS_REGION = { province: 'Burdur', district: 'Bucak' };
     var ADDRESS_CATALOG = {
-      'Alaattin': {
-        streets: {
-          'Ankara Caddesi': ['1', '3', '5', '7', '9', '11', '13', '15', '17', '19'],
-          'İstasyon Caddesi': ['2', '4', '6', '8', '10', '12', '14', '16'],
-          'Alkaya Sokak': ['1', '2', '4', '6', '8', '10'],
-          'Aşağı Merkez Sokak': ['3', '5', '7', '9', '11']
-        }
+      "Alaattin": {
+            "aliases": [
+                  "Alaaddin"
+            ],
+            "streets": {
+                  "6. Sokak": []
+            }
       },
-      'Atilla': {
-        streets: {
-          'Atilla Caddesi': ['1', '2', '4', '6', '8', '10', '12'],
-          'Çınar Sokak': ['3', '5', '7', '9', '11'],
-          'Köprü Sokak': ['2', '4', '6', '8'],
-          'Park Sokak': ['1', '3', '5', '7']
-        }
+      "Atilla": {
+            "aliases": [],
+            "streets": {}
       },
-      'Barboros': {
-        streets: {
-          'Barboros Caddesi': ['1', '2', '4', '6', '8', '10'],
-          'Hürriyet Sokak': ['3', '5', '7', '9'],
-          'Çeşme Sokak': ['2', '6', '8', '10'],
-          'Okul Sokak': ['1', '5', '7', '11']
-        }
+      "Barbaros": {
+            "aliases": [
+                  "Barboros"
+            ],
+            "streets": {
+                  "2029 Sokak": [],
+                  "2139 Sokak": [],
+                  "2154 Sokak": [],
+                  "2240 Sokak": [],
+                  "İncirhan Caddesi": []
+            }
       },
-      'Camii': {
-        streets: {
-          'Cumhuriyet Caddesi': ['1', '3', '5', '7', '9', '11', '13'],
-          'Cami Sokak': ['2', '4', '6', '8', '10'],
-          'Hamam Sokak': ['1', '2', '3', '4', '5'],
-          'Pazar Sokak': ['6', '8', '10', '12']
-        }
+      "Cami": {
+            "aliases": [
+                  "Camii"
+            ],
+            "streets": {
+                  "319 Sokak": [],
+                  "327 Sokak": [],
+                  "338 Sokak": [],
+                  "Kabak Caddesi": [],
+                  "Ramazan Selen Bulvarı": [
+                        "90"
+                  ]
+            }
       },
-      'Çamlıca': {
-        streets: {
-          'Çamlıca Caddesi': ['1', '3', '5', '7', '9'],
-          'Manolya Sokak': ['2', '4', '6', '8'],
-          'Yayla Sokak': ['1', '2', '5', '7'],
-          'Çınarlı Sokak': ['10', '12', '14', '16']
-        }
+      "Çamlıca": {
+            "aliases": [],
+            "streets": {
+                  "1727 Sokak": [],
+                  "1728 Sokak": [],
+                  "1730 Sokak": [],
+                  "Gazi Caddesi": [],
+                  "Kazım Karabekir Caddesi": []
+            }
       },
-      'Çavuşlar': {
-        streets: {
-          'Çavuşlar Caddesi': ['1', '2', '4', '6', '8'],
-          'Dere Sokak': ['3', '5', '7', '9'],
-          'Kanal Sokak': ['2', '4', '6', '10'],
-          'Bağlar Sokak': ['1', '3', '5', '11']
-        }
+      "Çavuşlar": {
+            "aliases": [],
+            "streets": {
+                  "2727 Sokak": [],
+                  "3014 Sokak": [],
+                  "3015 Sokak": [],
+                  "3016 Sokak": [],
+                  "3035 Sokak": [],
+                  "3049 Sokak": [],
+                  "Gündoğdu Caddesi": [],
+                  "Tepecik Caddesi": []
+            }
       },
-      'Fatih': {
-        streets: {
-          'Fatih Caddesi': ['1', '2', '4', '6', '8', '10', '12', '14'],
-          'Şehitler Sokak': ['3', '5', '7', '9', '11'],
-          'Yıldız Sokak': ['2', '6', '8', '10'],
-          'Aslan Sokak': ['1', '4', '7', '12']
-        }
+      "Çukur": {
+            "aliases": [],
+            "streets": {
+                  "Kabak Caddesi": []
+            }
       },
-      'Konak': {
-        streets: {
-          'Konak Caddesi': ['1', '3', '5', '7', '9', '11'],
-          'Belediye Sokak': ['2', '4', '6', '8', '10'],
-          'Kervan Sokak': ['1', '2', '5', '7'],
-          'Çarşı Sokak': ['3', '6', '9', '12']
-        }
+      "Fatih": {
+            "aliases": [],
+            "streets": {
+                  "1526 Sokak": [],
+                  "1529 Sokak": [],
+                  "1641 Sokak": [
+                        "13"
+                  ],
+                  "1664 Sokak": [],
+                  "1731 Sokak": [],
+                  "9 Eylül Caddesi": [],
+                  "Cemal Aktaş Caddesi": [],
+                  "Fatih Caddesi": [],
+                  "Gazi Caddesi": []
+            }
       },
-      'Mehmet Akif': {
-        streets: {
-          'Mehmet Akif Caddesi': ['1', '2', '4', '6', '8', '10'],
-          'İnönü Sokak': ['3', '5', '7', '9'],
-          'Yunus Sokak': ['2', '6', '8', '10'],
-          'Gül Sokak': ['1', '4', '7', '11']
-        }
+      "Karayvatlar": {
+            "aliases": [],
+            "streets": {
+                  "932 Sokak": [],
+                  "947 Sokak": [],
+                  "Cumhuriyet Caddesi": [],
+                  "Gazi Caddesi": [
+                        "24"
+                  ],
+                  "Sümer Ezgü Caddesi": []
+            }
       },
-      'Oğuzhan': {
-        streets: {
-          'Oğuzhan Caddesi': ['1', '3', '5', '7', '9'],
-          'Selvi Sokak': ['2', '4', '6', '8'],
-          'Kavak Sokak': ['1', '2', '5', '7'],
-          'Lale Sokak': ['10', '12', '14']
-        }
+      "Konak": {
+            "aliases": [],
+            "streets": {
+                  "Genç Osman Caddesi": [],
+                  "Hökez Caddesi": [],
+                  "2712 Sokak": [],
+                  "2716 Sokak": []
+            }
       },
-      'Pazar': {
-        streets: {
-          'Pazar Caddesi': ['1', '2', '3', '4', '5', '6', '7', '8'],
-          'Esnaf Sokak': ['9', '11', '13', '15'],
-          'Tahıl Sokak': ['2', '4', '6', '8'],
-          'Demirciler Sokak': ['1', '3', '5', '7']
-        }
+      "Mehmet Akif": {
+            "aliases": [],
+            "streets": {
+                  "2406 Sokak": [],
+                  "2447 Sokak": [],
+                  "2522 Sokak": []
+            }
       },
-      'Sanayi': {
-        streets: {
-          'Sanayi İçi Yolu': ['1', '2', '4', '6', '8', '10', '12', '14', '16', '18', '20', '21', '24'],
-          '2461. Sokak': ['1', '5', '9', '13', '21', '31', '37', '47'],
-          '2462. Sokak': ['2', '4', '6', '8', '10', '12', '24', '36'],
-          '2467. Sokak': ['1', '2', '4', '6', '8', '10'],
-          '2775. Sokak': ['2', '4', '6', '8', '10'],
-          '2888. Sokak': ['1', '3', '5', '7', '9', '11'],
-          '2889. Sokak': ['2', '4', '6', '8'],
-          '2902. Sokak': ['1', '2', '4', '6'],
-          '2910. Sokak': ['3', '5', '7', '9'],
-          '2928. Sokak': ['2', '4', '6', '8']
-        }
+      "Mimar Sinan": {
+            "aliases": [],
+            "streets": {
+                  "1586 Sokak": [],
+                  "1834 Sokak": [],
+                  "1835 Sokak": [],
+                  "1839 Sokak": [],
+                  "1842 Sokak": [],
+                  "1856 Sokak": [],
+                  "1861 Sokak": []
+            }
       },
-      'Yeni': {
-        streets: {
-          'Yeni Caddesi': ['1', '2', '4', '6', '8', '10', '12'],
-          'Barış Sokak': ['3', '5', '7', '9'],
-          'Akasya Sokak': ['2', '4', '6', '8'],
-          'Sevgi Sokak': ['1', '4', '7', '11']
-        }
+      "Oğuzhan": {
+            "aliases": [],
+            "streets": {
+                  "Atatürk Caddesi": [
+                        "1"
+                  ]
+            }
       },
-      'Yenicami': {
-        streets: {
-          'Yenicami Caddesi': ['1', '3', '5', '7', '9'],
-          'Çeşme Sokak': ['2', '4', '6', '8'],
-          'Arasta Sokak': ['1', '2', '5', '7'],
-          'Meydan Sokak': ['10', '12', '14']
-        }
+      "Onaç": {
+            "aliases": [],
+            "streets": {
+                  "2308 Sokak": [],
+                  "2364 Sokak": [],
+                  "Kemal Kaplan Sokağı": []
+            }
       },
-      'Yunus Emre': {
-        streets: {
-          'Yunus Emre Caddesi': ['1', '2', '4', '6', '8'],
-          'Dostluk Sokak': ['3', '5', '7', '9'],
-          'Özgür Sokak': ['2', '6', '8', '10'],
-          'İstiklal Sokak': ['1', '4', '7', '11']
-        }
+      "Pazar": {
+            "aliases": [],
+            "streets": {
+                  "Barutlu Caddesi": [],
+                  "İnönü Caddesi": []
+            }
       },
-      'Yetmiş Evler': {
-        streets: {
-          'Yetmiş Evler Caddesi': ['1', '3', '5', '7', '9'],
-          'Birlik Sokak': ['2', '4', '6', '8'],
-          'Umut Sokak': ['1', '2', '5', '7'],
-          'Sedir Sokak': ['10', '12', '14']
-        }
+      "Sanayi": {
+            "aliases": [],
+            "streets": {
+                  "2461 Sokak": [],
+                  "2462 Sokak": [],
+                  "2467 Sokak": [],
+                  "2477 Sokak": [
+                        "9"
+                  ],
+                  "2484 Sokak": [
+                        "4"
+                  ],
+                  "2775 Sokak": [],
+                  "2888 Sokak": [],
+                  "2889 Sokak": [],
+                  "2902 Sokak": [],
+                  "2904 Sokak": [],
+                  "2905 Sokak": [],
+                  "2907 Sokak": [],
+                  "2910 Sokak": [],
+                  "2928 Sokak": [],
+                  "Gündoğdu Caddesi": []
+            }
+      },
+      "Yeni": {
+            "aliases": [],
+            "streets": {
+                  "1257 Sokak": [],
+                  "1641 Sokak": [],
+                  "Gazi Caddesi": [],
+                  "Milli Egemenlik Caddesi": [],
+                  "Süleyman Demirel Bulvarı": [],
+                  "Yahya Kemal Caddesi": []
+            }
+      },
+      "Yetmiş Evler": {
+            "aliases": [
+                  "70 Evler",
+                  "Yetmis Evler"
+            ],
+            "streets": {}
+      },
+      "Yörükler": {
+            "aliases": [],
+            "streets": {
+                  "3002 Sokak": [],
+                  "3003 Sokak": [],
+                  "Tepecik Caddesi": []
+            }
+      },
+      "Yunus Emre": {
+            "aliases": [],
+            "streets": {
+                  "808 Sokak": [],
+                  "817 Sokak": [],
+                  "828 Sokak": [],
+                  "830 Sokak": [],
+                  "836 Sokak": [],
+                  "855 Sokak": [],
+                  "909 Sokak": [],
+                  "Sultan Hamit Caddesi": [],
+                  "Yıldırım Caddesi": []
+            }
       }
-    };
+};
+    var ADDRESS_NEIGHBORHOOD_ORDER = ['Alaattin', 'Atilla', 'Barbaros', 'Cami', 'Çamlıca', 'Çavuşlar', 'Çukur', 'Fatih', 'Karayvatlar', 'Konak', 'Mehmet Akif', 'Mimar Sinan', 'Oğuzhan', 'Onaç', 'Pazar', 'Sanayi', 'Yeni', 'Yetmiş Evler', 'Yörükler', 'Yunus Emre'];
 
     function escapeHtml(value) {
       if (value === null || value === undefined) return "";
@@ -1657,40 +1770,94 @@ app.get("/businesses", (req, res) => {
       document.getElementById("businessCategory").innerHTML = formOptions;
     }
 
-    function getNeighborhoodNames() {
-      return Object.keys(ADDRESS_CATALOG).sort(function(a, b) {
-        return a.localeCompare(b, 'tr');
+    function normalizeTextKey(value) {
+      return String(value || '')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/ı/g, 'i')
+        .replace(/ğ/g, 'g')
+        .replace(/ü/g, 'u')
+        .replace(/ş/g, 's')
+        .replace(/ö/g, 'o')
+        .replace(/ç/g, 'c')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+    }
+
+    function getCanonicalNeighborhoodName(value) {
+      if (!value) return '';
+      var normalized = normalizeTextKey(value);
+      for (var i = 0; i < ADDRESS_NEIGHBORHOOD_ORDER.length; i++) {
+        var officialName = ADDRESS_NEIGHBORHOOD_ORDER[i];
+        var entry = ADDRESS_CATALOG[officialName] || {};
+        if (normalizeTextKey(officialName) === normalized) return officialName;
+        var aliases = entry.aliases || [];
+        for (var j = 0; j < aliases.length; j++) {
+          if (normalizeTextKey(aliases[j]) === normalized) return officialName;
+        }
+      }
+      return String(value || '');
+    }
+
+    function sortTurkish(values, numeric) {
+      return values.slice().sort(function(a, b) {
+        return String(a).localeCompare(String(b), 'tr', { numeric: !!numeric, sensitivity: 'base' });
       });
     }
 
-    function getStreetNames(neighborhood) {
-      if (!neighborhood || !ADDRESS_CATALOG[neighborhood] || !ADDRESS_CATALOG[neighborhood].streets) return [];
-      return Object.keys(ADDRESS_CATALOG[neighborhood].streets).sort(function(a, b) {
-        return a.localeCompare(b, 'tr', { numeric: true });
-      });
-    }
-
-    function getDoorNumbers(neighborhood, street) {
-      if (!neighborhood || !street || !ADDRESS_CATALOG[neighborhood] || !ADDRESS_CATALOG[neighborhood].streets || !ADDRESS_CATALOG[neighborhood].streets[street]) return [];
-      return ADDRESS_CATALOG[neighborhood].streets[street].slice();
-    }
-
-    function setSelectOptions(selectId, placeholder, values, selectedValue) {
-      var select = document.getElementById(selectId);
-      if (!select) return;
-
-      var html = '<option value="">' + escapeHtml(placeholder) + '</option>';
+    function uniqueSorted(values, numeric) {
+      var map = {};
       for (var i = 0; i < values.length; i++) {
-        var value = String(values[i]);
-        html += '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>';
+        var val = String(values[i] || '').trim();
+        if (!val) continue;
+        map[val] = true;
       }
+      return sortTurkish(Object.keys(map), numeric);
+    }
 
-      if (selectedValue && values.indexOf(selectedValue) === -1) {
-        html += '<option value="' + escapeHtml(selectedValue) + '">' + escapeHtml(selectedValue) + ' (Kayıtlı)</option>';
+    function getNeighborhoodNames() {
+      return ADDRESS_NEIGHBORHOOD_ORDER.slice();
+    }
+
+    function collectKnownStreets(neighborhood) {
+      var canonicalNeighborhood = getCanonicalNeighborhoodName(neighborhood);
+      var collected = [];
+      if (canonicalNeighborhood && ADDRESS_CATALOG[canonicalNeighborhood] && ADDRESS_CATALOG[canonicalNeighborhood].streets) {
+        collected = collected.concat(Object.keys(ADDRESS_CATALOG[canonicalNeighborhood].streets));
       }
+      for (var i = 0; i < businesses.length; i++) {
+        if (getCanonicalNeighborhoodName(businesses[i].neighborhood) === canonicalNeighborhood && businesses[i].street) {
+          collected.push(businesses[i].street);
+        }
+      }
+      return uniqueSorted(collected, true);
+    }
 
-      select.innerHTML = html;
-      select.value = selectedValue || '';
+    function collectKnownDoorNumbers(neighborhood, street) {
+      var canonicalNeighborhood = getCanonicalNeighborhoodName(neighborhood);
+      var streetKey = String(street || '').trim();
+      if (!streetKey) return [];
+      var collected = [];
+      if (canonicalNeighborhood && ADDRESS_CATALOG[canonicalNeighborhood] && ADDRESS_CATALOG[canonicalNeighborhood].streets && ADDRESS_CATALOG[canonicalNeighborhood].streets[streetKey]) {
+        collected = collected.concat(ADDRESS_CATALOG[canonicalNeighborhood].streets[streetKey]);
+      }
+      for (var i = 0; i < businesses.length; i++) {
+        if (
+          getCanonicalNeighborhoodName(businesses[i].neighborhood) === canonicalNeighborhood &&
+          String(businesses[i].street || '').trim() === streetKey &&
+          businesses[i].doorNo
+        ) {
+          collected.push(businesses[i].doorNo);
+        }
+      }
+      return uniqueSorted(collected, true);
+    }
+
+    function setDatalistOptions(listId, values) {
+      var list = document.getElementById(listId);
+      if (!list) return;
+      list.innerHTML = values.map(function(value) {
+        return '<option value="' + escapeHtml(value) + '"></option>';
+      }).join('');
     }
 
     function initAddressSelectors() {
@@ -1699,33 +1866,54 @@ app.get("/businesses", (req, res) => {
       if (provinceSelect) provinceSelect.value = ADDRESS_REGION.province;
       if (districtSelect) districtSelect.value = ADDRESS_REGION.district;
       setSelectOptions('businessNeighborhood', 'Mahalle seçiniz', getNeighborhoodNames(), '');
-      setSelectOptions('businessStreet', 'Önce mahalle seçiniz', [], '');
-      setSelectOptions('businessDoorNo', 'Önce cadde / sokak seçiniz', [], '');
+      document.getElementById('businessStreet').value = '';
+      document.getElementById('businessStreet').placeholder = 'Önce mahalle seçiniz';
+      setDatalistOptions('businessStreetList', []);
+      document.getElementById('businessDoorNo').value = '';
+      document.getElementById('businessDoorNo').placeholder = 'Önce cadde / sokak seçiniz';
+      setDatalistOptions('businessDoorNoList', []);
     }
 
     function handleNeighborhoodChange(selectedStreet, selectedDoorNo) {
-      var neighborhood = document.getElementById('businessNeighborhood').value;
-      var streets = getStreetNames(neighborhood);
-      setSelectOptions('businessStreet', neighborhood ? 'Cadde / sokak seçiniz' : 'Önce mahalle seçiniz', streets, selectedStreet || '');
+      var neighborhood = getCanonicalNeighborhoodName(document.getElementById('businessNeighborhood').value);
+      if (neighborhood && neighborhood !== document.getElementById('businessNeighborhood').value) {
+        document.getElementById('businessNeighborhood').value = neighborhood;
+      }
+      var streets = collectKnownStreets(neighborhood);
+      var streetInput = document.getElementById('businessStreet');
+      setDatalistOptions('businessStreetList', streets);
+      streetInput.placeholder = neighborhood ? 'Cadde / sokak seçiniz veya yazınız' : 'Önce mahalle seçiniz';
+      streetInput.value = selectedStreet || '';
       handleStreetChange(selectedDoorNo);
       updateLocationPreview();
     }
 
+    function handleStreetInput(selectedDoorNo) {
+      handleStreetChange(selectedDoorNo);
+    }
+
     function handleStreetChange(selectedDoorNo) {
-      var neighborhood = document.getElementById('businessNeighborhood').value;
-      var street = document.getElementById('businessStreet').value;
-      var doorNumbers = getDoorNumbers(neighborhood, street);
-      setSelectOptions('businessDoorNo', street ? 'Kapı no seçiniz' : 'Önce cadde / sokak seçiniz', doorNumbers, selectedDoorNo || '');
+      var neighborhood = getCanonicalNeighborhoodName(document.getElementById('businessNeighborhood').value);
+      var street = document.getElementById('businessStreet').value.trim();
+      var doorNumbers = collectKnownDoorNumbers(neighborhood, street);
+      var doorInput = document.getElementById('businessDoorNo');
+      setDatalistOptions('businessDoorNoList', doorNumbers);
+      doorInput.placeholder = street ? 'Kapı no seçiniz veya yazınız' : 'Önce cadde / sokak seçiniz';
+      if (selectedDoorNo !== undefined) {
+        doorInput.value = selectedDoorNo || '';
+      }
       updateLocationPreview();
     }
 
     function setAddressSelection(neighborhood, street, doorNo) {
       initAddressSelectors();
-      setSelectOptions('businessNeighborhood', 'Mahalle seçiniz', getNeighborhoodNames(), neighborhood || '');
+      var canonicalNeighborhood = getCanonicalNeighborhoodName(neighborhood || '');
+      setSelectOptions('businessNeighborhood', 'Mahalle seçiniz', getNeighborhoodNames(), canonicalNeighborhood || neighborhood || '');
       handleNeighborhoodChange(street || '', doorNo || '');
       if (doorNo) {
         document.getElementById('businessDoorNo').value = doorNo;
       }
+    }
     }
 
     function renderStats() {
@@ -1911,7 +2099,7 @@ app.get("/businesses", (req, res) => {
     function getCurrentBusinessAddressQuery() {
       var parts = [];
       var tradeName = document.getElementById('businessTradeName').value.trim();
-      var neighborhood = document.getElementById('businessNeighborhood').value.trim();
+      var neighborhood = getCanonicalNeighborhoodName(document.getElementById('businessNeighborhood').value.trim());
       var street = document.getElementById('businessStreet').value.trim();
       var doorNo = document.getElementById('businessDoorNo').value.trim();
       var ada = document.getElementById('businessAda').value.trim();
