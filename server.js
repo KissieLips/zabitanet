@@ -3,6 +3,7 @@ const { Pool } = require("pg");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
+const https = require("https");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -62,6 +63,51 @@ const upload = multer({
   storage: storage,
   limits: { fileSize: 20 * 1024 * 1024 }
 });
+
+function httpsGetJson(url) {
+  return new Promise((resolve, reject) => {
+    const request = https.get(url, {
+      headers: {
+        "User-Agent": "ZabitaYonetimSistemi/1.0 (reverse geocode)",
+        "Accept": "application/json"
+      }
+    }, (response) => {
+      let raw = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => { raw += chunk; });
+      response.on("end", () => {
+        if (response.statusCode && response.statusCode >= 400) {
+          return reject(new Error("Harici konum servisi hata döndürdü: " + response.statusCode));
+        }
+        try {
+          resolve(raw ? JSON.parse(raw) : {});
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+
+    request.on("error", reject);
+    request.setTimeout(12000, () => {
+      request.destroy(new Error("Harici konum servisi zaman aşımına uğradı."));
+    });
+  });
+}
+
+function buildReverseGeocodeText(payload) {
+  if (!payload || !payload.address) return "";
+  const address = payload.address;
+
+  const parts = [
+    address.road,
+    address.neighbourhood || address.suburb || address.quarter || address.hamlet || address.village,
+    address.city_district || address.town || address.city || address.county,
+    address.state_district || address.state,
+  ].filter(Boolean);
+
+  return parts.join(", ");
+}
+
 
 app.use("/uploads", express.static(uploadsRoot));
 
@@ -927,6 +973,30 @@ app.delete("/api/businesses/:id", async (req, res) => {
   }
 });
 
+
+app.get("/api/geocode/reverse", async (req, res) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(400).json({ error: "Geçerli enlem ve boylam giriniz." });
+    }
+
+    const url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&lat=" + encodeURIComponent(String(lat)) + "&lon=" + encodeURIComponent(String(lng));
+    const payload = await httpsGetJson(url);
+
+    res.json({
+      displayName: payload.display_name || "",
+      shortText: buildReverseGeocodeText(payload),
+      address: payload.address || {},
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Konum çözümleme yapılamadı." });
+  }
+});
+
 app.get("/businesses", (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="tr">
@@ -1013,6 +1083,7 @@ app.get("/businesses", (req, res) => {
     .map-preview { margin-top: 10px; min-height: 18px; }
     .map-box { height: 420px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #f8fafc; }
     .map-help { margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .map-help.tight { margin-top: 6px; }
     .action-row { display: flex; flex-wrap: wrap; gap: 8px; }
     .mini-btn { border: 1px solid var(--line); background: #ffffff; color: #1f2937; padding: 7px 9px; border-radius: 9px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; }
     .mini-btn:hover { background: #f8fafc; }
@@ -1194,6 +1265,7 @@ app.get("/businesses", (req, res) => {
             </div>
             <div class="location-note" id="locationInfoText">İşyerindeyken “Konum Al” butonuna basarsanız cihazın mevcut konumu alınır. Konum yaklaşık çıkarsa “Haritadan Seç” ile noktayı elle düzeltebilirsiniz.</div>
             <div class="map-preview" id="locationPreviewRow"></div>
+            <div class="location-note" id="locationResolvedText"></div>
           </div>
         </div>
       </div>
@@ -1350,8 +1422,10 @@ app.get("/businesses", (req, res) => {
 
         html += '<tr>' +
           '<td>' +
-            '<div class="badge">' + escapeHtml(item.categoryName || "Kategori Yok") + '</div>' +
-            '<div class="cell-title" style="margin-top:8px;">' + escapeHtml(item.tradeName) + '</div>' +
+            '<div class="stack">' +
+              '<div><span class="badge">' + escapeHtml(item.categoryName || "Kategori Yok") + '</span></div>' +
+              '<div class="cell-title">' + escapeHtml(item.tradeName) + '</div>' +
+            '</div>' +
           '</td>' +
           '<td><div class="stack"><div class="cell-title">' + escapeHtml(item.ownerName) + '</div><div class="cell-sub">Yetkili / İşletme sahibi</div></div></td>' +
           '<td>' + (item.phone ? '<div class="cell-title">' + escapeHtml(item.phone) + '</div>' : '<span class="muted">Belirtilmedi</span>') + '</td>' +
@@ -1406,6 +1480,7 @@ app.get("/businesses", (req, res) => {
       document.getElementById('businessLocationLat').value = '';
       document.getElementById('businessLocationLng').value = '';
       document.getElementById('locationInfoText').textContent = 'İşyerindeyken “Konum Al” butonuna basarsanız cihazın mevcut konumu alınır. Konum yaklaşık çıkarsa “Haritadan Seç” ile noktayı elle düzeltebilirsiniz.';
+      document.getElementById('locationResolvedText').textContent = '';
       document.getElementById('locationPreviewRow').innerHTML = '';
       selectedMapCoords = null;
     }
@@ -1452,6 +1527,39 @@ app.get("/businesses", (req, res) => {
       openModal('businessModal');
     }
 
+    function setResolvedLocationText(textValue, isWarning) {
+      var el = document.getElementById('locationResolvedText');
+      if (!el) return;
+      if (!textValue) {
+        el.innerHTML = '';
+        return;
+      }
+      el.innerHTML = '<span' + (isWarning ? ' style="color:#b45309;font-weight:600;"' : '') + '>Algılanan yer:</span> ' + escapeHtml(textValue);
+    }
+
+    async function resolveLocationText(lat, lng) {
+      try {
+        var response = await fetch('/api/geocode/reverse?lat=' + encodeURIComponent(lat) + '&lng=' + encodeURIComponent(lng));
+        if (!response.ok) return '';
+        var data = await response.json();
+        return data.shortText || data.displayName || '';
+      } catch (error) {
+        return '';
+      }
+    }
+
+    function openMapPickerAt(lat, lng, noteText) {
+      if (!ensureMapPickerReady()) return;
+      openModal('mapPickerModal');
+      setTimeout(function() {
+        mapPicker.invalidateSize();
+        setMapSelection(lat, lng);
+        if (noteText) {
+          document.getElementById('mapPickerSelectionText').innerHTML += '<div class="map-help tight">' + escapeHtml(noteText) + '</div>';
+        }
+      }, 80);
+    }
+
     function updateLocationPreview() {
       var lat = document.getElementById('businessLocationLat').value.trim();
       var lng = document.getElementById('businessLocationLng').value.trim();
@@ -1475,7 +1583,7 @@ app.get("/businesses", (req, res) => {
 
         var bestPosition = null;
         var finished = false;
-        var options = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
+        var options = { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 };
         var fallbackTimer = null;
         var watchId = null;
 
@@ -1502,7 +1610,7 @@ app.get("/businesses", (req, res) => {
           if (!bestPosition || Number(position.coords.accuracy || 999999) < Number(bestPosition.coords.accuracy || 999999)) {
             bestPosition = position;
           }
-          if (bestPosition && Number(bestPosition.coords.accuracy || 999999) <= 40) {
+          if (bestPosition && Number(bestPosition.coords.accuracy || 999999) <= 25) {
             finishWithSuccess();
           }
         }
@@ -1515,7 +1623,7 @@ app.get("/businesses", (req, res) => {
           }
         }
 
-        fallbackTimer = setTimeout(finishWithSuccess, 10000);
+        fallbackTimer = setTimeout(finishWithSuccess, 20000);
         watchId = navigator.geolocation.watchPosition(consider, fail, options);
         navigator.geolocation.getCurrentPosition(consider, fail, options);
       });
@@ -1533,28 +1641,41 @@ app.get("/businesses", (req, res) => {
       try {
         button.disabled = true;
         button.textContent = 'Alınıyor...';
-        info.textContent = 'Cihazın daha doğru konum verisi bekleniyor. Lütfen birkaç saniye sabit kalın.';
+        info.textContent = 'Cihazın daha doğru GPS verisi bekleniyor. Lütfen 15-20 saniye sabit kalın.';
+        setResolvedLocationText('', false);
 
         var position = await getBestCurrentPosition();
         var lat = Number(position.coords.latitude).toFixed(6);
         var lng = Number(position.coords.longitude).toFixed(6);
         var accuracy = position.coords.accuracy ? Math.round(position.coords.accuracy) : null;
+        var resolvedText = await resolveLocationText(lat, lng);
+
+        if (accuracy !== null && accuracy > 80) {
+          document.getElementById('businessLocationLat').value = '';
+          document.getElementById('businessLocationLng').value = '';
+          selectedMapCoords = null;
+          updateLocationPreview();
+          info.textContent = 'Cihaz yaklaşık konum verdi (±' + accuracy + ' m). Yanlış kayıt olmaması için harita açılıyor; lütfen işyerinin tam noktasına dokunup “Seçimi Kullan” butonuna basın.';
+          setResolvedLocationText(resolvedText || 'Yaklaşık konum bulundu.', true);
+          openMapPickerAt(Number(lat), Number(lng), 'Yaklaşık konum merkeze alındı. Lütfen işyerinin tam yerini haritada seçin.');
+          return;
+        }
 
         document.getElementById('businessLocationLat').value = lat;
         document.getElementById('businessLocationLng').value = lng;
         selectedMapCoords = { lat: Number(lat), lng: Number(lng) };
         updateLocationPreview();
+        setResolvedLocationText(resolvedText, false);
 
-        if (accuracy !== null && accuracy > 150) {
-          info.textContent = 'Konum alındı ancak cihaz yaklaşık konum verdi (±' + accuracy + ' m). En doğru kayıt için telefonda GPS açıkken tekrar deneyin veya Haritadan Seç ile noktayı düzeltin.';
-        } else if (accuracy !== null) {
+        if (accuracy !== null) {
           info.textContent = 'Konum başarıyla alındı. Yaklaşık doğruluk: ±' + accuracy + ' m.';
         } else {
           info.textContent = 'Konum başarıyla alındı.';
         }
       } catch (error) {
-        info.textContent = 'Konum alınamadı. Tarayıcı konum izni verildiğinden emin olun.';
-        alert('Konum alınamadı. Bilgisayarlarda konum bazen yaklaşık gelebilir; mümkünse telefondan deneyin veya Haritadan Seç ile işaretleyin.');
+        info.textContent = 'Konum alınamadı. Tarayıcı konum izni ve telefondaki “kesin konum” ayarını kontrol edin.';
+        setResolvedLocationText('', false);
+        alert('Konum alınamadı. Telefonda tarayıcı izinlerinde konum ve mümkünse “kesin konum” açık olmalı. İstersen Haritadan Seç ile de işaretleyebilirsin.');
       } finally {
         button.disabled = false;
         button.textContent = 'Konum Al';
@@ -1581,18 +1702,23 @@ app.get("/businesses", (req, res) => {
       return true;
     }
 
-    function setMapSelection(lat, lng) {
+    async function setMapSelection(lat, lng) {
       if (!mapPicker) return;
       selectedMapCoords = { lat: Number(lat), lng: Number(lng) };
 
       if (!mapMarker) {
-        mapMarker = L.marker([lat, lng]).addTo(mapPicker);
+        mapMarker = L.marker([lat, lng], { draggable: true }).addTo(mapPicker);
+        mapMarker.on('dragend', function(event) {
+          var point = event.target.getLatLng();
+          setMapSelection(point.lat, point.lng);
+        });
       } else {
         mapMarker.setLatLng([lat, lng]);
       }
 
       mapPicker.setView([lat, lng], Math.max(mapPicker.getZoom(), 18));
-      document.getElementById('mapPickerSelectionText').innerHTML = '<div class="cell-title compact">Seçilen konum: ' + escapeHtml(Number(lat).toFixed(6) + ', ' + Number(lng).toFixed(6)) + '</div>';
+      var resolvedText = await resolveLocationText(Number(lat).toFixed(6), Number(lng).toFixed(6));
+      document.getElementById('mapPickerSelectionText').innerHTML = '<div class="cell-title compact">Seçilen konum: ' + escapeHtml(Number(lat).toFixed(6) + ', ' + Number(lng).toFixed(6)) + '</div>' + (resolvedText ? '<div class="cell-sub">' + escapeHtml(resolvedText) + '</div>' : '');
     }
 
     function openMapPicker() {
@@ -1610,7 +1736,7 @@ app.get("/businesses", (req, res) => {
         } else {
           selectedMapCoords = null;
           document.getElementById('mapPickerSelectionText').innerHTML = '<div class="muted">Henüz konum seçilmedi.</div>';
-          mapPicker.setView([37.4, 30.6], 11);
+          mapPicker.setView([37.7144, 30.2908], 12);
           if (mapMarker) {
             mapPicker.removeLayer(mapMarker);
             mapMarker = null;
@@ -1622,22 +1748,31 @@ app.get("/businesses", (req, res) => {
     async function centerMapOnCurrentLocation() {
       if (!ensureMapPickerReady()) return;
       try {
+        document.getElementById('mapPickerSelectionText').innerHTML = '<div class="muted">Mevcut konum getiriliyor...</div>';
         var position = await getBestCurrentPosition();
-        setMapSelection(position.coords.latitude, position.coords.longitude);
+        await setMapSelection(position.coords.latitude, position.coords.longitude);
+        var accuracy = position.coords.accuracy ? Math.round(position.coords.accuracy) : null;
+        if (accuracy !== null && accuracy > 80) {
+          document.getElementById('mapPickerSelectionText').innerHTML += '<div class="map-help tight" style="color:#b45309;">Cihaz yaklaşık konum verdi (±' + accuracy + ' m). Lütfen işyerinin tam yerine dokunarak veya işaretçiyi sürükleyerek düzeltin.</div>';
+        }
       } catch (error) {
-        alert('Mevcut konum ile harita ortalanamadı.');
+        alert('Mevcut konum ile harita ortalanamadı. Tarayıcı izinlerini kontrol edin.');
       }
     }
 
-    function applyMapSelection() {
+    async function applyMapSelection() {
       if (!selectedMapCoords) {
         alert('Lütfen haritada bir nokta seçin.');
         return;
       }
 
-      document.getElementById('businessLocationLat').value = Number(selectedMapCoords.lat).toFixed(6);
-      document.getElementById('businessLocationLng').value = Number(selectedMapCoords.lng).toFixed(6);
-      document.getElementById('locationInfoText').textContent = 'Konum haritadan seçildi. Kaydetmeden önce isterseniz “Seçilen Konumu Haritada Kontrol Et” bağlantısından doğrulayabilirsiniz.';
+      var latValue = Number(selectedMapCoords.lat).toFixed(6);
+      var lngValue = Number(selectedMapCoords.lng).toFixed(6);
+      document.getElementById('businessLocationLat').value = latValue;
+      document.getElementById('businessLocationLng').value = lngValue;
+      document.getElementById('locationInfoText').textContent = 'Konum haritadan seçildi. Kaydetmeden önce isterseniz harita bağlantısından doğrulayabilirsiniz.';
+      var resolvedText = await resolveLocationText(latValue, lngValue);
+      setResolvedLocationText(resolvedText, false);
       updateLocationPreview();
       closeModal('mapPickerModal');
     }
