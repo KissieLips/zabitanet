@@ -1422,14 +1422,12 @@ app.get("/businesses", (req, res) => {
             <label>Cadde / Sokak</label>
             <input type="text" id="businessStreet" list="businessStreetList" placeholder="Önce mahalle seçiniz" oninput="handleStreetInput()" />
             <datalist id="businessStreetList"></datalist>
-            <div class="muted">Listede yoksa yazabilirsiniz.</div>
           </div>
           <div class="parcel-row">
             <div class="form-group">
               <label>Kapı No</label>
               <input type="text" id="businessDoorNo" list="businessDoorNoList" placeholder="Önce cadde / sokak seçiniz" oninput="updateLocationPreview()" />
               <datalist id="businessDoorNoList"></datalist>
-              <div class="muted">Resmi listede yoksa manuel girebilirsiniz.</div>
             </div>
             <div class="form-group">
               <label>Ada</label>
