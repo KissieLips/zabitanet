@@ -1776,7 +1776,7 @@ app.get("/businesses", (req, res) => {
         return;
       }
 
-      var text = (lat && lng) ? 'Seçilen Konumu Google Maps'te Kontrol Et' : 'Adrese Göre Google Maps'te Aç';
+      var text = (lat && lng) ? "Seçilen Konumu Google Maps'te Kontrol Et" : "Adrese Göre Google Maps'te Aç";
       preview.innerHTML = '<a class="mini-btn" href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">' + text + '</a>';
     }
 
@@ -1861,7 +1861,7 @@ app.get("/businesses", (req, res) => {
           document.getElementById('businessLocationLng').value = '';
           selectedMapCoords = null;
           updateLocationPreview();
-          info.textContent = 'Cihaz yaklaşık konum verdi (±' + accuracy + ' m). Yanlış kayıt olmaması için bu koordinat yazılmadı. Google Maps'te doğru noktayı açıp bağlantıyı yapıştırın.';
+          info.textContent = "Cihaz yaklaşık konum verdi (±" + accuracy + " m). Yanlış kayıt olmaması için bu koordinat yazılmadı. Google Maps'te doğru noktayı açıp bağlantıyı yapıştırın.";
           setResolvedLocationText(resolvedText || 'Yaklaşık konum bulundu.', true);
           return;
         }
