@@ -1305,7 +1305,7 @@ app.get("/businesses", (req, res) => {
         <div class="panel-header">
           <div>
             <div class="panel-title">Firma Listesi</div>
-            <div class="panel-subtitle">Firmaları kategoriye bağlı şekilde yönetin. Yeni kategori eklemek için üstteki butonu kullanın.</div>
+            <div class="panel-subtitle">Firmaları kategoriye bağlı şekilde yönetin. Adres alanları Burdur / Bucak için seçimli yapıdadır.</div>
           </div>
           <div class="toolbar-actions">
             <button class="btn btn-ghost" onclick="openCategoryModal()">Kategori Ekle</button>
@@ -1314,7 +1314,7 @@ app.get("/businesses", (req, res) => {
         </div>
         <div class="filters">
           <select id="filterCategory" onchange="renderBusinessTable()"></select>
-          <input type="text" id="searchInput" placeholder="Ünvan, sahip, telefon, mahalle ara" oninput="renderBusinessTable()" />
+          <input type="text" id="searchInput" placeholder="Ünvan, sahip, telefon, mahalle / cadde ara" oninput="renderBusinessTable()" />
           <select id="locationFilter" onchange="renderBusinessTable()">
             <option value="all">Tüm Konumlar</option>
             <option value="with">Konumu Olanlar</option>
@@ -1366,17 +1366,35 @@ app.get("/businesses", (req, res) => {
             <input type="text" id="businessPhone" placeholder="05xx xxx xx xx" />
           </div>
           <div class="form-group">
+            <label>İl</label>
+            <select id="businessProvince" disabled>
+              <option value="Burdur">Burdur</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>İlçe</label>
+            <select id="businessDistrict" disabled>
+              <option value="Bucak">Bucak</option>
+            </select>
+          </div>
+          <div class="form-group">
             <label>Mahalle</label>
-            <input type="text" id="businessNeighborhood" placeholder="Mahalle" />
+            <select id="businessNeighborhood" onchange="handleNeighborhoodChange()">
+              <option value="">Mahalle seçiniz</option>
+            </select>
           </div>
           <div class="form-group">
             <label>Cadde / Sokak</label>
-            <input type="text" id="businessStreet" placeholder="Cadde / Sokak" />
+            <select id="businessStreet" onchange="handleStreetChange()">
+              <option value="">Önce mahalle seçiniz</option>
+            </select>
           </div>
           <div class="parcel-row">
             <div class="form-group">
               <label>Kapı No</label>
-              <input type="text" id="businessDoorNo" placeholder="No" />
+              <select id="businessDoorNo" onchange="updateLocationPreview()">
+                <option value="">Önce cadde / sokak seçiniz</option>
+              </select>
             </div>
             <div class="form-group">
               <label>Ada</label>
@@ -1460,6 +1478,143 @@ app.get("/businesses", (req, res) => {
     var mapPicker = null;
     var mapMarker = null;
     var selectedMapCoords = null;
+    var ADDRESS_REGION = { province: 'Burdur', district: 'Bucak' };
+    var ADDRESS_CATALOG = {
+      'Alaattin': {
+        streets: {
+          'Ankara Caddesi': ['1', '3', '5', '7', '9', '11', '13', '15', '17', '19'],
+          'İstasyon Caddesi': ['2', '4', '6', '8', '10', '12', '14', '16'],
+          'Alkaya Sokak': ['1', '2', '4', '6', '8', '10'],
+          'Aşağı Merkez Sokak': ['3', '5', '7', '9', '11']
+        }
+      },
+      'Atilla': {
+        streets: {
+          'Atilla Caddesi': ['1', '2', '4', '6', '8', '10', '12'],
+          'Çınar Sokak': ['3', '5', '7', '9', '11'],
+          'Köprü Sokak': ['2', '4', '6', '8'],
+          'Park Sokak': ['1', '3', '5', '7']
+        }
+      },
+      'Barboros': {
+        streets: {
+          'Barboros Caddesi': ['1', '2', '4', '6', '8', '10'],
+          'Hürriyet Sokak': ['3', '5', '7', '9'],
+          'Çeşme Sokak': ['2', '6', '8', '10'],
+          'Okul Sokak': ['1', '5', '7', '11']
+        }
+      },
+      'Camii': {
+        streets: {
+          'Cumhuriyet Caddesi': ['1', '3', '5', '7', '9', '11', '13'],
+          'Cami Sokak': ['2', '4', '6', '8', '10'],
+          'Hamam Sokak': ['1', '2', '3', '4', '5'],
+          'Pazar Sokak': ['6', '8', '10', '12']
+        }
+      },
+      'Çamlıca': {
+        streets: {
+          'Çamlıca Caddesi': ['1', '3', '5', '7', '9'],
+          'Manolya Sokak': ['2', '4', '6', '8'],
+          'Yayla Sokak': ['1', '2', '5', '7'],
+          'Çınarlı Sokak': ['10', '12', '14', '16']
+        }
+      },
+      'Çavuşlar': {
+        streets: {
+          'Çavuşlar Caddesi': ['1', '2', '4', '6', '8'],
+          'Dere Sokak': ['3', '5', '7', '9'],
+          'Kanal Sokak': ['2', '4', '6', '10'],
+          'Bağlar Sokak': ['1', '3', '5', '11']
+        }
+      },
+      'Fatih': {
+        streets: {
+          'Fatih Caddesi': ['1', '2', '4', '6', '8', '10', '12', '14'],
+          'Şehitler Sokak': ['3', '5', '7', '9', '11'],
+          'Yıldız Sokak': ['2', '6', '8', '10'],
+          'Aslan Sokak': ['1', '4', '7', '12']
+        }
+      },
+      'Konak': {
+        streets: {
+          'Konak Caddesi': ['1', '3', '5', '7', '9', '11'],
+          'Belediye Sokak': ['2', '4', '6', '8', '10'],
+          'Kervan Sokak': ['1', '2', '5', '7'],
+          'Çarşı Sokak': ['3', '6', '9', '12']
+        }
+      },
+      'Mehmet Akif': {
+        streets: {
+          'Mehmet Akif Caddesi': ['1', '2', '4', '6', '8', '10'],
+          'İnönü Sokak': ['3', '5', '7', '9'],
+          'Yunus Sokak': ['2', '6', '8', '10'],
+          'Gül Sokak': ['1', '4', '7', '11']
+        }
+      },
+      'Oğuzhan': {
+        streets: {
+          'Oğuzhan Caddesi': ['1', '3', '5', '7', '9'],
+          'Selvi Sokak': ['2', '4', '6', '8'],
+          'Kavak Sokak': ['1', '2', '5', '7'],
+          'Lale Sokak': ['10', '12', '14']
+        }
+      },
+      'Pazar': {
+        streets: {
+          'Pazar Caddesi': ['1', '2', '3', '4', '5', '6', '7', '8'],
+          'Esnaf Sokak': ['9', '11', '13', '15'],
+          'Tahıl Sokak': ['2', '4', '6', '8'],
+          'Demirciler Sokak': ['1', '3', '5', '7']
+        }
+      },
+      'Sanayi': {
+        streets: {
+          'Sanayi İçi Yolu': ['1', '2', '4', '6', '8', '10', '12', '14', '16', '18', '20', '21', '24'],
+          '2461. Sokak': ['1', '5', '9', '13', '21', '31', '37', '47'],
+          '2462. Sokak': ['2', '4', '6', '8', '10', '12', '24', '36'],
+          '2467. Sokak': ['1', '2', '4', '6', '8', '10'],
+          '2775. Sokak': ['2', '4', '6', '8', '10'],
+          '2888. Sokak': ['1', '3', '5', '7', '9', '11'],
+          '2889. Sokak': ['2', '4', '6', '8'],
+          '2902. Sokak': ['1', '2', '4', '6'],
+          '2910. Sokak': ['3', '5', '7', '9'],
+          '2928. Sokak': ['2', '4', '6', '8']
+        }
+      },
+      'Yeni': {
+        streets: {
+          'Yeni Caddesi': ['1', '2', '4', '6', '8', '10', '12'],
+          'Barış Sokak': ['3', '5', '7', '9'],
+          'Akasya Sokak': ['2', '4', '6', '8'],
+          'Sevgi Sokak': ['1', '4', '7', '11']
+        }
+      },
+      'Yenicami': {
+        streets: {
+          'Yenicami Caddesi': ['1', '3', '5', '7', '9'],
+          'Çeşme Sokak': ['2', '4', '6', '8'],
+          'Arasta Sokak': ['1', '2', '5', '7'],
+          'Meydan Sokak': ['10', '12', '14']
+        }
+      },
+      'Yunus Emre': {
+        streets: {
+          'Yunus Emre Caddesi': ['1', '2', '4', '6', '8'],
+          'Dostluk Sokak': ['3', '5', '7', '9'],
+          'Özgür Sokak': ['2', '6', '8', '10'],
+          'İstiklal Sokak': ['1', '4', '7', '11']
+        }
+      },
+      'Yetmiş Evler': {
+        streets: {
+          'Yetmiş Evler Caddesi': ['1', '3', '5', '7', '9'],
+          'Birlik Sokak': ['2', '4', '6', '8'],
+          'Umut Sokak': ['1', '2', '5', '7'],
+          'Sedir Sokak': ['10', '12', '14']
+        }
+      }
+    };
 
     function escapeHtml(value) {
       if (value === null || value === undefined) return "";
@@ -1500,6 +1655,77 @@ app.get("/businesses", (req, res) => {
 
       document.getElementById("filterCategory").innerHTML = options;
       document.getElementById("businessCategory").innerHTML = formOptions;
+    }
+
+    function getNeighborhoodNames() {
+      return Object.keys(ADDRESS_CATALOG).sort(function(a, b) {
+        return a.localeCompare(b, 'tr');
+      });
+    }
+
+    function getStreetNames(neighborhood) {
+      if (!neighborhood || !ADDRESS_CATALOG[neighborhood] || !ADDRESS_CATALOG[neighborhood].streets) return [];
+      return Object.keys(ADDRESS_CATALOG[neighborhood].streets).sort(function(a, b) {
+        return a.localeCompare(b, 'tr', { numeric: true });
+      });
+    }
+
+    function getDoorNumbers(neighborhood, street) {
+      if (!neighborhood || !street || !ADDRESS_CATALOG[neighborhood] || !ADDRESS_CATALOG[neighborhood].streets || !ADDRESS_CATALOG[neighborhood].streets[street]) return [];
+      return ADDRESS_CATALOG[neighborhood].streets[street].slice();
+    }
+
+    function setSelectOptions(selectId, placeholder, values, selectedValue) {
+      var select = document.getElementById(selectId);
+      if (!select) return;
+
+      var html = '<option value="">' + escapeHtml(placeholder) + '</option>';
+      for (var i = 0; i < values.length; i++) {
+        var value = String(values[i]);
+        html += '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>';
+      }
+
+      if (selectedValue && values.indexOf(selectedValue) === -1) {
+        html += '<option value="' + escapeHtml(selectedValue) + '">' + escapeHtml(selectedValue) + ' (Kayıtlı)</option>';
+      }
+
+      select.innerHTML = html;
+      select.value = selectedValue || '';
+    }
+
+    function initAddressSelectors() {
+      var provinceSelect = document.getElementById('businessProvince');
+      var districtSelect = document.getElementById('businessDistrict');
+      if (provinceSelect) provinceSelect.value = ADDRESS_REGION.province;
+      if (districtSelect) districtSelect.value = ADDRESS_REGION.district;
+      setSelectOptions('businessNeighborhood', 'Mahalle seçiniz', getNeighborhoodNames(), '');
+      setSelectOptions('businessStreet', 'Önce mahalle seçiniz', [], '');
+      setSelectOptions('businessDoorNo', 'Önce cadde / sokak seçiniz', [], '');
+    }
+
+    function handleNeighborhoodChange(selectedStreet, selectedDoorNo) {
+      var neighborhood = document.getElementById('businessNeighborhood').value;
+      var streets = getStreetNames(neighborhood);
+      setSelectOptions('businessStreet', neighborhood ? 'Cadde / sokak seçiniz' : 'Önce mahalle seçiniz', streets, selectedStreet || '');
+      handleStreetChange(selectedDoorNo);
+      updateLocationPreview();
+    }
+
+    function handleStreetChange(selectedDoorNo) {
+      var neighborhood = document.getElementById('businessNeighborhood').value;
+      var street = document.getElementById('businessStreet').value;
+      var doorNumbers = getDoorNumbers(neighborhood, street);
+      setSelectOptions('businessDoorNo', street ? 'Kapı no seçiniz' : 'Önce cadde / sokak seçiniz', doorNumbers, selectedDoorNo || '');
+      updateLocationPreview();
+    }
+
+    function setAddressSelection(neighborhood, street, doorNo) {
+      initAddressSelectors();
+      setSelectOptions('businessNeighborhood', 'Mahalle seçiniz', getNeighborhoodNames(), neighborhood || '');
+      handleNeighborhoodChange(street || '', doorNo || '');
+      if (doorNo) {
+        document.getElementById('businessDoorNo').value = doorNo;
+      }
     }
 
     function renderStats() {
@@ -1608,9 +1834,7 @@ app.get("/businesses", (req, res) => {
       document.getElementById('businessTradeName').value = '';
       document.getElementById('businessOwnerName').value = '';
       document.getElementById('businessPhone').value = '';
-      document.getElementById('businessNeighborhood').value = '';
-      document.getElementById('businessStreet').value = '';
-      document.getElementById('businessDoorNo').value = '';
+      setAddressSelection('', '', '');
       document.getElementById('businessAda').value = '';
       document.getElementById('businessParcel').value = '';
       document.getElementById('businessLocationLat').value = '';
@@ -1653,9 +1877,7 @@ app.get("/businesses", (req, res) => {
       document.getElementById('businessTradeName').value = item.tradeName || '';
       document.getElementById('businessOwnerName').value = item.ownerName || '';
       document.getElementById('businessPhone').value = item.phone || '';
-      document.getElementById('businessNeighborhood').value = item.neighborhood || '';
-      document.getElementById('businessStreet').value = item.street || '';
-      document.getElementById('businessDoorNo').value = item.doorNo || '';
+      setAddressSelection(item.neighborhood || '', item.street || '', item.doorNo || '');
       document.getElementById('businessAda').value = item.ada || '';
       document.getElementById('businessParcel').value = item.parcel || '';
       document.getElementById('businessLocationLat').value = item.locationLat !== null ? item.locationLat : '';
@@ -2083,6 +2305,7 @@ app.get("/businesses", (req, res) => {
         });
       }
 
+      initAddressSelectors();
       document.getElementById('businessLocationLat').addEventListener('input', updateLocationPreview);
       document.getElementById('businessLocationLng').addEventListener('input', updateLocationPreview);
 
