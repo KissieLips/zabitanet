@@ -1814,6 +1814,24 @@ app.get("/businesses", (req, res) => {
       return sortTurkish(Object.keys(map), numeric);
     }
 
+    function setSelectOptions(selectId, placeholder, values, selectedValue) {
+      var select = document.getElementById(selectId);
+      if (!select) return;
+
+      var html = '<option value="">' + escapeHtml(placeholder) + '</option>';
+      for (var i = 0; i < values.length; i++) {
+        var value = String(values[i]);
+        html += '<option value="' + escapeHtml(value) + '">' + escapeHtml(value) + '</option>';
+      }
+
+      if (selectedValue && values.indexOf(selectedValue) === -1) {
+        html += '<option value="' + escapeHtml(selectedValue) + '">' + escapeHtml(selectedValue) + ' (Kayıtlı)</option>';
+      }
+
+      select.innerHTML = html;
+      select.value = selectedValue || '';
+    }
+
     function getNeighborhoodNames() {
       return ADDRESS_NEIGHBORHOOD_ORDER.slice();
     }
@@ -1913,7 +1931,6 @@ app.get("/businesses", (req, res) => {
       if (doorNo) {
         document.getElementById('businessDoorNo').value = doorNo;
       }
-    }
     }
 
     function renderStats() {
