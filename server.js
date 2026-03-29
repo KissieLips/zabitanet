@@ -464,6 +464,21 @@ function mapBusinessFile(row) {
   };
 }
 
+function mapBusinessInspectionFile(row) {
+  const url = row.file_path ? row.file_path.replace(/\\/g, "/") : "";
+  return {
+    id: row.id,
+    inspectionId: row.inspection_id,
+    fileType: row.file_type || "",
+    originalName: row.original_name || "",
+    mimeType: row.mime_type || "",
+    fileSize: Number(row.file_size || 0),
+    url: url,
+    createdAt: formatDateTime(row.created_at),
+    isImage: (row.mime_type || "").indexOf("image/") === 0
+  };
+}
+
 function mapInspectionFeed(row) {
   const base = mapBusinessInspection(row);
   return {
@@ -4625,12 +4640,26 @@ app.get("/businesses/:id", (req, res) => {
     async function initPage() {
       try {
         await loadBusiness();
-        await loadInspections();
-        await loadInspectionFiles();
       } catch (error) {
         document.getElementById('summaryContainer').innerHTML = '<div class="empty-state">' + escapeHtml(error.message || 'Firma bilgileri yüklenemedi.') + '</div>';
         document.getElementById('licenseContainer').innerHTML = '<div class="empty-state">Firma detayı alınamadı.</div>';
-        document.getElementById('inspectionContainer').innerHTML = '<div class="empty-state">Denetim geçmişi ve dosyalar alınamadı.</div>';
+        document.getElementById('inspectionContainer').innerHTML = '<div class="empty-state">Denetim geçmişi alınamadı.</div>';
+        return;
+      }
+
+      try {
+        await loadInspections();
+      } catch (error) {
+        document.getElementById('inspectionContainer').innerHTML = '<div class="empty-state">' + escapeHtml(error.message || 'Denetim geçmişi alınamadı.') + '</div>';
+        return;
+      }
+
+      try {
+        await loadInspectionFiles();
+      } catch (error) {
+        inspectionFiles = [];
+        renderInspections();
+        showToast('Denetim dosyaları yüklenemedi. Şimdilik sadece denetim kayıtları gösteriliyor.');
       }
     }
 
