@@ -2970,6 +2970,31 @@ app.get("/businesses/:id", (req, res) => {
     .stack { display: grid; gap: 4px; }
     .muted { color: var(--muted); font-size: 12px; }
     .empty-state, .loading { border: 1px dashed var(--line); border-radius: 12px; background: #fbfdff; padding: 22px; text-align: center; color: var(--muted); font-size: 13px; }
+    .inspection-shell { display: grid; gap: 12px; }
+    .inspection-summary-bar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .inspection-mini-stat { border: 1px solid var(--line); background: linear-gradient(180deg, #fbfdff 0%, #f7faff 100%); border-radius: 12px; padding: 12px; min-height: 86px; }
+    .inspection-mini-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+    .inspection-mini-value { font-size: 24px; font-weight: 700; line-height: 1; margin-bottom: 6px; }
+    .inspection-mini-sub { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .inspection-list { display: grid; gap: 10px; }
+    .inspection-card { border: 1px solid var(--line); border-radius: 14px; background: #ffffff; overflow: hidden; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04); }
+    .inspection-card-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 14px 16px; background: linear-gradient(180deg, #fbfcfe 0%, #f7faff 100%); border-bottom: 1px solid #e7eef8; }
+    .inspection-card-date { display: grid; gap: 4px; }
+    .inspection-card-kicker { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--muted); }
+    .inspection-card-title { font-size: 16px; font-weight: 700; line-height: 1.25; }
+    .inspection-badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .inspection-card-body { padding: 14px 16px 16px; display: grid; gap: 12px; }
+    .inspection-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .inspection-field { border: 1px solid #e9eef5; background: #fbfdff; border-radius: 12px; padding: 11px 12px; min-height: 78px; }
+    .inspection-field-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+    .inspection-field-value { font-size: 13px; line-height: 1.55; color: var(--text); white-space: pre-line; }
+    .inspection-note-box { border: 1px solid #e7edf5; background: #fafcff; border-radius: 12px; padding: 12px 13px; }
+    .inspection-note-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+    .inspection-note-body { font-size: 13px; line-height: 1.65; color: var(--text); white-space: pre-line; }
+    .inspection-card-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .inspection-footer-meta { font-size: 12px; color: var(--muted); }
+    .badge.info { background: #dbeafe; color: #1d4ed8; }
+    .badge.danger { background: #fee2e2; color: #b91c1c; }
 
     .drawer-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.42); opacity: 0; pointer-events: none; transition: opacity 0.18s ease; z-index: 120; }
     .drawer-overlay.show { opacity: 1; pointer-events: auto; }
@@ -3001,9 +3026,11 @@ app.get("/businesses/:id", (req, res) => {
       .app { grid-template-columns: minmax(0, 1fr); }
       .sidebar { display: none; }
       .main { padding: 14px; }
-      .stats-grid, .summary-grid, .license-layout, .form-grid { grid-template-columns: 1fr; }
+      .stats-grid, .summary-grid, .license-layout, .form-grid, .inspection-summary-bar, .inspection-grid { grid-template-columns: 1fr; }
       .hero-title { font-size: 22px; }
       .drawer { width: 100vw; }
+      .inspection-card-head, .inspection-card-footer { flex-direction: column; align-items: stretch; }
+      .inspection-badges { justify-content: flex-start; }
     }
   </style>
 </head>
@@ -3226,8 +3253,38 @@ app.get("/businesses/:id", (req, res) => {
     function badgeForInspectionStatus(status) {
       if (status === 'Kapatıldı') return '<span class="badge success">Kapatıldı</span>';
       if (status === 'Süre Verildi') return '<span class="badge warn">Süre Verildi</span>';
+      if (status === 'Açık') return '<span class="badge danger">Açık</span>';
       if (status) return '<span class="badge gray">' + escapeHtml(status) + '</span>';
       return '<span class="badge gray">Belirtilmedi</span>';
+    }
+
+    function badgeForInspectionResult(status) {
+      if (status === 'Uygun') return '<span class="badge success">Uygun</span>';
+      if (status === 'Eksik Var') return '<span class="badge warn">Eksik Var</span>';
+      if (status === 'Uyarı Yapıldı') return '<span class="badge danger">Uyarı Yapıldı</span>';
+      if (status === 'İşlem Yapıldı') return '<span class="badge info">İşlem Yapıldı</span>';
+      if (status) return '<span class="badge gray">' + escapeHtml(status) + '</span>';
+      return '<span class="badge gray">Sonuç Girilmedi</span>';
+    }
+
+    function getInspectionSummary() {
+      var today = new Date().toISOString().slice(0, 10);
+      var summary = { total: inspections.length, acik: 0, sureVerildi: 0, geciken: 0 };
+      for (var i = 0; i < inspections.length; i++) {
+        var item = inspections[i];
+        if (item.currentStatus === 'Açık') summary.acik += 1;
+        if (item.currentStatus === 'Süre Verildi') {
+          summary.sureVerildi += 1;
+          if (item.controlDate && item.controlDate < today) {
+            summary.geciken += 1;
+          }
+        }
+      }
+      return summary;
+    }
+
+    function inspectionField(label, value) {
+      return '<div class="inspection-field"><div class="inspection-field-label">' + label + '</div><div class="inspection-field-value">' + value + '</div></div>';
     }
 
     function setMessage(id, message, kind) {
@@ -3314,20 +3371,45 @@ app.get("/businesses/:id", (req, res) => {
         return;
       }
 
-      var rows = '';
+      var summary = getInspectionSummary();
+      var summaryHtml = '' +
+        '<div class="inspection-summary-bar">' +
+          '<div class="inspection-mini-stat"><div class="inspection-mini-label">Toplam Kayıt</div><div class="inspection-mini-value">' + summary.total + '</div><div class="inspection-mini-sub">Firmaya ait toplam denetim adedi</div></div>' +
+          '<div class="inspection-mini-stat"><div class="inspection-mini-label">Açık Denetim</div><div class="inspection-mini-value">' + summary.acik + '</div><div class="inspection-mini-sub">Takibi devam eden açık kayıtlar</div></div>' +
+          '<div class="inspection-mini-stat"><div class="inspection-mini-label">Süre Verilen</div><div class="inspection-mini-value">' + summary.sureVerildi + '</div><div class="inspection-mini-sub">Kontrol tarihi beklenen kayıtlar</div></div>' +
+          '<div class="inspection-mini-stat"><div class="inspection-mini-label">Geciken Kontrol</div><div class="inspection-mini-value">' + summary.geciken + '</div><div class="inspection-mini-sub">Kontrol tarihi geçen denetimler</div></div>' +
+        '</div>';
+
+      var cards = '';
       for (var i = 0; i < inspections.length; i++) {
         var item = inspections[i];
-        rows += '<tr>' +
-          '<td><div class="stack"><strong>' + escapeHtml(item.inspectionDateText || '-') + '</strong><span class="muted">Kayıt: ' + escapeHtml(item.createdAt || '-') + '</span></div></td>' +
-          '<td>' + escapeHtml(item.inspectionType || 'Belirtilmedi') + '</td>' +
-          '<td>' + escapeHtml(item.resultStatus || 'Belirtilmedi') + '</td>' +
-          '<td><div class="stack"><span>' + escapeHtml(item.actionTaken || 'Belirtilmedi') + '</span>' + (item.note ? '<span class="muted">' + escapeHtml(item.note) + '</span>' : '') + '</div></td>' +
-          '<td><div class="stack">' + badgeForInspectionStatus(item.currentStatus) + (item.controlDateText ? '<span class="muted">Kontrol: ' + escapeHtml(item.controlDateText) + '</span>' : '') + '</div></td>' +
-          '<td><div class="action-row"><button class="mini-btn primary" type="button" onclick="openInspectionEditor(' + item.id + ')">Düzenle</button><button class="mini-btn danger" type="button" onclick="deleteInspectionRecord(' + item.id + ')">Sil</button></div></td>' +
-        '</tr>';
+        cards += '' +
+          '<article class="inspection-card">' +
+            '<div class="inspection-card-head">' +
+              '<div class="inspection-card-date">' +
+                '<div class="inspection-card-kicker">Denetim Kaydı</div>' +
+                '<div class="inspection-card-title">' + escapeHtml(item.inspectionDateText || '-') + '</div>' +
+                '<div class="muted">' + escapeHtml(item.inspectionType || 'Denetim türü belirtilmedi') + '</div>' +
+              '</div>' +
+              '<div class="inspection-badges">' + badgeForInspectionResult(item.resultStatus) + badgeForInspectionStatus(item.currentStatus) + '</div>' +
+            '</div>' +
+            '<div class="inspection-card-body">' +
+              '<div class="inspection-grid">' +
+                inspectionField('Yapılan İşlem', escapeHtml(item.actionTaken || 'Henüz işlem girilmedi')) +
+                inspectionField('Kontrol Tarihi', escapeHtml(item.controlDateText || 'Planlanmadı')) +
+                inspectionField('Kayıt Zamanı', escapeHtml(item.createdAt || '-')) +
+                inspectionField('Sonuç Özeti', escapeHtml(item.resultStatus || 'Sonuç girilmedi')) +
+              '</div>' +
+              (item.note ? '<div class="inspection-note-box"><div class="inspection-note-title">Denetim Notu</div><div class="inspection-note-body">' + escapeHtml(item.note) + '</div></div>' : '') +
+              '<div class="inspection-card-footer">' +
+                '<div class="inspection-footer-meta">Kayıt No: #' + escapeHtml(String(item.id)) + '</div>' +
+                '<div class="action-row"><button class="mini-btn primary" type="button" onclick="openInspectionEditor(' + item.id + ')">Düzenle</button><button class="mini-btn danger" type="button" onclick="deleteInspectionRecord(' + item.id + ')">Sil</button></div>' +
+              '</div>' +
+            '</div>' +
+          '</article>';
       }
 
-      container.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Tarih</th><th>Denetim Türü</th><th>Sonuç</th><th>Yapılan İşlem / Not</th><th>Durum</th><th>İşlemler</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      container.innerHTML = '<div class="inspection-shell">' + summaryHtml + '<div class="inspection-list">' + cards + '</div></div>';
     }
 
     function fillLicenseForm() {
