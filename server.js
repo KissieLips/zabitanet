@@ -404,6 +404,24 @@ function mapBusinessInspection(row) {
   };
 }
 
+function mapInspectionFeed(row) {
+  const base = mapBusinessInspection(row);
+  return {
+    ...base,
+    tradeName: row.trade_name || '',
+    ownerName: row.owner_name || '',
+    phone: row.phone || '',
+    categoryId: row.category_id || null,
+    categoryName: row.category_name || '',
+    neighborhood: getCanonicalBusinessNeighborhood(row.neighborhood || ''),
+    street: row.street || '',
+    doorNo: row.door_no || '',
+    addressText: buildBusinessAddress(row),
+    licenseStatus: row.license_status || 'Yok',
+    mapsUrl: buildMapsUrl(row.location_lat, row.location_lng),
+  };
+}
+
 function safeUnlink(filePath) {
   try {
     if (filePath && fs.existsSync(filePath)) {
@@ -1414,6 +1432,76 @@ app.delete("/api/businesses/:id/inspections/:inspectionId", async (req, res) => 
   }
 });
 
+app.get("/api/inspections", async (req, res) => {
+  try {
+    const { month, categoryId, resultStatus, currentStatus, licenseStatus, search } = req.query;
+    const conditions = [];
+    const values = [];
+
+    if (month) {
+      values.push(String(month) + '-01');
+      conditions.push("DATE_TRUNC('month', bi.inspection_date) = DATE_TRUNC('month', $" + values.length + "::date)");
+    }
+
+    if (categoryId) {
+      values.push(Number(categoryId));
+      conditions.push("b.category_id = $" + values.length);
+    }
+
+    if (resultStatus) {
+      values.push(String(resultStatus));
+      conditions.push("COALESCE(bi.result_status, '') = $" + values.length);
+    }
+
+    if (currentStatus) {
+      values.push(String(currentStatus));
+      conditions.push("COALESCE(bi.current_status, '') = $" + values.length);
+    }
+
+    if (licenseStatus) {
+      values.push(String(licenseStatus));
+      conditions.push("COALESCE(b.license_status, 'Yok') = $" + values.length);
+    }
+
+    if (search) {
+      values.push('%' + String(search).trim() + '%');
+      const idx = values.length;
+      conditions.push("(COALESCE(b.trade_name, '') ILIKE $" + idx + " OR COALESCE(b.owner_name, '') ILIKE $" + idx + " OR COALESCE(b.phone, '') ILIKE $" + idx + " OR COALESCE(bc.name, '') ILIKE $" + idx + " OR COALESCE(b.neighborhood, '') ILIKE $" + idx + " OR COALESCE(b.street, '') ILIKE $" + idx + ")");
+    }
+
+    const whereSql = conditions.length ? ('WHERE ' + conditions.join(' AND ')) : '';
+
+    const result = await pool.query(
+      `
+        SELECT
+          bi.*,
+          b.trade_name,
+          b.owner_name,
+          b.phone,
+          b.category_id,
+          bc.name AS category_name,
+          b.neighborhood,
+          b.street,
+          b.door_no,
+          b.license_status,
+          b.location_lat,
+          b.location_lng
+        FROM business_inspections bi
+        INNER JOIN businesses b ON b.id = bi.business_id
+        LEFT JOIN business_categories bc ON bc.id = b.category_id
+        ${whereSql}
+        ORDER BY bi.inspection_date DESC, bi.id DESC
+      `,
+      values
+    );
+
+    res.json(result.rows.map(mapInspectionFeed));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Toplu denetim kayıtları alınamadı." });
+  }
+});
+
 app.get("/api/geocode/reverse", async (req, res) => {
   try {
     const lat = Number(req.query.lat);
@@ -1547,7 +1635,7 @@ app.get("/businesses", (req, res) => {
     .btn-success { background: var(--success); color: #ffffff; }
     input, select, textarea { width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; background: #ffffff; color: var(--text); transition: border-color 0.15s ease, box-shadow 0.15s ease; }
     input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
-    .filters { display: grid; grid-template-columns: 220px minmax(220px, 1fr) 150px; gap: 10px; align-items: center; margin-bottom: 12px; }
+    .filters { display: grid; grid-template-columns: 220px 170px 170px minmax(220px, 1fr); gap: 10px; align-items: center; margin-bottom: 12px; }
     .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
     .table-wrap table td:first-child { min-width: 230px; }
     table { width: 100%; border-collapse: collapse; min-width: 1020px; background: #ffffff; }
@@ -1621,6 +1709,7 @@ app.get("/businesses", (req, res) => {
       <nav class="menu">
         <a href="/" class="menu-item"><span class="menu-left"><span>📌</span><span>Şikayet Takip</span></span></a>
         <a href="/businesses" class="menu-item active"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
+        <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
       </nav>
     </aside>
 
@@ -1666,18 +1755,25 @@ app.get("/businesses", (req, res) => {
             <div class="panel-subtitle">Firmaları kategoriye bağlı şekilde yönetin. Adres alanları daha düzenli ve kurumsal bir form yapısıyla sunulur.</div>
           </div>
           <div class="toolbar-actions">
+            <a class="btn btn-secondary" href="/inspections">Tüm Denetimler</a>
             <button class="btn btn-ghost" onclick="openCategoryModal()">Kategori Ekle</button>
             <button class="btn btn-primary" onclick="openNewBusinessModal()">+ Yeni Firma Ekle</button>
           </div>
         </div>
         <div class="filters">
           <select id="filterCategory" onchange="renderBusinessTable()"></select>
-          <input type="text" id="searchInput" placeholder="Ünvan, sahip, telefon, mahalle / cadde ara" oninput="renderBusinessTable()" />
+          <select id="licenseFilter" onchange="renderBusinessTable()">
+            <option value="all">Tüm Ruhsat Durumları</option>
+            <option value="Var">Ruhsatlı Firmalar</option>
+            <option value="Yok">Ruhsatsız Firmalar</option>
+            <option value="Başvuru Aşamasında">Başvuru Aşamasında</option>
+          </select>
           <select id="locationFilter" onchange="renderBusinessTable()">
             <option value="all">Tüm Konumlar</option>
             <option value="with">Konumu Olanlar</option>
             <option value="without">Konumu Olmayanlar</option>
           </select>
+          <input type="text" id="searchInput" placeholder="Ünvan, sahip, telefon, mahalle / cadde ara" oninput="renderBusinessTable()" />
         </div>
         <div class="table-wrap">
           <table>
@@ -2293,15 +2389,18 @@ app.get("/businesses", (req, res) => {
     function getFilteredBusinesses() {
       var search = document.getElementById("searchInput").value.trim().toLocaleLowerCase("tr-TR");
       var categoryId = document.getElementById("filterCategory").value;
+      var licenseFilter = document.getElementById("licenseFilter").value;
       var locationFilter = document.getElementById("locationFilter").value;
 
       return businesses.filter(function(item) {
         var matchesCategory = !categoryId || String(item.categoryId) === String(categoryId);
+        var normalizedLicense = String(item.licenseStatus || 'Yok');
+        var matchesLicense = licenseFilter === 'all' || normalizedLicense === licenseFilter;
         var hasLocation = item.locationLat !== null && item.locationLng !== null;
         var matchesLocation = locationFilter === "all" || (locationFilter === "with" ? hasLocation : !hasLocation);
-        var text = [item.categoryName, item.tradeName, item.ownerName, item.phone, item.neighborhood, item.street, item.doorNo, item.ada, item.parcel].join(" ").toLocaleLowerCase("tr-TR");
+        var text = [item.categoryName, item.tradeName, item.ownerName, item.phone, item.neighborhood, item.street, item.doorNo, item.ada, item.parcel, item.licenseStatus].join(" ").toLocaleLowerCase("tr-TR");
         var matchesSearch = !search || text.indexOf(search) !== -1;
-        return matchesCategory && matchesLocation && matchesSearch;
+        return matchesCategory && matchesLicense && matchesLocation && matchesSearch;
       });
     }
 
@@ -3048,6 +3147,7 @@ app.get("/businesses/:id", (req, res) => {
       <nav class="menu">
         <a href="/" class="menu-item"><span class="menu-left"><span>📌</span><span>Şikayet Takip</span></span></a>
         <a href="/businesses" class="menu-item active"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
+        <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
       </nav>
     </aside>
 
@@ -3060,6 +3160,7 @@ app.get("/businesses/:id", (req, res) => {
         </div>
         <div class="toolbar">
           <a class="btn btn-ghost" href="/businesses">← Listeye Dön</a>
+          <a class="btn btn-ghost" href="/inspections">Tüm Denetimler</a>
           <button class="btn btn-secondary" type="button" id="openLicenseBtnTop">Ruhsat Bilgisi Düzenle</button>
           <button class="btn btn-primary" type="button" id="openInspectionBtnTop">+ Yeni Denetim Ekle</button>
         </div>
@@ -3650,6 +3751,218 @@ app.get("/businesses/:id", (req, res) => {
 </html>`);
 });
 
+app.get("/inspections", (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zabıta Yönetim Sistemi - Tüm Denetimler</title>
+  <style>
+    :root { --bg: #f4f7fb; --panel: #ffffff; --panel-soft: #f8fafc; --line: #dbe3ee; --text: #17202f; --muted: #667085; --primary: #2563eb; --danger: #dc2626; --warning: #f59e0b; --success: #16a34a; --shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, "Segoe UI", Arial, sans-serif; background: #f3f6fa; color: var(--text); }
+    .app { min-height: 100vh; display: grid; grid-template-columns: 208px minmax(0, 1fr); }
+    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #fff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 0; height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); }
+    .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.16); }
+    .brand { font-size: 14px; font-weight: 700; line-height: 1.3; }
+    .brand-sub { font-size: 10.5px; color: rgba(255,255,255,0.62); line-height: 1.45; }
+    .nav-section-title { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.42); margin-top: 6px; padding: 0 2px; font-weight: 700; }
+    .menu { display: flex; flex-direction: column; gap: 4px; }
+    .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border-radius: 10px; font-size: 12.5px; text-decoration: none; color: rgba(255,255,255,0.84); transition: 0.18s ease; border: 1px solid transparent; font-weight: 500; }
+    .menu-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.08); }
+    .menu-item.active { background: rgba(255,255,255,0.08); color: #ffffff; border-color: rgba(255,255,255,0.1); font-weight: 600; }
+    .menu-left { display: inline-flex; align-items: center; gap: 8px; }
+    .main { padding: 18px 20px; min-width: 0; }
+    .hero, .panel, .stat-card { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+    .hero { padding: 16px 18px; display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 12px; }
+    .hero-title { margin: 0; font-size: 26px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 700; }
+    .hero-text { margin: 6px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.6; max-width: 860px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn { border: none; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; transition: 0.15s ease; }
+    .btn:hover { transform: translateY(-1px); opacity: 0.96; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-secondary { background: #64748b; color: #fff; }
+    .btn-ghost { background: #eef2ff; color: #1d4ed8; border: 1px solid #dbe7ff; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .stat-card { padding: 14px; display: grid; gap: 7px; }
+    .stat-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
+    .stat-value { font-size: 22px; font-weight: 700; line-height: 1.05; }
+    .stat-sub { font-size: 12px; color: var(--muted); }
+    .panel { padding: 16px; margin-bottom: 12px; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    .panel-title { font-size: 15px; font-weight: 700; }
+    .panel-subtitle { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+    .filters { display: grid; grid-template-columns: 160px 180px 170px 170px 170px minmax(220px, 1fr) auto auto; gap: 10px; align-items: center; }
+    input, select { width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; background: #fff; color: var(--text); }
+    input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+    .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; min-width: 1260px; }
+    th, td { padding: 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; text-align: left; vertical-align: top; }
+    th { background: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); position: sticky; top: 0; z-index: 1; }
+    tbody tr:hover { background: #f8fbff; }
+    .cell-title { font-weight: 700; line-height: 1.45; }
+    .cell-sub { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 4px; }
+    .stack { display: grid; gap: 4px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .badge.success { background: #dcfce7; color: #166534; }
+    .badge.warn { background: #fef3c7; color: #92400e; }
+    .badge.danger { background: #fee2e2; color: #b91c1c; }
+    .badge.info { background: #dbeafe; color: #1d4ed8; }
+    .badge.gray { background: #e5e7eb; color: #374151; }
+    .mini-btn { border: 1px solid var(--line); background: #fff; border-radius: 9px; padding: 7px 10px; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none; color: #111827; display: inline-flex; align-items: center; gap: 6px; }
+    .mini-btn.primary { border-color: #cfe0ff; color: #1d4ed8; background: #eef4ff; }
+    .empty-state { border: 1px dashed var(--line); border-radius: 12px; background: #fbfdff; padding: 22px; text-align: center; color: var(--muted); font-size: 13px; }
+    .print-meta { display: none; margin-bottom: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; font-size: 12.5px; color: var(--muted); }
+    @media (max-width: 1220px) { .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 800px) { .app { grid-template-columns: 1fr; } .sidebar { display: none; } .main { padding: 14px; } .stats-grid, .filters { grid-template-columns: 1fr; } .hero-title { font-size: 22px; } }
+    @media print { body { background: #fff; } .sidebar, .hero .toolbar, .filters-panel { display: none !important; } .app { display: block; } .main { padding: 0; } .hero, .panel, .stat-card { box-shadow: none; border-color: #d1d5db; } .hero { margin-bottom: 10px; } .print-meta { display: block; } .table-wrap { overflow: visible; } table { min-width: 0; } th, td { font-size: 11px; padding: 8px; } a { color: inherit; text-decoration: none; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-top"><div class="brand-mark">ZB</div><div><div class="brand">Zabıta Yönetim Sistemi</div><div class="brand-sub">Kurumsal takip ve saha yönetimi</div></div></div>
+      <div class="nav-section-title">Modüller</div>
+      <nav class="menu">
+        <a href="/" class="menu-item"><span class="menu-left"><span>📌</span><span>Şikayet Takip</span></span></a>
+        <a href="/businesses" class="menu-item"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
+        <a href="/inspections" class="menu-item active"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
+      </nav>
+    </aside>
+    <main class="main">
+      <section class="hero">
+        <div>
+          <h1 class="hero-title">Toplu Denetim Geçmişi</h1>
+          <p class="hero-text">Tüm firmalara ait denetim kayıtları bu ekranda tek havuzda toplanır. Ay, kategori, sonuç, durum ve ruhsat yapısına göre filtreleyip yazdırabilir ya da tarayıcı yazdır ekranından PDF olarak kaydedebilirsin.</p>
+        </div>
+        <div class="toolbar">
+          <a class="btn btn-ghost" href="/businesses">Firma Listesi</a>
+          <button class="btn btn-secondary" type="button" onclick="clearFilters()">Filtreyi Temizle</button>
+          <button class="btn btn-primary" type="button" onclick="printFilteredView()">Yazdır / PDF</button>
+        </div>
+      </section>
+      <section class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Filtreli Denetim</div><div class="stat-value" id="statTotal">0</div><div class="stat-sub">Seçili filtreye uyan toplam denetim kaydı</div></div>
+        <div class="stat-card"><div class="stat-label">Firma Sayısı</div><div class="stat-value" id="statBusiness">0</div><div class="stat-sub">Denetim görünen benzersiz firma adedi</div></div>
+        <div class="stat-card"><div class="stat-label">Süre Verilen</div><div class="stat-value" id="statDeadline">0</div><div class="stat-sub">Kontrol tarihi planlanan denetimler</div></div>
+        <div class="stat-card"><div class="stat-label">Geciken Kontrol</div><div class="stat-value" id="statOverdue">0</div><div class="stat-sub">Kontrol tarihi geçen kayıtlar</div></div>
+      </section>
+      <section class="panel filters-panel">
+        <div class="panel-header"><div><div class="panel-title">Filtreleme</div><div class="panel-subtitle">Örnek kullanım: Mart ayı tüm denetimler veya sadece belli kategorideki ruhsatsız firmaların denetimleri.</div></div></div>
+        <div class="filters">
+          <input type="month" id="filterMonth" onchange="renderInspectionTable()" />
+          <select id="filterCategory" onchange="renderInspectionTable()"></select>
+          <select id="filterLicense" onchange="renderInspectionTable()"><option value="all">Tüm Ruhsat Durumları</option><option value="Var">Ruhsatlı</option><option value="Yok">Ruhsatsız</option><option value="Başvuru Aşamasında">Başvuru Aşamasında</option></select>
+          <select id="filterResult" onchange="renderInspectionTable()"><option value="all">Tüm Sonuçlar</option><option value="Uygun">Uygun</option><option value="Eksik Var">Eksik Var</option><option value="Uyarı Yapıldı">Uyarı Yapıldı</option><option value="İşlem Yapıldı">İşlem Yapıldı</option></select>
+          <select id="filterStatus" onchange="renderInspectionTable()"><option value="all">Tüm Durumlar</option><option value="Açık">Açık</option><option value="Süre Verildi">Süre Verildi</option><option value="Kapatıldı">Kapatıldı</option></select>
+          <input type="text" id="searchInput" placeholder="Firma, sahip, telefon, mahalle / cadde ara" oninput="renderInspectionTable()" />
+          <button class="btn btn-ghost" type="button" onclick="setCurrentMonth()">Bu Ay</button>
+          <button class="btn btn-secondary" type="button" onclick="clearFilters()">Temizle</button>
+        </div>
+      </section>
+      <div class="print-meta" id="printMeta"></div>
+      <section class="panel">
+        <div class="panel-header"><div><div class="panel-title">Denetim Listesi</div><div class="panel-subtitle">Filtreler uygulandıkça liste ve yazdır/PDF çıktısı aynı anda güncellenir.</div></div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Denetim Tarihi</th><th>Firma / Kategori</th><th>Adres</th><th>Sonuç</th><th>Durum</th><th>Yapılan İşlem</th><th>Kontrol Tarihi</th><th>Ruhsat</th><th>İşlemler</th></tr></thead>
+            <tbody id="inspectionTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script>
+    var categories = [];
+    var inspections = [];
+    function escapeHtml(value) { return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+    function badgeForResult(status) { if (status === 'Uygun') return '<span class="badge success">Uygun</span>'; if (status === 'Eksik Var') return '<span class="badge warn">Eksik Var</span>'; if (status === 'Uyarı Yapıldı') return '<span class="badge danger">Uyarı Yapıldı</span>'; if (status === 'İşlem Yapıldı') return '<span class="badge info">İşlem Yapıldı</span>'; if (status) return '<span class="badge gray">' + escapeHtml(status) + '</span>'; return '<span class="badge gray">Girilmeyen Sonuç</span>'; }
+    function badgeForStatus(status) { if (status === 'Kapatıldı') return '<span class="badge success">Kapatıldı</span>'; if (status === 'Süre Verildi') return '<span class="badge warn">Süre Verildi</span>'; if (status === 'Açık') return '<span class="badge info">Açık</span>'; if (status) return '<span class="badge gray">' + escapeHtml(status) + '</span>'; return '<span class="badge gray">Durum Yok</span>'; }
+    function badgeForLicense(status) { if (status === 'Var') return '<span class="badge success">Ruhsatlı</span>'; if (status === 'Başvuru Aşamasında') return '<span class="badge warn">Başvuru Aşamasında</span>'; return '<span class="badge danger">Ruhsatsız</span>'; }
+    function setCurrentMonth() { document.getElementById('filterMonth').value = new Date().toISOString().slice(0, 7); renderInspectionTable(); }
+    function renderCategoryOptions() { var html = '<option value="all">Tüm Kategoriler</option>'; for (var i = 0; i < categories.length; i++) { html += '<option value="' + categories[i].id + '">' + escapeHtml(categories[i].name) + '</option>'; } document.getElementById('filterCategory').innerHTML = html; }
+    function getFilteredInspections() {
+      var month = document.getElementById('filterMonth').value;
+      var categoryId = document.getElementById('filterCategory').value;
+      var licenseStatus = document.getElementById('filterLicense').value;
+      var resultStatus = document.getElementById('filterResult').value;
+      var currentStatus = document.getElementById('filterStatus').value;
+      var search = document.getElementById('searchInput').value.trim().toLocaleLowerCase('tr-TR');
+      return inspections.filter(function(item) {
+        var itemMonth = item.inspectionDate ? item.inspectionDate.slice(0, 7) : '';
+        var text = [item.tradeName, item.ownerName, item.phone, item.categoryName, item.neighborhood, item.street, item.doorNo, item.addressText, item.actionTaken, item.note].join(' ').toLocaleLowerCase('tr-TR');
+        var matchesMonth = !month || itemMonth === month;
+        var matchesCategory = categoryId === 'all' || String(item.categoryId) === String(categoryId);
+        var matchesLicense = licenseStatus === 'all' || String(item.licenseStatus || 'Yok') === licenseStatus;
+        var matchesResult = resultStatus === 'all' || String(item.resultStatus || '') === resultStatus;
+        var matchesStatus = currentStatus === 'all' || String(item.currentStatus || '') === currentStatus;
+        var matchesSearch = !search || text.indexOf(search) !== -1;
+        return matchesMonth && matchesCategory && matchesLicense && matchesResult && matchesStatus && matchesSearch;
+      });
+    }
+    function renderStats(rows) {
+      var uniqueBusinesses = {};
+      var sureVerildi = 0;
+      var overdue = 0;
+      var today = new Date().toISOString().slice(0, 10);
+      for (var i = 0; i < rows.length; i++) { uniqueBusinesses[rows[i].businessId] = true; if (rows[i].currentStatus === 'Süre Verildi') { sureVerildi += 1; if (rows[i].controlDate && rows[i].controlDate < today) overdue += 1; } }
+      document.getElementById('statTotal').textContent = rows.length;
+      document.getElementById('statBusiness').textContent = Object.keys(uniqueBusinesses).length;
+      document.getElementById('statDeadline').textContent = sureVerildi;
+      document.getElementById('statOverdue').textContent = overdue;
+    }
+    function updatePrintMeta(rows) {
+      var month = document.getElementById('filterMonth').value;
+      var categoryText = document.getElementById('filterCategory').selectedOptions[0] ? document.getElementById('filterCategory').selectedOptions[0].textContent : 'Tüm Kategoriler';
+      var licenseText = document.getElementById('filterLicense').selectedOptions[0].textContent;
+      var resultText = document.getElementById('filterResult').selectedOptions[0].textContent;
+      var statusText = document.getElementById('filterStatus').selectedOptions[0].textContent;
+      var search = document.getElementById('searchInput').value.trim();
+      var parts = [];
+      if (month) parts.push('Ay: ' + month);
+      parts.push('Kategori: ' + categoryText);
+      parts.push('Ruhsat: ' + licenseText);
+      parts.push('Sonuç: ' + resultText);
+      parts.push('Durum: ' + statusText);
+      if (search) parts.push('Arama: ' + search);
+      parts.push('Toplam kayıt: ' + rows.length);
+      document.getElementById('printMeta').innerHTML = '<strong>Toplu Denetim Çıktısı</strong><br>' + escapeHtml(parts.join(' • '));
+    }
+    function renderInspectionTable() {
+      var rows = getFilteredInspections();
+      renderStats(rows);
+      updatePrintMeta(rows);
+      var body = document.getElementById('inspectionTableBody');
+      if (!rows.length) { body.innerHTML = '<tr><td colspan="9"><div class="empty-state">Bu filtreye uygun denetim kaydı bulunmuyor.</div></td></tr>'; return; }
+      var html = '';
+      for (var i = 0; i < rows.length; i++) {
+        var item = rows[i];
+        html += '<tr>' +
+          '<td><div class="cell-title">' + escapeHtml(item.inspectionDateText || '-') + '</div><div class="cell-sub">' + escapeHtml(item.createdAt || '-') + '</div></td>' +
+          '<td><div class="cell-title">' + escapeHtml(item.tradeName || '-') + '</div><div class="cell-sub">' + escapeHtml(item.categoryName || 'Kategori Yok') + '</div><div class="cell-sub">Yetkili: ' + escapeHtml(item.ownerName || '-') + '</div></td>' +
+          '<td><div class="stack"><div>' + escapeHtml(item.addressText || 'Adres girilmedi') + '</div>' + (item.phone ? '<div class="cell-sub">Tel: ' + escapeHtml(item.phone) + '</div>' : '') + '</div></td>' +
+          '<td>' + badgeForResult(item.resultStatus) + '</td>' +
+          '<td>' + badgeForStatus(item.currentStatus) + '</td>' +
+          '<td><div class="stack"><div>' + escapeHtml(item.actionTaken || 'İşlem girilmedi') + '</div>' + (item.note ? '<div class="cell-sub">Not: ' + escapeHtml(item.note) + '</div>' : '') + '</div></td>' +
+          '<td>' + escapeHtml(item.controlDateText || 'Planlanmadı') + '</td>' +
+          '<td>' + badgeForLicense(item.licenseStatus) + '</td>' +
+          '<td><a class="mini-btn primary" href="/businesses/' + item.businessId + '">Firma Detayı</a></td>' +
+        '</tr>';
+      }
+      body.innerHTML = html;
+    }
+    function clearFilters() { document.getElementById('filterMonth').value = ''; document.getElementById('filterCategory').value = 'all'; document.getElementById('filterLicense').value = 'all'; document.getElementById('filterResult').value = 'all'; document.getElementById('filterStatus').value = 'all'; document.getElementById('searchInput').value = ''; renderInspectionTable(); }
+    function printFilteredView() { updatePrintMeta(getFilteredInspections()); window.print(); }
+    async function loadCategories() { var response = await fetch('/api/business-categories'); if (!response.ok) throw new Error('Kategoriler yüklenemedi.'); categories = await response.json(); renderCategoryOptions(); }
+    async function loadInspections() { var response = await fetch('/api/inspections'); if (!response.ok) throw new Error('Denetim listesi yüklenemedi.'); inspections = await response.json(); renderInspectionTable(); }
+    document.addEventListener('DOMContentLoaded', async function() { try { await loadCategories(); await loadInspections(); } catch (error) { document.getElementById('inspectionTableBody').innerHTML = '<tr><td colspan="9"><div class="empty-state">' + escapeHtml(error.message || 'Denetim listesi yüklenemedi.') + '</div></td></tr>'; } });
+  </script>
+</body>
+</html>`);
+});
+
 app.get("/business-categories", (req, res) => {
   res.redirect("/businesses");
 });
@@ -3846,6 +4159,7 @@ app.get("/", (req, res) => {
         <div class="nav-section-title">Modüller</div>
         <a href="#" class="menu-item active"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span></a>
         <a href="/businesses" class="menu-item"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
+        <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
       </nav>
     </aside>
     <main class="main">
