@@ -3022,8 +3022,8 @@ app.get("/businesses/:id", (req, res) => {
         </div>
         <div class="toolbar">
           <a class="btn btn-ghost" href="/businesses">← Listeye Dön</a>
-          <button class="btn btn-secondary" type="button" onclick="openLicenseModal()">Ruhsat Bilgisi Düzenle</button>
-          <button class="btn btn-primary" type="button" onclick="openInspectionModal()">+ Yeni Denetim Ekle</button>
+          <button class="btn btn-secondary" id="openLicenseBtnTop" type="button" onclick="openLicenseModal()">Ruhsat Bilgisi Düzenle</button>
+          <button class="btn btn-primary" id="openInspectionBtnTop" type="button" onclick="openInspectionModal()">+ Yeni Denetim Ekle</button>
         </div>
       </section>
 
@@ -3062,7 +3062,7 @@ app.get("/businesses/:id", (req, res) => {
             <div class="panel-title">Ruhsat Bilgisi</div>
             <div class="panel-subtitle">Ruhsat durumu, numarası, veriliş tarihi ve firma iç notları tek kartta tutulur.</div>
           </div>
-          <button class="btn btn-ghost" type="button" onclick="openLicenseModal()">Düzenle</button>
+          <button class="btn btn-ghost" id="openLicenseBtnSection" type="button" onclick="openLicenseModal()">Düzenle</button>
         </div>
         <div id="licenseContainer" class="loading">Ruhsat bilgileri yükleniyor...</div>
       </section>
@@ -3073,7 +3073,7 @@ app.get("/businesses/:id", (req, res) => {
             <div class="panel-title">Denetim Geçmişi</div>
             <div class="panel-subtitle">Bu firmaya ait denetim kayıtları tarih sırasıyla burada tutulur.</div>
           </div>
-          <button class="btn btn-primary" type="button" onclick="openInspectionModal()">+ Yeni Denetim Ekle</button>
+          <button class="btn btn-primary" id="openInspectionBtnSection" type="button" onclick="openInspectionModal()">+ Yeni Denetim Ekle</button>
         </div>
         <div id="inspectionContainer" class="loading">Denetim geçmişi yükleniyor...</div>
       </section>
@@ -3202,11 +3202,15 @@ app.get("/businesses/:id", (req, res) => {
     }
 
     function closeModal(id) {
-      document.getElementById(id).classList.remove('show');
+      var modal = document.getElementById(id);
+      if (!modal) return;
+      modal.classList.remove('show');
     }
 
     function openModal(id) {
-      document.getElementById(id).classList.add('show');
+      var modal = document.getElementById(id);
+      if (!modal) return;
+      modal.classList.add('show');
     }
 
     function badgeForLicense(status) {
@@ -3304,14 +3308,13 @@ app.get("/businesses/:id", (req, res) => {
     }
 
     function openLicenseModal() {
-      if (!currentBusiness) return;
-      document.getElementById('licenseActivitySubject').value = currentBusiness.activitySubject || '';
-      document.getElementById('licenseStatus').value = currentBusiness.licenseStatus || 'Yok';
-      document.getElementById('licenseNo').value = currentBusiness.licenseNo || '';
-      document.getElementById('licenseDate').value = currentBusiness.licenseDate || '';
-      document.getElementById('businessClass').value = currentBusiness.businessClass || '';
-      document.getElementById('licenseNote').value = currentBusiness.licenseNote || '';
-      document.getElementById('businessNote').value = currentBusiness.businessNote || '';
+      document.getElementById('licenseActivitySubject').value = currentBusiness ? (currentBusiness.activitySubject || '') : '';
+      document.getElementById('licenseStatus').value = currentBusiness ? (currentBusiness.licenseStatus || 'Yok') : 'Yok';
+      document.getElementById('licenseNo').value = currentBusiness ? (currentBusiness.licenseNo || '') : '';
+      document.getElementById('licenseDate').value = currentBusiness ? (currentBusiness.licenseDate || '') : '';
+      document.getElementById('businessClass').value = currentBusiness ? (currentBusiness.businessClass || '') : '';
+      document.getElementById('licenseNote').value = currentBusiness ? (currentBusiness.licenseNote || '') : '';
+      document.getElementById('businessNote').value = currentBusiness ? (currentBusiness.businessNote || '') : '';
       openModal('licenseModal');
     }
 
@@ -3447,6 +3450,39 @@ app.get("/businesses/:id", (req, res) => {
       renderInspections();
     }
 
+
+    function bindDetailPageActions() {
+      var buttonIds = ['openLicenseBtnTop', 'openLicenseBtnSection'];
+      for (var i = 0; i < buttonIds.length; i++) {
+        var button = document.getElementById(buttonIds[i]);
+        if (button) {
+          button.addEventListener('click', function(event) {
+            event.preventDefault();
+            openLicenseModal();
+          });
+        }
+      }
+
+      var inspectionButtonIds = ['openInspectionBtnTop', 'openInspectionBtnSection'];
+      for (var j = 0; j < inspectionButtonIds.length; j++) {
+        var inspectionButton = document.getElementById(inspectionButtonIds[j]);
+        if (inspectionButton) {
+          inspectionButton.addEventListener('click', function(event) {
+            event.preventDefault();
+            openInspectionModal();
+          });
+        }
+      }
+
+      window.openLicenseModal = openLicenseModal;
+      window.openInspectionModal = openInspectionModal;
+      window.closeModal = closeModal;
+      window.saveLicenseInfo = saveLicenseInfo;
+      window.saveInspection = saveInspection;
+      window.deleteInspection = deleteInspection;
+      window.toggleInspectionControlDate = toggleInspectionControlDate;
+    }
+
     async function initPage() {
       try {
         await loadBusiness();
@@ -3464,6 +3500,7 @@ app.get("/businesses/:id", (req, res) => {
       }
     });
 
+    bindDetailPageActions();
     initPage();
   </script>
 </body>
