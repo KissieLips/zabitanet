@@ -4,6 +4,7 @@ const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
+const XLSX = require("xlsx");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,8 +18,10 @@ const pool = new Pool({
 
 const uploadsRoot = path.join(__dirname, "uploads");
 const complaintUploadsRoot = path.join(uploadsRoot, "complaints");
+const businessUploadsRoot = path.join(uploadsRoot, "businesses");
 
 fs.mkdirSync(complaintUploadsRoot, { recursive: true });
+fs.mkdirSync(businessUploadsRoot, { recursive: true });
 
 function normalizeStoredText(value) {
   if (value === null || value === undefined) return "";
@@ -62,6 +65,25 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   limits: { fileSize: 20 * 1024 * 1024 }
+});
+
+const businessStorage = multer.diskStorage({
+  destination: function(req, file, cb) {
+    const businessFolder = path.join(businessUploadsRoot, String(req.params.id));
+    fs.mkdirSync(businessFolder, { recursive: true });
+    cb(null, businessFolder);
+  },
+  filename: function(req, file, cb) {
+    const decodedOriginalName = decodeUploadFilename(file.originalname || "dosya");
+    const ext = path.extname(decodedOriginalName || "");
+    const base = path.basename(decodedOriginalName || "dosya", ext).replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, "-");
+    cb(null, Date.now() + "-" + base + ext);
+  }
+});
+
+const businessUpload = multer({
+  storage: businessStorage,
+  limits: { fileSize: 25 * 1024 * 1024 }
 });
 
 function httpsGetJson(url) {
@@ -404,6 +426,23 @@ function mapBusinessInspection(row) {
   };
 }
 
+function mapBusinessFile(row) {
+  const url = row.file_path ? row.file_path.replace(/\\/g, "/") : "";
+  return {
+    id: row.id,
+    businessId: row.business_id,
+    fileType: row.file_type || "",
+    category: row.category || "",
+    description: row.description || "",
+    originalName: row.original_name || "",
+    mimeType: row.mime_type || "",
+    fileSize: Number(row.file_size || 0),
+    url: url,
+    createdAt: formatDateTime(row.created_at),
+    isImage: (row.mime_type || "").indexOf("image/") === 0
+  };
+}
+
 function mapInspectionFeed(row) {
   const base = mapBusinessInspection(row);
   return {
@@ -632,6 +671,27 @@ async function initDb() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_business_inspections_business_id
     ON business_inspections(business_id)
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS business_files (
+      id SERIAL PRIMARY KEY,
+      business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+      file_type VARCHAR(20) NOT NULL,
+      category VARCHAR(120) NOT NULL,
+      description TEXT,
+      original_name VARCHAR(255) NOT NULL,
+      stored_name VARCHAR(255) NOT NULL,
+      file_path TEXT NOT NULL,
+      mime_type VARCHAR(120),
+      file_size BIGINT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_business_files_business_id
+    ON business_files(business_id)
   `);
 
   const defaultCategories = [
@@ -1036,6 +1096,24 @@ app.get("/api/businesses", async (req, res) => {
   }
 });
 
+app.get('/api/businesses/export.xlsx', async (req, res) => {
+  try {
+    const filters = await enrichBusinessExportFilters(normalizeBusinessExportFilters(req.query));
+    const allRows = await queryBusinessList();
+    const rows = filterBusinessRows(allRows, filters);
+    const workbook = createBusinessWorkbook(rows, filters);
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const fileName = buildBusinessExportFileName(filters);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + fileName + '"');
+    res.send(buffer);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Firma Excel çıktısı oluşturulamadı.' });
+  }
+});
+
 app.get("/api/businesses/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -1214,7 +1292,21 @@ app.put("/api/businesses/:id", async (req, res) => {
 app.delete("/api/businesses/:id", async (req, res) => {
   try {
     const { id } = req.params;
+    const filesResult = await pool.query("SELECT file_path FROM business_files WHERE business_id = $1", [id]);
     await pool.query("DELETE FROM businesses WHERE id = $1", [id]);
+
+    for (const row of filesResult.rows) {
+      const absolutePath = path.join(__dirname, row.file_path.replace(/^\/uploads\//, "uploads/"));
+      safeUnlink(absolutePath);
+    }
+
+    const folderPath = path.join(businessUploadsRoot, String(id));
+    try {
+      fs.rmSync(folderPath, { recursive: true, force: true });
+    } catch (folderError) {
+      console.error("Firma klasörü silinemedi:", folderError);
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -1432,75 +1524,485 @@ app.delete("/api/businesses/:id/inspections/:inspectionId", async (req, res) => 
   }
 });
 
+app.get("/api/businesses/:id/files", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `SELECT * FROM business_files WHERE business_id = $1 ORDER BY id DESC`,
+      [id]
+    );
+    res.json(result.rows.map(mapBusinessFile));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Firma dosyaları alınamadı." });
+  }
+});
+
+app.post("/api/businesses/:id/files", businessUpload.any(), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fileType, category, description } = req.body || {};
+    const uploadedFiles = Array.isArray(req.files) ? req.files : (req.file ? [req.file] : []);
+
+    if (!uploadedFiles.length) {
+      return res.status(400).json({ error: "Dosya seçiniz." });
+    }
+
+    if (!fileType || !category) {
+      uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
+      return res.status(400).json({ error: "Dosya türü ve kategori seçiniz." });
+    }
+
+    if (fileType === "document" && uploadedFiles.length > 1) {
+      uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
+      return res.status(400).json({ error: "Evrak yüklemede aynı anda sadece 1 dosya seçebilirsiniz." });
+    }
+
+    const businessResult = await pool.query("SELECT id FROM businesses WHERE id = $1", [id]);
+    if (businessResult.rows.length === 0) {
+      uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
+      return res.status(404).json({ error: "Firma bulunamadı." });
+    }
+
+    if (fileType === "photo") {
+      const invalidPhoto = uploadedFiles.find(function(file) {
+        return !file.mimetype || file.mimetype.indexOf("image/") !== 0;
+      });
+      if (invalidPhoto) {
+        uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
+        return res.status(400).json({ error: "Fotoğraf yüklemede sadece görsel dosyaları kabul edilir." });
+      }
+    }
+
+    const insertedRows = [];
+    for (const uploadedFile of uploadedFiles) {
+      const relativePath = "/uploads/businesses/" + id + "/" + uploadedFile.filename;
+      const result = await pool.query(
+        `
+          INSERT INTO business_files
+            (business_id, file_type, category, description, original_name, stored_name, file_path, mime_type, file_size)
+          VALUES
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          RETURNING *
+        `,
+        [
+          id,
+          fileType,
+          category,
+          normalizeStoredText(description || ""),
+          decodeUploadFilename(uploadedFile.originalname),
+          uploadedFile.filename,
+          relativePath,
+          uploadedFile.mimetype || "",
+          uploadedFile.size || 0,
+        ]
+      );
+      insertedRows.push(mapBusinessFile(result.rows[0]));
+    }
+
+    res.json({ success: true, uploadedCount: insertedRows.length, files: insertedRows });
+  } catch (error) {
+    console.error(error);
+    const uploadedFiles = Array.isArray(req.files) ? req.files : (req.file ? [req.file] : []);
+    uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
+    res.status(500).json({ error: "Firma dosyası yüklenemedi." });
+  }
+});
+
+app.delete("/api/business-files/:fileId", async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const fileResult = await pool.query("SELECT * FROM business_files WHERE id = $1", [fileId]);
+
+    if (fileResult.rows.length === 0) {
+      return res.status(404).json({ error: "Dosya bulunamadı." });
+    }
+
+    const fileRow = fileResult.rows[0];
+    const absolutePath = path.join(__dirname, fileRow.file_path.replace(/^\/uploads\//, "uploads/"));
+
+    await pool.query("DELETE FROM business_files WHERE id = $1", [fileId]);
+    safeUnlink(absolutePath);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Dosya silinemedi." });
+  }
+});
+
+function buildInspectionFeedFilters(rawQuery = {}) {
+  return {
+    month: rawQuery.month ? String(rawQuery.month).trim() : '',
+    categoryId: rawQuery.categoryId && String(rawQuery.categoryId).trim() !== 'all' ? Number(rawQuery.categoryId) : null,
+    resultStatus: rawQuery.resultStatus && String(rawQuery.resultStatus).trim() !== 'all' ? String(rawQuery.resultStatus).trim() : '',
+    currentStatus: rawQuery.currentStatus && String(rawQuery.currentStatus).trim() !== 'all' ? String(rawQuery.currentStatus).trim() : '',
+    licenseStatus: rawQuery.licenseStatus && String(rawQuery.licenseStatus).trim() !== 'all' ? String(rawQuery.licenseStatus).trim() : '',
+    search: rawQuery.search ? String(rawQuery.search).trim() : '',
+    categoryName: rawQuery.categoryName ? String(rawQuery.categoryName).trim() : '',
+  };
+}
+
+function buildInspectionFeedQuery(filters = {}) {
+  const { month, categoryId, resultStatus, currentStatus, licenseStatus, search } = buildInspectionFeedFilters(filters);
+  const conditions = [];
+  const values = [];
+
+  if (month) {
+    values.push(String(month) + '-01');
+    conditions.push("DATE_TRUNC('month', bi.inspection_date) = DATE_TRUNC('month', $" + values.length + "::date)");
+  }
+
+  if (Number.isFinite(categoryId) && categoryId > 0) {
+    values.push(categoryId);
+    conditions.push("b.category_id = $" + values.length);
+  }
+
+  if (resultStatus) {
+    values.push(resultStatus);
+    conditions.push("COALESCE(bi.result_status, '') = $" + values.length);
+  }
+
+  if (currentStatus) {
+    values.push(currentStatus);
+    conditions.push("COALESCE(bi.current_status, '') = $" + values.length);
+  }
+
+  if (licenseStatus) {
+    values.push(licenseStatus);
+    conditions.push("COALESCE(b.license_status, 'Yok') = $" + values.length);
+  }
+
+  if (search) {
+    values.push('%' + search + '%');
+    const idx = values.length;
+    conditions.push("(COALESCE(b.trade_name, '') ILIKE $" + idx + " OR COALESCE(b.owner_name, '') ILIKE $" + idx + " OR COALESCE(b.phone, '') ILIKE $" + idx + " OR COALESCE(bc.name, '') ILIKE $" + idx + " OR COALESCE(b.neighborhood, '') ILIKE $" + idx + " OR COALESCE(b.street, '') ILIKE $" + idx + ")");
+  }
+
+  const whereSql = conditions.length ? ('WHERE ' + conditions.join(' AND ')) : '';
+
+  return {
+    whereSql,
+    values,
+    filters: { month, categoryId, resultStatus, currentStatus, licenseStatus, search }
+  };
+}
+
+async function queryInspectionFeed(rawQuery = {}) {
+  const { whereSql, values, filters } = buildInspectionFeedQuery(rawQuery);
+  const result = await pool.query(
+    `
+      SELECT
+        bi.*,
+        b.trade_name,
+        b.owner_name,
+        b.phone,
+        b.category_id,
+        bc.name AS category_name,
+        b.neighborhood,
+        b.street,
+        b.door_no,
+        b.license_status,
+        b.location_lat,
+        b.location_lng
+      FROM business_inspections bi
+      INNER JOIN businesses b ON b.id = bi.business_id
+      LEFT JOIN business_categories bc ON bc.id = b.category_id
+      ${whereSql}
+      ORDER BY bi.inspection_date DESC, bi.id DESC
+    `,
+    values
+  );
+
+  return {
+    rows: result.rows.map(mapInspectionFeed),
+    filters
+  };
+}
+
+function buildInspectionExportFileName(filters = {}) {
+  const monthText = filters.month ? filters.month.replace(/[^0-9-]/g, '') : 'tum-kayitlar';
+  return 'toplu-denetimler-' + monthText + '.xlsx';
+}
+
+async function queryBusinessList() {
+  const result = await pool.query(
+    `
+      SELECT
+        b.*, bc.name AS category_name
+      FROM businesses b
+      LEFT JOIN business_categories bc ON bc.id = b.category_id
+      ORDER BY b.id DESC
+    `
+  );
+
+  return result.rows.map(mapBusiness);
+}
+
+function normalizeBusinessExportFilters(rawQuery = {}) {
+  const categoryId = rawQuery.categoryId ? String(rawQuery.categoryId) : '';
+  const licenseStatus = rawQuery.licenseStatus ? String(rawQuery.licenseStatus) : 'all';
+  const locationFilter = rawQuery.locationFilter ? String(rawQuery.locationFilter) : 'all';
+  const search = rawQuery.search ? String(rawQuery.search).trim() : '';
+
+  return {
+    categoryId,
+    licenseStatus,
+    locationFilter,
+    search,
+  };
+}
+
+function filterBusinessRows(rows, filters = {}) {
+  const search = String(filters.search || '').toLocaleLowerCase('tr-TR');
+  const categoryId = String(filters.categoryId || '');
+  const licenseFilter = String(filters.licenseStatus || 'all');
+  const locationFilter = String(filters.locationFilter || 'all');
+
+  return rows.filter((item) => {
+    const matchesCategory = !categoryId || String(item.categoryId) === categoryId;
+    const normalizedLicense = String(item.licenseStatus || 'Yok');
+    const matchesLicense = licenseFilter === 'all' || normalizedLicense === licenseFilter;
+    const hasLocation = item.locationLat !== null && item.locationLng !== null;
+    const matchesLocation = locationFilter === 'all' || (locationFilter === 'with' ? hasLocation : !hasLocation);
+    const text = [
+      item.categoryName,
+      item.tradeName,
+      item.ownerName,
+      item.phone,
+      item.neighborhood,
+      item.street,
+      item.doorNo,
+      item.ada,
+      item.parcel,
+      item.licenseStatus
+    ].join(' ').toLocaleLowerCase('tr-TR');
+    const matchesSearch = !search || text.indexOf(search) !== -1;
+    return matchesCategory && matchesLicense && matchesLocation && matchesSearch;
+  });
+}
+
+async function enrichBusinessExportFilters(filters = {}) {
+  const enriched = { ...filters, categoryName: 'Tüm kategoriler' };
+  if (!filters.categoryId) return enriched;
+
+  const categoryResult = await pool.query(
+    'SELECT name FROM business_categories WHERE id = $1 LIMIT 1',
+    [Number(filters.categoryId)]
+  );
+
+  if (categoryResult.rows.length) {
+    enriched.categoryName = categoryResult.rows[0].name;
+  } else {
+    enriched.categoryName = 'Kategori #' + String(filters.categoryId);
+  }
+
+  return enriched;
+}
+
+function buildBusinessExportFileName(filters = {}) {
+  const categoryText = filters.categoryName && filters.categoryName !== 'Tüm kategoriler'
+    ? String(filters.categoryName).toLocaleLowerCase('tr-TR').replace(/[^a-z0-9çğıöşü]+/gi, '-').replace(/^-+|-+$/g, '')
+    : 'tum-firmalar';
+  return 'firma-listesi-' + (categoryText || 'tum-firmalar') + '.xlsx';
+}
+
+function buildBusinessSummaryRows(rows, filters = {}) {
+  let withLocation = 0;
+  let withoutLocation = 0;
+  let licenseYes = 0;
+  let licenseNo = 0;
+  let licensePending = 0;
+
+  rows.forEach((item) => {
+    const hasLocation = item.locationLat !== null && item.locationLng !== null;
+    if (hasLocation) withLocation += 1;
+    else withoutLocation += 1;
+
+    if (item.licenseStatus === 'Var') licenseYes += 1;
+    else if (item.licenseStatus === 'Başvuru Aşamasında') licensePending += 1;
+    else licenseNo += 1;
+  });
+
+  return [
+    { 'Alan': 'Kategori', 'Değer': filters.categoryName || 'Tüm kategoriler' },
+    { 'Alan': 'Ruhsat Durumu', 'Değer': filters.licenseStatus === 'all' ? 'Tüm ruhsat durumları' : (filters.licenseStatus || 'Tüm ruhsat durumları') },
+    { 'Alan': 'Konum Filtresi', 'Değer': filters.locationFilter === 'with' ? 'Konumu olanlar' : (filters.locationFilter === 'without' ? 'Konumu olmayanlar' : 'Tüm konumlar') },
+    { 'Alan': 'Arama', 'Değer': filters.search || '-' },
+    { 'Alan': 'Toplam Firma', 'Değer': rows.length },
+    { 'Alan': 'Konumu Olan', 'Değer': withLocation },
+    { 'Alan': 'Konumu Olmayan', 'Değer': withoutLocation },
+    { 'Alan': 'Ruhsatlı', 'Değer': licenseYes },
+    { 'Alan': 'Ruhsatsız', 'Değer': licenseNo },
+    { 'Alan': 'Başvuru Aşamasında', 'Değer': licensePending },
+    { 'Alan': 'Oluşturulma Tarihi', 'Değer': formatDateTime(new Date()) },
+  ];
+}
+
+function createBusinessWorkbook(rows, filters = {}) {
+  const workbook = XLSX.utils.book_new();
+
+  const summaryRows = buildBusinessSummaryRows(rows, filters);
+  const summarySheet = XLSX.utils.json_to_sheet(summaryRows, { header: ['Alan', 'Değer'] });
+  summarySheet['!cols'] = [{ wch: 24 }, { wch: 42 }];
+  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Filtre Özeti');
+
+  const dataRows = rows.map((item, index) => ({
+    'Sıra': index + 1,
+    'Kategori': item.categoryName || '',
+    'İşyeri Ünvanı': item.tradeName || '',
+    'İşyeri Sahibi': item.ownerName || '',
+    'Telefon': item.phone || '',
+    'Mahalle': item.neighborhood ? item.neighborhood + ' Mah.' : '',
+    'Cadde / Sokak': item.street || '',
+    'Kapı No': item.doorNo || '',
+    'Tam Adres': item.addressText || '',
+    'Ada': item.ada || '',
+    'Parsel': item.parcel || '',
+    'Ruhsat Durumu': item.licenseStatus || 'Yok',
+    'Ruhsat No': item.licenseNo || '',
+    'Ruhsat Tarihi': item.licenseDateText || '',
+    'Faaliyet Konusu': item.activitySubject || '',
+    'İşyeri Sınıfı / Türü': item.businessClass || '',
+    'Konum': item.locationText || '',
+    'Harita Linki': item.mapsUrl || item.addressMapsUrl || '',
+    'Kayıt Zamanı': item.createdAt || '',
+  }));
+
+  const dataSheet = XLSX.utils.json_to_sheet(dataRows);
+  dataSheet['!autofilter'] = { ref: dataSheet['!ref'] || 'A1' };
+  dataSheet['!cols'] = [
+    { wch: 8 },
+    { wch: 22 },
+    { wch: 32 },
+    { wch: 24 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 26 },
+    { wch: 12 },
+    { wch: 40 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 14 },
+    { wch: 24 },
+    { wch: 24 },
+    { wch: 22 },
+    { wch: 30 },
+    { wch: 22 },
+  ];
+  XLSX.utils.book_append_sheet(workbook, dataSheet, 'Firmalar');
+
+  return workbook;
+}
+
+function buildInspectionSummaryRows(rows, filters = {}) {
+  const uniqueBusinesses = new Set();
+  let deadlineCount = 0;
+  let overdueCount = 0;
+  const today = new Date().toISOString().slice(0, 10);
+
+  rows.forEach((item) => {
+    if (item.businessId) uniqueBusinesses.add(item.businessId);
+    if (item.currentStatus === 'Süre Verildi') {
+      deadlineCount += 1;
+      if (item.controlDate && item.controlDate < today) overdueCount += 1;
+    }
+  });
+
+  return [
+    { 'Alan': 'Ay', 'Değer': filters.month || 'Tüm aylar' },
+    { 'Alan': 'Kategori', 'Değer': filters.categoryName || (filters.categoryId ? 'Kategori #' + String(filters.categoryId) : 'Tüm kategoriler') },
+    { 'Alan': 'Ruhsat Durumu', 'Değer': filters.licenseStatus || 'Tüm ruhsat durumları' },
+    { 'Alan': 'Sonuç', 'Değer': filters.resultStatus || 'Tüm sonuçlar' },
+    { 'Alan': 'Durum', 'Değer': filters.currentStatus || 'Tüm durumlar' },
+    { 'Alan': 'Arama', 'Değer': filters.search || '-' },
+    { 'Alan': 'Toplam Denetim', 'Değer': rows.length },
+    { 'Alan': 'Firma Sayısı', 'Değer': uniqueBusinesses.size },
+    { 'Alan': 'Süre Verilen', 'Değer': deadlineCount },
+    { 'Alan': 'Geciken Kontrol', 'Değer': overdueCount },
+    { 'Alan': 'Oluşturulma Tarihi', 'Değer': formatDateTime(new Date()) },
+  ];
+}
+
+function createInspectionWorkbook(rows, filters = {}) {
+  const workbook = XLSX.utils.book_new();
+
+  const summaryRows = buildInspectionSummaryRows(rows, filters);
+  const summarySheet = XLSX.utils.json_to_sheet(summaryRows, { header: ['Alan', 'Değer'] });
+  summarySheet['!cols'] = [{ wch: 24 }, { wch: 42 }];
+  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Filtre Özeti');
+
+  const dataRows = rows.map((item, index) => ({
+    'Sıra': index + 1,
+    'Denetim Tarihi': item.inspectionDateText || '',
+    'Firma Ünvanı': item.tradeName || '',
+    'Kategori': item.categoryName || '',
+    'Firma Sahibi': item.ownerName || '',
+    'Telefon': item.phone || '',
+    'Adres': item.addressText || '',
+    'Sonuç': item.resultStatus || '',
+    'Durum': item.currentStatus || '',
+    'Yapılan İşlem': item.actionTaken || '',
+    'Kontrol Tarihi': item.controlDateText || '',
+    'Ruhsat Durumu': item.licenseStatus || 'Yok',
+    'Not': item.note || '',
+    'Kayıt Zamanı': item.createdAt || '',
+    'Harita Linki': item.mapsUrl || '',
+  }));
+
+  const dataSheet = XLSX.utils.json_to_sheet(dataRows);
+  dataSheet['!autofilter'] = { ref: dataSheet['!ref'] || 'A1' };
+  dataSheet['!cols'] = [
+    { wch: 8 },
+    { wch: 14 },
+    { wch: 32 },
+    { wch: 24 },
+    { wch: 24 },
+    { wch: 16 },
+    { wch: 40 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 34 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 28 },
+    { wch: 22 },
+    { wch: 28 },
+  ];
+  XLSX.utils.book_append_sheet(workbook, dataSheet, 'Denetimler');
+
+  return workbook;
+}
+
 app.get("/api/inspections", async (req, res) => {
   try {
-    const { month, categoryId, resultStatus, currentStatus, licenseStatus, search } = req.query;
-    const conditions = [];
-    const values = [];
-
-    if (month) {
-      values.push(String(month) + '-01');
-      conditions.push("DATE_TRUNC('month', bi.inspection_date) = DATE_TRUNC('month', $" + values.length + "::date)");
-    }
-
-    if (categoryId) {
-      values.push(Number(categoryId));
-      conditions.push("b.category_id = $" + values.length);
-    }
-
-    if (resultStatus) {
-      values.push(String(resultStatus));
-      conditions.push("COALESCE(bi.result_status, '') = $" + values.length);
-    }
-
-    if (currentStatus) {
-      values.push(String(currentStatus));
-      conditions.push("COALESCE(bi.current_status, '') = $" + values.length);
-    }
-
-    if (licenseStatus) {
-      values.push(String(licenseStatus));
-      conditions.push("COALESCE(b.license_status, 'Yok') = $" + values.length);
-    }
-
-    if (search) {
-      values.push('%' + String(search).trim() + '%');
-      const idx = values.length;
-      conditions.push("(COALESCE(b.trade_name, '') ILIKE $" + idx + " OR COALESCE(b.owner_name, '') ILIKE $" + idx + " OR COALESCE(b.phone, '') ILIKE $" + idx + " OR COALESCE(bc.name, '') ILIKE $" + idx + " OR COALESCE(b.neighborhood, '') ILIKE $" + idx + " OR COALESCE(b.street, '') ILIKE $" + idx + ")");
-    }
-
-    const whereSql = conditions.length ? ('WHERE ' + conditions.join(' AND ')) : '';
-
-    const result = await pool.query(
-      `
-        SELECT
-          bi.*,
-          b.trade_name,
-          b.owner_name,
-          b.phone,
-          b.category_id,
-          bc.name AS category_name,
-          b.neighborhood,
-          b.street,
-          b.door_no,
-          b.license_status,
-          b.location_lat,
-          b.location_lng
-        FROM business_inspections bi
-        INNER JOIN businesses b ON b.id = bi.business_id
-        LEFT JOIN business_categories bc ON bc.id = b.category_id
-        ${whereSql}
-        ORDER BY bi.inspection_date DESC, bi.id DESC
-      `,
-      values
-    );
-
-    res.json(result.rows.map(mapInspectionFeed));
+    const { rows } = await queryInspectionFeed(req.query);
+    res.json(rows);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Toplu denetim kayıtları alınamadı." });
   }
 });
+
+app.get("/api/inspections/export.xlsx", async (req, res) => {
+  try {
+    const { rows, filters } = await queryInspectionFeed(req.query);
+    const workbook = createInspectionWorkbook(rows, filters);
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const fileName = buildInspectionExportFileName(filters);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + fileName + '"');
+    res.send(buffer);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Excel çıktısı oluşturulamadı.' });
+  }
+});
+
+
 
 app.get("/api/geocode/reverse", async (req, res) => {
   try {
@@ -1756,6 +2258,7 @@ app.get("/businesses", (req, res) => {
           </div>
           <div class="toolbar-actions">
             <a class="btn btn-secondary" href="/inspections">Tüm Denetimler</a>
+            <button class="btn btn-secondary" type="button" onclick="exportBusinessesExcel()">Excel'e Aktar</button>
             <button class="btn btn-ghost" onclick="openCategoryModal()">Kategori Ekle</button>
             <button class="btn btn-primary" onclick="openNewBusinessModal()">+ Yeni Firma Ekle</button>
           </div>
@@ -2475,6 +2978,27 @@ app.get("/businesses", (req, res) => {
       renderBusinessTable();
     }
 
+    function exportBusinessesExcel() {
+      var rows = getFilteredBusinesses();
+      if (!rows.length) {
+        alert('Bu filtreye uygun Excel çıktısı oluşturulacak firma kaydı bulunmuyor.');
+        return;
+      }
+
+      var query = new URLSearchParams();
+      var categoryId = document.getElementById('filterCategory').value;
+      var licenseStatus = document.getElementById('licenseFilter').value;
+      var locationFilter = document.getElementById('locationFilter').value;
+      var search = document.getElementById('searchInput').value.trim();
+
+      if (categoryId) query.set('categoryId', categoryId);
+      if (licenseStatus && licenseStatus !== 'all') query.set('licenseStatus', licenseStatus);
+      if (locationFilter && locationFilter !== 'all') query.set('locationFilter', locationFilter);
+      if (search) query.set('search', search);
+
+      window.location.href = '/api/businesses/export.xlsx' + (query.toString() ? ('?' + query.toString()) : '');
+    }
+
     function resetBusinessForm() {
       editingBusinessId = null;
       document.getElementById('businessModalTitle').textContent = 'Yeni Firma Ekle';
@@ -3120,12 +3644,36 @@ app.get("/businesses/:id", (req, res) => {
     .form-message.success { color: #166534; }
     .toast { position: fixed; right: 18px; bottom: 18px; background: #0f172a; color: #ffffff; padding: 12px 14px; border-radius: 12px; font-size: 13px; box-shadow: var(--shadow-strong); opacity: 0; transform: translateY(8px); pointer-events: none; transition: all 0.18s ease; z-index: 140; }
     .toast.show { opacity: 1; transform: translateY(0); }
+    .upload-shell { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 12px; align-items: start; }
+    .upload-card { border: 1px solid var(--line); background: #fbfdff; border-radius: 14px; padding: 14px; }
+    .upload-card-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .upload-card-subtitle { font-size: 12px; color: var(--muted); line-height: 1.55; margin-bottom: 12px; }
+    .upload-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .file-group { display: grid; gap: 12px; }
+    .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+    .file-card { border: 1px solid var(--line); background: #ffffff; border-radius: 14px; overflow: hidden; display: grid; min-height: 100%; }
+    .file-thumb { aspect-ratio: 16 / 10; background: linear-gradient(180deg, #eef4ff 0%, #f8fbff 100%); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .file-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .file-thumb-icon { font-size: 40px; opacity: 0.8; }
+    .file-body { padding: 12px; display: grid; gap: 7px; }
+    .file-name { font-size: 13px; font-weight: 700; line-height: 1.45; word-break: break-word; }
+    .file-meta { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .file-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+    .file-tag { display: inline-flex; align-items: center; padding: 5px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #eef4ff; color: #1d4ed8; border: 1px solid #dbe7ff; }
+    .file-tag.gray { background: #f3f4f6; color: #374151; border-color: #e5e7eb; }
+    .file-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+    .group-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .group-title { font-size: 13px; font-weight: 700; }
+    .group-subtitle { font-size: 12px; color: var(--muted); }
+    .empty-file-box { border: 1px dashed var(--line); background: #fbfdff; border-radius: 12px; padding: 16px; color: var(--muted); font-size: 12.5px; text-align: center; }
+    .compact-textarea { min-height: 86px; }
+    .upload-help { font-size: 12px; color: var(--muted); line-height: 1.55; margin-top: 8px; }
 
     @media (max-width: 980px) {
       .app { grid-template-columns: minmax(0, 1fr); }
       .sidebar { display: none; }
       .main { padding: 14px; }
-      .stats-grid, .summary-grid, .license-layout, .form-grid, .inspection-summary-bar, .inspection-grid { grid-template-columns: 1fr; }
+      .stats-grid, .summary-grid, .license-layout, .form-grid, .inspection-summary-bar, .inspection-grid, .upload-shell { grid-template-columns: 1fr; }
       .hero-title { font-size: 22px; }
       .drawer { width: 100vw; }
       .inspection-card-head, .inspection-card-footer { flex-direction: column; align-items: stretch; }
@@ -3215,6 +3763,71 @@ app.get("/businesses/:id", (req, res) => {
           <button class="btn btn-primary" type="button" id="openInspectionBtnSection">+ Yeni Denetim Ekle</button>
         </div>
         <div id="inspectionContainer" class="loading">Denetim geçmişi yükleniyor...</div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Fotoğraf / Evrak</div>
+            <div class="panel-subtitle">Firmaya ait ruhsat, tutanak ve saha fotoğraflarını bu bölümde tutabilirsin.</div>
+          </div>
+        </div>
+        <div class="upload-shell">
+          <div class="upload-card">
+            <div class="upload-card-title">Yeni Dosya Yükle</div>
+            <div class="upload-card-subtitle">Fotoğrafları çoklu, evrakları tek dosya olarak yükleyebilirsin.</div>
+            <form id="businessFileForm">
+              <div class="form-grid" style="grid-template-columns: 1fr;">
+                <div class="form-group">
+                  <label for="businessFileType">Dosya Türü</label>
+                  <select id="businessFileType">
+                    <option value="photo">Fotoğraf</option>
+                    <option value="document">Evrak</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="businessFileCategory">Kategori</label>
+                  <select id="businessFileCategory"></select>
+                </div>
+                <div class="form-group">
+                  <label for="businessFileDescription">Açıklama</label>
+                  <textarea id="businessFileDescription" class="compact-textarea" placeholder="Kısa açıklama veya not"></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="businessFileInput">Dosya Seç</label>
+                  <input type="file" id="businessFileInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp" multiple />
+                  <div class="upload-help" id="businessFileHelp">Fotoğrafta birden fazla seçim yapılabilir.</div>
+                </div>
+              </div>
+              <div id="businessFileMessage" class="form-message"></div>
+              <div class="upload-actions">
+                <button class="btn btn-primary" type="submit" id="businessFileSubmitBtn">Dosya Yükle</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="file-group">
+            <div>
+              <div class="group-head">
+                <div>
+                  <div class="group-title">Fotoğraflar</div>
+                  <div class="group-subtitle">Dış görünüş, iç görünüş, denetim ve ruhsat fotoğrafları</div>
+                </div>
+              </div>
+              <div id="businessPhotoList" class="loading" style="margin-top:10px;">Fotoğraflar yükleniyor...</div>
+            </div>
+
+            <div>
+              <div class="group-head">
+                <div>
+                  <div class="group-title">Evraklar</div>
+                  <div class="group-subtitle">Ruhsat belgesi, tutanak, ihtar, tebligat ve diğer evraklar</div>
+                </div>
+              </div>
+              <div id="businessDocumentList" class="loading" style="margin-top:10px;">Evraklar yükleniyor...</div>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
   </div>
@@ -3333,7 +3946,13 @@ app.get("/businesses/:id", (req, res) => {
     var businessId = ${businessId};
     var currentBusiness = null;
     var inspections = [];
+    var businessFiles = [];
     var activeEditor = null;
+
+    var businessFileCategories = {
+      photo: ['İşyeri Dış Görünüş', 'İşyeri İç Görünüş', 'Ruhsat Fotoğrafı', 'Denetim Fotoğrafı', 'Diğer Fotoğraf'],
+      document: ['Ruhsat Belgesi', 'Tutanak', 'İhtar', 'Ceza Belgesi', 'Tebligat', 'Diğer Evrak']
+    };
 
     function escapeHtml(value) {
       if (value === null || value === undefined) return '';
@@ -3386,6 +4005,59 @@ app.get("/businesses/:id", (req, res) => {
 
     function inspectionField(label, value) {
       return '<div class="inspection-field"><div class="inspection-field-label">' + label + '</div><div class="inspection-field-value">' + value + '</div></div>';
+    }
+
+    function formatFileSize(bytes) {
+      var size = Number(bytes || 0);
+      if (!size) return '0 KB';
+      if (size < 1024) return size + ' B';
+      if (size < 1024 * 1024) return (size / 1024).toFixed(1).replace(/\.0$/, '') + ' KB';
+      return (size / (1024 * 1024)).toFixed(1).replace(/\.0$/, '') + ' MB';
+    }
+
+    function updateBusinessFileCategoryOptions() {
+      var type = document.getElementById('businessFileType').value;
+      var select = document.getElementById('businessFileCategory');
+      var input = document.getElementById('businessFileInput');
+      var help = document.getElementById('businessFileHelp');
+      var options = businessFileCategories[type] || [];
+      select.innerHTML = options.map(function(item) {
+        return '<option value="' + escapeHtml(item) + '">' + escapeHtml(item) + '</option>';
+      }).join('');
+      input.multiple = type === 'photo';
+      help.textContent = type === 'photo'
+        ? 'Fotoğrafta birden fazla seçim yapılabilir.'
+        : 'Evrakta aynı anda tek dosya seçebilirsin.';
+    }
+
+    function buildBusinessFileCard(file) {
+      var thumb = file.isImage
+        ? '<div class="file-thumb"><img src="' + escapeHtml(file.url) + '" alt="' + escapeHtml(file.originalName) + '"></div>'
+        : '<div class="file-thumb"><div class="file-thumb-icon">📄</div></div>';
+
+      var html = '<article class="file-card">' + thumb + '<div class="file-body">';
+      html += '<div class="file-name">' + escapeHtml(file.originalName || 'Dosya') + '</div>';
+      html += '<div class="file-tags"><span class="file-tag">' + escapeHtml(file.fileType === 'photo' ? 'Fotoğraf' : 'Evrak') + '</span><span class="file-tag gray">' + escapeHtml(file.category || 'Kategori yok') + '</span></div>';
+      html += '<div class="file-meta">' + escapeHtml(file.description || 'Açıklama girilmedi.') + '</div>';
+      html += '<div class="file-meta">Boyut: ' + escapeHtml(formatFileSize(file.fileSize)) + ' • Yüklenme: ' + escapeHtml(file.createdAt || '-') + '</div>';
+      html += '<div class="file-actions"><a class="mini-btn primary" target="_blank" rel="noopener noreferrer" href="' + escapeHtml(file.url) + '">Aç</a><button class="mini-btn danger" type="button" onclick="deleteBusinessFile(' + file.id + ')">Sil</button></div>';
+      html += '</div></article>';
+      return html;
+    }
+
+    function renderBusinessFiles() {
+      var photoList = document.getElementById('businessPhotoList');
+      var documentList = document.getElementById('businessDocumentList');
+      var photos = businessFiles.filter(function(item) { return item.fileType === 'photo'; });
+      var documents = businessFiles.filter(function(item) { return item.fileType === 'document'; });
+
+      photoList.innerHTML = photos.length
+        ? '<div class="file-grid">' + photos.map(buildBusinessFileCard).join('') + '</div>'
+        : '<div class="empty-file-box">Bu firmaya ait henüz fotoğraf yüklenmedi.</div>';
+
+      documentList.innerHTML = documents.length
+        ? '<div class="file-grid">' + documents.map(buildBusinessFileCard).join('') + '</div>'
+        : '<div class="empty-file-box">Bu firmaya ait henüz evrak yüklenmedi.</div>';
     }
 
     function setMessage(id, message, kind) {
@@ -3711,6 +4383,71 @@ app.get("/businesses/:id", (req, res) => {
       renderInspections();
     }
 
+    async function loadBusinessFiles() {
+      var response = await fetch('/api/businesses/' + businessId + '/files');
+      var data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Firma dosyaları yüklenemedi.');
+      }
+      businessFiles = data;
+      renderBusinessFiles();
+    }
+
+    async function handleBusinessFileSubmit(event) {
+      event.preventDefault();
+      setMessage('businessFileMessage', '', '');
+      var fileInput = document.getElementById('businessFileInput');
+      if (!fileInput.files || !fileInput.files.length) {
+        setMessage('businessFileMessage', 'Lütfen en az bir dosya seçin.', 'error');
+        return;
+      }
+
+      var submitButton = document.getElementById('businessFileSubmitBtn');
+      submitButton.disabled = true;
+      submitButton.textContent = 'Yükleniyor...';
+
+      try {
+        var formData = new FormData();
+        formData.append('fileType', document.getElementById('businessFileType').value);
+        formData.append('category', document.getElementById('businessFileCategory').value);
+        formData.append('description', document.getElementById('businessFileDescription').value.trim());
+
+        for (var i = 0; i < fileInput.files.length; i++) {
+          formData.append('files', fileInput.files[i]);
+        }
+
+        var response = await fetch('/api/businesses/' + businessId + '/files', {
+          method: 'POST',
+          body: formData
+        });
+        var data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Dosya yüklenemedi.');
+
+        document.getElementById('businessFileDescription').value = '';
+        document.getElementById('businessFileInput').value = '';
+        await loadBusinessFiles();
+        showToast('Dosya yükleme tamamlandı.');
+      } catch (error) {
+        setMessage('businessFileMessage', error.message || 'Dosya yüklenemedi.', 'error');
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Dosya Yükle';
+      }
+    }
+
+    async function deleteBusinessFile(fileId) {
+      if (!confirm('Bu dosya silinsin mi?')) return;
+      try {
+        var response = await fetch('/api/business-files/' + fileId, { method: 'DELETE' });
+        var data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Dosya silinemedi.');
+        await loadBusinessFiles();
+        showToast('Dosya silindi.');
+      } catch (error) {
+        alert(error.message || 'Dosya silinemedi.');
+      }
+    }
+
     function bindDetailPageActions() {
       document.getElementById('openLicenseBtnTop').addEventListener('click', openLicenseEditor);
       document.getElementById('openLicenseBtnSection').addEventListener('click', openLicenseEditor);
@@ -3724,23 +4461,30 @@ app.get("/businesses/:id", (req, res) => {
         }
       });
       document.getElementById('inspectionCurrentStatus').addEventListener('change', toggleInspectionControlDate);
+      document.getElementById('businessFileType').addEventListener('change', updateBusinessFileCategoryOptions);
       document.getElementById('licenseForm').addEventListener('submit', handleLicenseSubmit);
       document.getElementById('inspectionForm').addEventListener('submit', handleInspectionSubmit);
+      document.getElementById('businessFileForm').addEventListener('submit', handleBusinessFileSubmit);
       document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') closeDrawer();
       });
       window.openInspectionEditor = openInspectionEditor;
       window.deleteInspectionRecord = deleteInspectionRecord;
+      window.deleteBusinessFile = deleteBusinessFile;
+      updateBusinessFileCategoryOptions();
     }
 
     async function initPage() {
       try {
         await loadBusiness();
         await loadInspections();
+        await loadBusinessFiles();
       } catch (error) {
         document.getElementById('summaryContainer').innerHTML = '<div class="empty-state">' + escapeHtml(error.message || 'Firma bilgileri yüklenemedi.') + '</div>';
         document.getElementById('licenseContainer').innerHTML = '<div class="empty-state">Firma detayı alınamadı.</div>';
         document.getElementById('inspectionContainer').innerHTML = '<div class="empty-state">Denetim geçmişi alınamadı.</div>';
+        document.getElementById('businessPhotoList').innerHTML = '<div class="empty-file-box">Fotoğraf bölümü yüklenemedi.</div>';
+        document.getElementById('businessDocumentList').innerHTML = '<div class="empty-file-box">Evrak bölümü yüklenemedi.</div>';
       }
     }
 
@@ -3840,6 +4584,7 @@ app.get("/inspections", (req, res) => {
         <div class="toolbar">
           <a class="btn btn-ghost" href="/businesses">Firma Listesi</a>
           <button class="btn btn-secondary" type="button" onclick="clearFilters()">Filtreyi Temizle</button>
+          <button class="btn btn-secondary" type="button" onclick="exportExcel()">Excel'e Aktar</button>
           <button class="btn btn-primary" type="button" onclick="printFilteredView()">Yazdır / PDF</button>
         </div>
       </section>
@@ -3864,7 +4609,7 @@ app.get("/inspections", (req, res) => {
       </section>
       <div class="print-meta" id="printMeta"></div>
       <section class="panel">
-        <div class="panel-header"><div><div class="panel-title">Denetim Listesi</div><div class="panel-subtitle">Filtreler uygulandıkça liste ve yazdır/PDF çıktısı aynı anda güncellenir.</div></div></div>
+        <div class="panel-header"><div><div class="panel-title">Denetim Listesi</div><div class="panel-subtitle">Filtreler uygulandıkça liste, yazdır/PDF çıktısı ve Excel aktarımı aynı filtrelerle çalışır.</div></div></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Denetim Tarihi</th><th>Firma / Kategori</th><th>Adres</th><th>Sonuç</th><th>Durum</th><th>Yapılan İşlem</th><th>Kontrol Tarihi</th><th>Ruhsat</th><th>İşlemler</th></tr></thead>
@@ -3952,6 +4697,29 @@ app.get("/inspections", (req, res) => {
         '</tr>';
       }
       body.innerHTML = html;
+    }
+    function buildFilterQueryString() {
+      var params = new URLSearchParams();
+      var month = document.getElementById('filterMonth').value;
+      var category = document.getElementById('filterCategory').value;
+      var categoryText = document.getElementById('filterCategory').selectedOptions[0] ? document.getElementById('filterCategory').selectedOptions[0].textContent : '';
+      var license = document.getElementById('filterLicense').value;
+      var result = document.getElementById('filterResult').value;
+      var status = document.getElementById('filterStatus').value;
+      var search = document.getElementById('searchInput').value.trim();
+      if (month) params.set('month', month);
+      if (category && category !== 'all') { params.set('categoryId', category); params.set('categoryName', categoryText); }
+      if (license && license !== 'all') params.set('licenseStatus', license);
+      if (result && result !== 'all') params.set('resultStatus', result);
+      if (status && status !== 'all') params.set('currentStatus', status);
+      if (search) params.set('search', search);
+      return params.toString();
+    }
+    function exportExcel() {
+      var rows = getFilteredInspections();
+      if (!rows.length) { alert('Bu filtreye uygun Excel çıktısı oluşturulacak kayıt bulunmuyor.'); return; }
+      var query = buildFilterQueryString();
+      window.location.href = '/api/inspections/export.xlsx' + (query ? ('?' + query) : '');
     }
     function clearFilters() { document.getElementById('filterMonth').value = ''; document.getElementById('filterCategory').value = 'all'; document.getElementById('filterLicense').value = 'all'; document.getElementById('filterResult').value = 'all'; document.getElementById('filterStatus').value = 'all'; document.getElementById('searchInput').value = ''; renderInspectionTable(); }
     function printFilteredView() { updatePrintMeta(getFilteredInspections()); window.print(); }
