@@ -19,9 +19,11 @@ const pool = new Pool({
 const uploadsRoot = path.join(__dirname, "uploads");
 const complaintUploadsRoot = path.join(uploadsRoot, "complaints");
 const businessUploadsRoot = path.join(uploadsRoot, "businesses");
+const businessInspectionUploadsRoot = path.join(uploadsRoot, "business-inspections");
 
 fs.mkdirSync(complaintUploadsRoot, { recursive: true });
 fs.mkdirSync(businessUploadsRoot, { recursive: true });
+fs.mkdirSync(businessInspectionUploadsRoot, { recursive: true });
 
 function normalizeStoredText(value) {
   if (value === null || value === undefined) return "";
@@ -83,6 +85,25 @@ const businessStorage = multer.diskStorage({
 
 const businessUpload = multer({
   storage: businessStorage,
+  limits: { fileSize: 25 * 1024 * 1024 }
+});
+
+const inspectionFileStorage = multer.diskStorage({
+  destination: function(req, file, cb) {
+    const inspectionFolder = path.join(businessInspectionUploadsRoot, String(req.params.inspectionId));
+    fs.mkdirSync(inspectionFolder, { recursive: true });
+    cb(null, inspectionFolder);
+  },
+  filename: function(req, file, cb) {
+    const decodedOriginalName = decodeUploadFilename(file.originalname || "dosya");
+    const ext = path.extname(decodedOriginalName || "");
+    const base = path.basename(decodedOriginalName || "dosya", ext).replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, "-");
+    cb(null, Date.now() + "-" + base + ext);
+  }
+});
+
+const inspectionFileUpload = multer({
+  storage: inspectionFileStorage,
   limits: { fileSize: 25 * 1024 * 1024 }
 });
 
@@ -694,6 +715,25 @@ async function initDb() {
     ON business_files(business_id)
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS business_inspection_files (
+      id SERIAL PRIMARY KEY,
+      inspection_id INTEGER NOT NULL REFERENCES business_inspections(id) ON DELETE CASCADE,
+      file_type VARCHAR(20) NOT NULL,
+      original_name VARCHAR(255) NOT NULL,
+      stored_name VARCHAR(255) NOT NULL,
+      file_path TEXT NOT NULL,
+      mime_type VARCHAR(120),
+      file_size BIGINT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_business_inspection_files_inspection_id
+    ON business_inspection_files(inspection_id)
+  `);
+
   const defaultCategories = [
     'Market / Bakkal',
     'Pastahane / Tatlıcı',
@@ -1293,9 +1333,23 @@ app.delete("/api/businesses/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const filesResult = await pool.query("SELECT file_path FROM business_files WHERE business_id = $1", [id]);
+    const inspectionFilesResult = await pool.query(
+      `
+        SELECT bif.file_path, bif.inspection_id
+        FROM business_inspection_files bif
+        INNER JOIN business_inspections bi ON bi.id = bif.inspection_id
+        WHERE bi.business_id = $1
+      `,
+      [id]
+    );
     await pool.query("DELETE FROM businesses WHERE id = $1", [id]);
 
     for (const row of filesResult.rows) {
+      const absolutePath = path.join(__dirname, row.file_path.replace(/^\/uploads\//, "uploads/"));
+      safeUnlink(absolutePath);
+    }
+
+    for (const row of inspectionFilesResult.rows) {
       const absolutePath = path.join(__dirname, row.file_path.replace(/^\/uploads\//, "uploads/"));
       safeUnlink(absolutePath);
     }
@@ -1306,6 +1360,15 @@ app.delete("/api/businesses/:id", async (req, res) => {
     } catch (folderError) {
       console.error("Firma klasörü silinemedi:", folderError);
     }
+
+    const inspectionIds = [...new Set(inspectionFilesResult.rows.map(function(row) { return String(row.inspection_id); }))];
+    inspectionIds.forEach(function(inspectionId) {
+      try {
+        fs.rmSync(path.join(businessInspectionUploadsRoot, inspectionId), { recursive: true, force: true });
+      } catch (folderError) {
+        console.error("Denetim dosya klasörü silinemedi:", folderError);
+      }
+    });
 
     res.json({ success: true });
   } catch (error) {
@@ -1513,10 +1576,32 @@ app.put("/api/businesses/:id/inspections/:inspectionId", async (req, res) => {
 app.delete("/api/businesses/:id/inspections/:inspectionId", async (req, res) => {
   try {
     const { id, inspectionId } = req.params;
+    const fileResult = await pool.query(
+      `
+        SELECT bif.file_path
+        FROM business_inspection_files bif
+        INNER JOIN business_inspections bi ON bi.id = bif.inspection_id
+        WHERE bif.inspection_id = $1 AND bi.business_id = $2
+      `,
+      [inspectionId, id]
+    );
+
     await pool.query(
       "DELETE FROM business_inspections WHERE id = $1 AND business_id = $2",
       [inspectionId, id]
     );
+
+    fileResult.rows.forEach(function(row) {
+      const absolutePath = path.join(__dirname, row.file_path.replace(/^\/uploads\//, "uploads/"));
+      safeUnlink(absolutePath);
+    });
+
+    try {
+      fs.rmSync(path.join(businessInspectionUploadsRoot, String(inspectionId)), { recursive: true, force: true });
+    } catch (folderError) {
+      console.error("Denetim klasörü silinemedi:", folderError);
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -1622,6 +1707,117 @@ app.delete("/api/business-files/:fileId", async (req, res) => {
     const absolutePath = path.join(__dirname, fileRow.file_path.replace(/^\/uploads\//, "uploads/"));
 
     await pool.query("DELETE FROM business_files WHERE id = $1", [fileId]);
+    safeUnlink(absolutePath);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Dosya silinemedi." });
+  }
+});
+
+app.get("/api/businesses/:id/inspection-files", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `
+        SELECT bif.*
+        FROM business_inspection_files bif
+        INNER JOIN business_inspections bi ON bi.id = bif.inspection_id
+        WHERE bi.business_id = $1
+        ORDER BY bif.created_at DESC, bif.id DESC
+      `,
+      [id]
+    );
+    res.json(result.rows.map(mapBusinessInspectionFile));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Denetim dosyaları alınamadı." });
+  }
+});
+
+app.post("/api/business-inspections/:inspectionId/files", inspectionFileUpload.any(), async (req, res) => {
+  try {
+    const { inspectionId } = req.params;
+    const { fileType } = req.body || {};
+    const uploadedFiles = Array.isArray(req.files) ? req.files : (req.file ? [req.file] : []);
+
+    if (!uploadedFiles.length) {
+      return res.status(400).json({ error: "Dosya seçiniz." });
+    }
+
+    if (!fileType) {
+      uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
+      return res.status(400).json({ error: "Dosya türü seçiniz." });
+    }
+
+    if (fileType === "document" && uploadedFiles.length > 1) {
+      uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
+      return res.status(400).json({ error: "Evrak yüklemede aynı anda sadece 1 dosya seçebilirsiniz." });
+    }
+
+    const inspectionResult = await pool.query("SELECT id FROM business_inspections WHERE id = $1", [inspectionId]);
+    if (inspectionResult.rows.length === 0) {
+      uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
+      return res.status(404).json({ error: "Denetim kaydı bulunamadı." });
+    }
+
+    if (fileType === "photo") {
+      const invalidPhoto = uploadedFiles.find(function(file) {
+        return !file.mimetype || file.mimetype.indexOf("image/") !== 0;
+      });
+      if (invalidPhoto) {
+        uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
+        return res.status(400).json({ error: "Fotoğraf yüklemede sadece görsel dosyaları kabul edilir." });
+      }
+    }
+
+    const insertedRows = [];
+    for (const uploadedFile of uploadedFiles) {
+      const relativePath = "/uploads/business-inspections/" + inspectionId + "/" + uploadedFile.filename;
+      const result = await pool.query(
+        `
+          INSERT INTO business_inspection_files
+            (inspection_id, file_type, original_name, stored_name, file_path, mime_type, file_size)
+          VALUES
+            ($1, $2, $3, $4, $5, $6, $7)
+          RETURNING *
+        `,
+        [
+          inspectionId,
+          fileType,
+          decodeUploadFilename(uploadedFile.originalname),
+          uploadedFile.filename,
+          relativePath,
+          uploadedFile.mimetype || "",
+          uploadedFile.size || 0,
+        ]
+      );
+      insertedRows.push(mapBusinessInspectionFile(result.rows[0]));
+    }
+
+    res.json({ success: true, uploadedCount: insertedRows.length, files: insertedRows });
+  } catch (error) {
+    console.error(error);
+    const uploadedFiles = Array.isArray(req.files) ? req.files : (req.file ? [req.file] : []);
+    uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
+    res.status(500).json({ error: "Denetim dosyası yüklenemedi." });
+  }
+});
+
+app.delete("/api/business-inspection-files/:fileId", async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const fileResult = await pool.query("SELECT * FROM business_inspection_files WHERE id = $1", [fileId]);
+
+    if (fileResult.rows.length === 0) {
+      return res.status(404).json({ error: "Dosya bulunamadı." });
+    }
+
+    const fileRow = fileResult.rows[0];
+    const absolutePath = path.join(__dirname, fileRow.file_path.replace(/^\/uploads\//, "uploads/"));
+
+    await pool.query("DELETE FROM business_inspection_files WHERE id = $1", [fileId]);
     safeUnlink(absolutePath);
 
     res.json({ success: true });
@@ -3616,6 +3812,12 @@ app.get("/businesses/:id", (req, res) => {
     .inspection-note-body { font-size: 13px; line-height: 1.65; color: var(--text); white-space: pre-line; }
     .inspection-card-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
     .inspection-footer-meta { font-size: 12px; color: var(--muted); }
+    .inspection-attachments { border-top: 1px solid #edf2f7; padding-top: 12px; display: grid; gap: 12px; }
+    .inspection-attachments-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .inspection-upload-row { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+    .inspection-file-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .inspection-file-column { display: grid; gap: 8px; }
+    .inspection-file-group-title { font-size: 12px; font-weight: 700; color: #334155; }
     .badge.info { background: #dbeafe; color: #1d4ed8; }
     .badge.danger { background: #fee2e2; color: #b91c1c; }
 
@@ -3673,7 +3875,7 @@ app.get("/businesses/:id", (req, res) => {
       .app { grid-template-columns: minmax(0, 1fr); }
       .sidebar { display: none; }
       .main { padding: 14px; }
-      .stats-grid, .summary-grid, .license-layout, .form-grid, .inspection-summary-bar, .inspection-grid, .upload-shell { grid-template-columns: 1fr; }
+      .stats-grid, .summary-grid, .license-layout, .form-grid, .inspection-summary-bar, .inspection-grid, .upload-shell, .inspection-file-columns, .inspection-upload-row { grid-template-columns: 1fr; }
       .hero-title { font-size: 22px; }
       .drawer { width: 100vw; }
       .inspection-card-head, .inspection-card-footer { flex-direction: column; align-items: stretch; }
@@ -3763,71 +3965,6 @@ app.get("/businesses/:id", (req, res) => {
           <button class="btn btn-primary" type="button" id="openInspectionBtnSection">+ Yeni Denetim Ekle</button>
         </div>
         <div id="inspectionContainer" class="loading">Denetim geçmişi yükleniyor...</div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">Fotoğraf / Evrak</div>
-            <div class="panel-subtitle">Firmaya ait ruhsat, tutanak ve saha fotoğraflarını bu bölümde tutabilirsin.</div>
-          </div>
-        </div>
-        <div class="upload-shell">
-          <div class="upload-card">
-            <div class="upload-card-title">Yeni Dosya Yükle</div>
-            <div class="upload-card-subtitle">Fotoğrafları çoklu, evrakları tek dosya olarak yükleyebilirsin.</div>
-            <form id="businessFileForm">
-              <div class="form-grid" style="grid-template-columns: 1fr;">
-                <div class="form-group">
-                  <label for="businessFileType">Dosya Türü</label>
-                  <select id="businessFileType">
-                    <option value="photo">Fotoğraf</option>
-                    <option value="document">Evrak</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label for="businessFileCategory">Kategori</label>
-                  <select id="businessFileCategory"></select>
-                </div>
-                <div class="form-group">
-                  <label for="businessFileDescription">Açıklama</label>
-                  <textarea id="businessFileDescription" class="compact-textarea" placeholder="Kısa açıklama veya not"></textarea>
-                </div>
-                <div class="form-group">
-                  <label for="businessFileInput">Dosya Seç</label>
-                  <input type="file" id="businessFileInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp" multiple />
-                  <div class="upload-help" id="businessFileHelp">Fotoğrafta birden fazla seçim yapılabilir.</div>
-                </div>
-              </div>
-              <div id="businessFileMessage" class="form-message"></div>
-              <div class="upload-actions">
-                <button class="btn btn-primary" type="submit" id="businessFileSubmitBtn">Dosya Yükle</button>
-              </div>
-            </form>
-          </div>
-
-          <div class="file-group">
-            <div>
-              <div class="group-head">
-                <div>
-                  <div class="group-title">Fotoğraflar</div>
-                  <div class="group-subtitle">Dış görünüş, iç görünüş, denetim ve ruhsat fotoğrafları</div>
-                </div>
-              </div>
-              <div id="businessPhotoList" class="loading" style="margin-top:10px;">Fotoğraflar yükleniyor...</div>
-            </div>
-
-            <div>
-              <div class="group-head">
-                <div>
-                  <div class="group-title">Evraklar</div>
-                  <div class="group-subtitle">Ruhsat belgesi, tutanak, ihtar, tebligat ve diğer evraklar</div>
-                </div>
-              </div>
-              <div id="businessDocumentList" class="loading" style="margin-top:10px;">Evraklar yükleniyor...</div>
-            </div>
-          </div>
-        </div>
       </section>
     </main>
   </div>
@@ -3946,13 +4083,8 @@ app.get("/businesses/:id", (req, res) => {
     var businessId = ${businessId};
     var currentBusiness = null;
     var inspections = [];
-    var businessFiles = [];
+    var inspectionFiles = [];
     var activeEditor = null;
-
-    var businessFileCategories = {
-      photo: ['İşyeri Dış Görünüş', 'İşyeri İç Görünüş', 'Ruhsat Fotoğrafı', 'Denetim Fotoğrafı', 'Diğer Fotoğraf'],
-      document: ['Ruhsat Belgesi', 'Tutanak', 'İhtar', 'Ceza Belgesi', 'Tebligat', 'Diğer Evrak']
-    };
 
     function escapeHtml(value) {
       if (value === null || value === undefined) return '';
@@ -4015,49 +4147,43 @@ app.get("/businesses/:id", (req, res) => {
       return (size / (1024 * 1024)).toFixed(1).replace(/\.0$/, '') + ' MB';
     }
 
-    function updateBusinessFileCategoryOptions() {
-      var type = document.getElementById('businessFileType').value;
-      var select = document.getElementById('businessFileCategory');
-      var input = document.getElementById('businessFileInput');
-      var help = document.getElementById('businessFileHelp');
-      var options = businessFileCategories[type] || [];
-      select.innerHTML = options.map(function(item) {
-        return '<option value="' + escapeHtml(item) + '">' + escapeHtml(item) + '</option>';
-      }).join('');
-      input.multiple = type === 'photo';
-      help.textContent = type === 'photo'
-        ? 'Fotoğrafta birden fazla seçim yapılabilir.'
-        : 'Evrakta aynı anda tek dosya seçebilirsin.';
+    function getInspectionFiles(inspectionId, fileType) {
+      return inspectionFiles.filter(function(item) {
+        return String(item.inspectionId) === String(inspectionId) && (!fileType || item.fileType === fileType);
+      });
     }
 
-    function buildBusinessFileCard(file) {
+    function buildInspectionFileCard(file) {
       var thumb = file.isImage
         ? '<div class="file-thumb"><img src="' + escapeHtml(file.url) + '" alt="' + escapeHtml(file.originalName) + '"></div>'
         : '<div class="file-thumb"><div class="file-thumb-icon">📄</div></div>';
 
       var html = '<article class="file-card">' + thumb + '<div class="file-body">';
       html += '<div class="file-name">' + escapeHtml(file.originalName || 'Dosya') + '</div>';
-      html += '<div class="file-tags"><span class="file-tag">' + escapeHtml(file.fileType === 'photo' ? 'Fotoğraf' : 'Evrak') + '</span><span class="file-tag gray">' + escapeHtml(file.category || 'Kategori yok') + '</span></div>';
-      html += '<div class="file-meta">' + escapeHtml(file.description || 'Açıklama girilmedi.') + '</div>';
+      html += '<div class="file-tags"><span class="file-tag">' + escapeHtml(file.fileType === 'photo' ? 'Fotoğraf' : 'Evrak') + '</span></div>';
       html += '<div class="file-meta">Boyut: ' + escapeHtml(formatFileSize(file.fileSize)) + ' • Yüklenme: ' + escapeHtml(file.createdAt || '-') + '</div>';
-      html += '<div class="file-actions"><a class="mini-btn primary" target="_blank" rel="noopener noreferrer" href="' + escapeHtml(file.url) + '">Aç</a><button class="mini-btn danger" type="button" onclick="deleteBusinessFile(' + file.id + ')">Sil</button></div>';
+      html += '<div class="file-actions"><a class="mini-btn primary" target="_blank" rel="noopener noreferrer" href="' + escapeHtml(file.url) + '">Aç</a><button class="mini-btn danger" type="button" onclick="deleteInspectionFile(' + file.id + ')">Sil</button></div>';
       html += '</div></article>';
       return html;
     }
 
-    function renderBusinessFiles() {
-      var photoList = document.getElementById('businessPhotoList');
-      var documentList = document.getElementById('businessDocumentList');
-      var photos = businessFiles.filter(function(item) { return item.fileType === 'photo'; });
-      var documents = businessFiles.filter(function(item) { return item.fileType === 'document'; });
+    function renderInspectionFileGroup(inspectionId, fileType, emptyText) {
+      var files = getInspectionFiles(inspectionId, fileType);
+      return files.length
+        ? '<div class="file-grid">' + files.map(buildInspectionFileCard).join('') + '</div>'
+        : '<div class="empty-file-box">' + emptyText + '</div>';
+    }
 
-      photoList.innerHTML = photos.length
-        ? '<div class="file-grid">' + photos.map(buildBusinessFileCard).join('') + '</div>'
-        : '<div class="empty-file-box">Bu firmaya ait henüz fotoğraf yüklenmedi.</div>';
-
-      documentList.innerHTML = documents.length
-        ? '<div class="file-grid">' + documents.map(buildBusinessFileCard).join('') + '</div>'
-        : '<div class="empty-file-box">Bu firmaya ait henüz evrak yüklenmedi.</div>';
+    function updateInspectionFileInputState(inspectionId) {
+      var select = document.getElementById('inspectionFileType_' + inspectionId);
+      var input = document.getElementById('inspectionFileInput_' + inspectionId);
+      var help = document.getElementById('inspectionFileHelp_' + inspectionId);
+      if (!select || !input || !help) return;
+      var type = select.value;
+      input.multiple = type === 'photo';
+      help.textContent = type === 'photo'
+        ? 'Fotoğrafta birden fazla seçim yapılabilir.'
+        : 'Evrakta aynı anda tek dosya seçebilirsin.';
     }
 
     function setMessage(id, message, kind) {
@@ -4156,6 +4282,8 @@ app.get("/businesses/:id", (req, res) => {
       var cards = '';
       for (var i = 0; i < inspections.length; i++) {
         var item = inspections[i];
+        var photoCount = getInspectionFiles(item.id, 'photo').length;
+        var documentCount = getInspectionFiles(item.id, 'document').length;
         cards += '' +
           '<article class="inspection-card">' +
             '<div class="inspection-card-head">' +
@@ -4174,6 +4302,22 @@ app.get("/businesses/:id", (req, res) => {
                 inspectionField('Sonuç Özeti', escapeHtml(item.resultStatus || 'Sonuç girilmedi')) +
               '</div>' +
               (item.note ? '<div class="inspection-note-box"><div class="inspection-note-title">Denetim Notu</div><div class="inspection-note-body">' + escapeHtml(item.note) + '</div></div>' : '') +
+              '<div class="inspection-attachments">' +
+                '<div class="inspection-attachments-head">' +
+                  '<div class="inspection-note-title" style="margin-bottom:0;">Fotoğraf / Evrak</div>' +
+                  '<div class="inspection-footer-meta">' + photoCount + ' fotoğraf • ' + documentCount + ' evrak</div>' +
+                '</div>' +
+                '<div class="inspection-upload-row">' +
+                  '<select id="inspectionFileType_' + item.id + '" onchange="updateInspectionFileInputState(' + item.id + ')"><option value="photo">Fotoğraf</option><option value="document">Evrak</option></select>' +
+                  '<div><input type="file" id="inspectionFileInput_' + item.id + '" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp" multiple /><div class="upload-help" id="inspectionFileHelp_' + item.id + '">Fotoğrafta birden fazla seçim yapılabilir.</div></div>' +
+                  '<button class="mini-btn primary" type="button" onclick="uploadInspectionFiles(' + item.id + ')">Yükle</button>' +
+                '</div>' +
+                '<div id="inspectionFileMessage_' + item.id + '" class="form-message"></div>' +
+                '<div class="inspection-file-columns">' +
+                  '<div class="inspection-file-column"><div class="inspection-file-group-title">Fotoğraflar</div>' + renderInspectionFileGroup(item.id, 'photo', 'Bu denetime ait fotoğraf yüklenmedi.') + '</div>' +
+                  '<div class="inspection-file-column"><div class="inspection-file-group-title">Evraklar</div>' + renderInspectionFileGroup(item.id, 'document', 'Bu denetime ait evrak yüklenmedi.') + '</div>' +
+                '</div>' +
+              '</div>' +
               '<div class="inspection-card-footer">' +
                 '<div class="inspection-footer-meta">Kayıt No: #' + escapeHtml(String(item.id)) + '</div>' +
                 '<div class="action-row"><button class="mini-btn primary" type="button" onclick="openInspectionEditor(' + item.id + ')">Düzenle</button><button class="mini-btn danger" type="button" onclick="deleteInspectionRecord(' + item.id + ')">Sil</button></div>' +
@@ -4183,6 +4327,9 @@ app.get("/businesses/:id", (req, res) => {
       }
 
       container.innerHTML = '<div class="inspection-shell">' + summaryHtml + '<div class="inspection-list">' + cards + '</div></div>';
+      for (var j = 0; j < inspections.length; j++) {
+        updateInspectionFileInputState(inspections[j].id);
+      }
     }
 
     function fillLicenseForm() {
@@ -4350,7 +4497,7 @@ app.get("/businesses/:id", (req, res) => {
     }
 
     async function deleteInspectionRecord(id) {
-      if (!confirm('Bu denetim kaydı silinsin mi?')) return;
+      if (!confirm('Bu denetim kaydı ve buna bağlı fotoğraf/evraklar silinsin mi?')) return;
       try {
         var response = await fetch('/api/businesses/' + businessId + '/inspections/' + id, { method: 'DELETE' });
         var data = await response.json();
@@ -4383,65 +4530,67 @@ app.get("/businesses/:id", (req, res) => {
       renderInspections();
     }
 
-    async function loadBusinessFiles() {
-      var response = await fetch('/api/businesses/' + businessId + '/files');
+    async function loadInspectionFiles() {
+      var response = await fetch('/api/businesses/' + businessId + '/inspection-files');
       var data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || 'Firma dosyaları yüklenemedi.');
+        throw new Error(data.error || 'Denetim dosyaları yüklenemedi.');
       }
-      businessFiles = data;
-      renderBusinessFiles();
+      inspectionFiles = data;
+      renderInspections();
     }
 
-    async function handleBusinessFileSubmit(event) {
-      event.preventDefault();
-      setMessage('businessFileMessage', '', '');
-      var fileInput = document.getElementById('businessFileInput');
-      if (!fileInput.files || !fileInput.files.length) {
-        setMessage('businessFileMessage', 'Lütfen en az bir dosya seçin.', 'error');
+    async function uploadInspectionFiles(inspectionId) {
+      setMessage('inspectionFileMessage_' + inspectionId, '', '');
+      var fileInput = document.getElementById('inspectionFileInput_' + inspectionId);
+      var typeSelect = document.getElementById('inspectionFileType_' + inspectionId);
+      if (!fileInput || !fileInput.files || !fileInput.files.length) {
+        setMessage('inspectionFileMessage_' + inspectionId, 'Lütfen en az bir dosya seçin.', 'error');
         return;
       }
 
-      var submitButton = document.getElementById('businessFileSubmitBtn');
-      submitButton.disabled = true;
-      submitButton.textContent = 'Yükleniyor...';
+      var uploadButton = null;
+      if (typeof event !== 'undefined' && event && event.currentTarget) {
+        uploadButton = event.currentTarget;
+        uploadButton.disabled = true;
+        uploadButton.textContent = 'Yükleniyor...';
+      }
 
       try {
         var formData = new FormData();
-        formData.append('fileType', document.getElementById('businessFileType').value);
-        formData.append('category', document.getElementById('businessFileCategory').value);
-        formData.append('description', document.getElementById('businessFileDescription').value.trim());
-
+        formData.append('fileType', typeSelect.value);
         for (var i = 0; i < fileInput.files.length; i++) {
           formData.append('files', fileInput.files[i]);
         }
 
-        var response = await fetch('/api/businesses/' + businessId + '/files', {
+        var response = await fetch('/api/business-inspections/' + inspectionId + '/files', {
           method: 'POST',
           body: formData
         });
         var data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Dosya yüklenemedi.');
+        if (!response.ok) throw new Error(data.error || 'Denetim dosyası yüklenemedi.');
 
-        document.getElementById('businessFileDescription').value = '';
-        document.getElementById('businessFileInput').value = '';
-        await loadBusinessFiles();
-        showToast('Dosya yükleme tamamlandı.');
+        fileInput.value = '';
+        await loadInspectionFiles();
+        setMessage('inspectionFileMessage_' + inspectionId, 'Dosya yükleme tamamlandı.', 'success');
+        showToast('Dosya yüklendi.');
       } catch (error) {
-        setMessage('businessFileMessage', error.message || 'Dosya yüklenemedi.', 'error');
+        setMessage('inspectionFileMessage_' + inspectionId, error.message || 'Dosya yüklenemedi.', 'error');
       } finally {
-        submitButton.disabled = false;
-        submitButton.textContent = 'Dosya Yükle';
+        if (uploadButton) {
+          uploadButton.disabled = false;
+          uploadButton.textContent = 'Yükle';
+        }
       }
     }
 
-    async function deleteBusinessFile(fileId) {
+    async function deleteInspectionFile(fileId) {
       if (!confirm('Bu dosya silinsin mi?')) return;
       try {
-        var response = await fetch('/api/business-files/' + fileId, { method: 'DELETE' });
+        var response = await fetch('/api/business-inspection-files/' + fileId, { method: 'DELETE' });
         var data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Dosya silinemedi.');
-        await loadBusinessFiles();
+        await loadInspectionFiles();
         showToast('Dosya silindi.');
       } catch (error) {
         alert(error.message || 'Dosya silinemedi.');
@@ -4461,30 +4610,27 @@ app.get("/businesses/:id", (req, res) => {
         }
       });
       document.getElementById('inspectionCurrentStatus').addEventListener('change', toggleInspectionControlDate);
-      document.getElementById('businessFileType').addEventListener('change', updateBusinessFileCategoryOptions);
       document.getElementById('licenseForm').addEventListener('submit', handleLicenseSubmit);
       document.getElementById('inspectionForm').addEventListener('submit', handleInspectionSubmit);
-      document.getElementById('businessFileForm').addEventListener('submit', handleBusinessFileSubmit);
       document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') closeDrawer();
       });
       window.openInspectionEditor = openInspectionEditor;
       window.deleteInspectionRecord = deleteInspectionRecord;
-      window.deleteBusinessFile = deleteBusinessFile;
-      updateBusinessFileCategoryOptions();
+      window.uploadInspectionFiles = uploadInspectionFiles;
+      window.deleteInspectionFile = deleteInspectionFile;
+      window.updateInspectionFileInputState = updateInspectionFileInputState;
     }
 
     async function initPage() {
       try {
         await loadBusiness();
         await loadInspections();
-        await loadBusinessFiles();
+        await loadInspectionFiles();
       } catch (error) {
         document.getElementById('summaryContainer').innerHTML = '<div class="empty-state">' + escapeHtml(error.message || 'Firma bilgileri yüklenemedi.') + '</div>';
         document.getElementById('licenseContainer').innerHTML = '<div class="empty-state">Firma detayı alınamadı.</div>';
-        document.getElementById('inspectionContainer').innerHTML = '<div class="empty-state">Denetim geçmişi alınamadı.</div>';
-        document.getElementById('businessPhotoList').innerHTML = '<div class="empty-file-box">Fotoğraf bölümü yüklenemedi.</div>';
-        document.getElementById('businessDocumentList').innerHTML = '<div class="empty-file-box">Evrak bölümü yüklenemedi.</div>';
+        document.getElementById('inspectionContainer').innerHTML = '<div class="empty-state">Denetim geçmişi ve dosyalar alınamadı.</div>';
       }
     }
 
