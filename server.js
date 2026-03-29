@@ -1037,6 +1037,24 @@ app.get("/api/businesses", async (req, res) => {
   }
 });
 
+app.get('/api/businesses/export.xlsx', async (req, res) => {
+  try {
+    const filters = await enrichBusinessExportFilters(normalizeBusinessExportFilters(req.query));
+    const allRows = await queryBusinessList();
+    const rows = filterBusinessRows(allRows, filters);
+    const workbook = createBusinessWorkbook(rows, filters);
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const fileName = buildBusinessExportFileName(filters);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + fileName + '"');
+    res.send(buffer);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Firma Excel çıktısı oluşturulamadı.' });
+  }
+});
+
 app.get("/api/businesses/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -1804,23 +1822,7 @@ app.get("/api/inspections/export.xlsx", async (req, res) => {
   }
 });
 
-app.get('/api/businesses/export.xlsx', async (req, res) => {
-  try {
-    const filters = await enrichBusinessExportFilters(normalizeBusinessExportFilters(req.query));
-    const allRows = await queryBusinessList();
-    const rows = filterBusinessRows(allRows, filters);
-    const workbook = createBusinessWorkbook(rows, filters);
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-    const fileName = buildBusinessExportFileName(filters);
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="' + fileName + '"');
-    res.send(buffer);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Firma Excel çıktısı oluşturulamadı.' });
-  }
-});
 
 app.get("/api/geocode/reverse", async (req, res) => {
   try {
