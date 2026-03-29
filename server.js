@@ -1215,7 +1215,6 @@ app.put("/api/businesses/:id/license", async (req, res) => {
       licenseDate,
       businessClass,
       licenseNote,
-      businessNote,
     } = req.body || {};
 
     const exists = await pool.query("SELECT id FROM businesses WHERE id = $1", [id]);
@@ -1232,9 +1231,8 @@ app.put("/api/businesses/:id/license", async (req, res) => {
           license_no = $3,
           license_date = $4,
           business_class = $5,
-          license_note = $6,
-          business_note = $7
-        WHERE id = $8
+          license_note = $6
+        WHERE id = $7
       `,
       [
         activitySubject ? String(activitySubject).trim() : '',
@@ -1243,7 +1241,6 @@ app.put("/api/businesses/:id/license", async (req, res) => {
         licenseDate ? licenseDate : null,
         businessClass ? String(businessClass).trim() : '',
         licenseNote ? String(licenseNote).trim() : '',
-        businessNote ? String(businessNote).trim() : '',
         id,
       ]
     );
@@ -3074,7 +3071,7 @@ app.get("/businesses/:id", (req, res) => {
         <div class="panel-header">
           <div>
             <div class="panel-title">Ruhsat Bilgisi</div>
-            <div class="panel-subtitle">Ruhsat durumu, numarası, veriliş tarihi ve firma iç notları tek kartta tutulur.</div>
+            <div class="panel-subtitle">Ruhsat durumu, numarası, veriliş tarihi ve adres bilgisi tek kartta tutulur.</div>
           </div>
           <button class="btn btn-ghost" type="button" id="openLicenseBtnSection">Düzenle</button>
         </div>
@@ -3105,7 +3102,7 @@ app.get("/businesses/:id", (req, res) => {
       </div>
       <div class="drawer-body">
         <section class="drawer-section" id="licenseSection">
-          <div class="hint-card">Ruhsat ve firma iç notlarını bu panelden düzenleyebilirsin. Kaydet dediğinde kart hemen güncellenir.</div>
+          <div class="hint-card">Ruhsat bilgilerini bu panelden düzenleyebilirsin. Adres bilgisi firma kaydından otomatik çekilir.</div>
           <form id="licenseForm">
             <div class="form-grid">
               <div class="form-group">
@@ -3137,8 +3134,8 @@ app.get("/businesses/:id", (req, res) => {
                 <textarea id="licenseNote" placeholder="Ruhsatla ilgili açıklama veya takip notu"></textarea>
               </div>
               <div class="form-group full">
-                <label for="businessNote">Firma Notu</label>
-                <textarea id="businessNote" placeholder="Firmaya özel iç not"></textarea>
+                <label for="licenseAddressPreview">Adres Bilgisi</label>
+                <textarea id="licenseAddressPreview" readonly placeholder="Firma adresi otomatik gelir"></textarea>
               </div>
             </div>
             <div id="licenseMessage" class="form-message"></div>
@@ -3296,8 +3293,8 @@ app.get("/businesses/:id", (req, res) => {
         '<div class="license-note-box">' +
           '<div class="note-title">Ruhsat Açıklaması</div>' +
           '<div class="note-body">' + escapeHtml(currentBusiness.licenseNote || 'Henüz ruhsat açıklaması girilmedi.') + '</div>' +
-          '<div class="note-title" style="margin-top:14px;">Firma Notu</div>' +
-          '<div class="note-body">' + escapeHtml(currentBusiness.businessNote || 'Henüz firma iç notu girilmedi.') + '</div>' +
+          '<div class="note-title" style="margin-top:14px;">Adres Bilgisi</div>' +
+          '<div class="note-body">' + escapeHtml(currentBusiness.addressText || 'Adres girilmedi.') + '</div>' +
         '</div>';
 
       document.getElementById('licenseContainer').innerHTML = '<div class="license-layout"><div>' + left + '</div><div>' + right + '</div></div>';
@@ -3340,7 +3337,7 @@ app.get("/businesses/:id", (req, res) => {
       document.getElementById('licenseDate').value = currentBusiness ? (currentBusiness.licenseDate || '') : '';
       document.getElementById('businessClass').value = currentBusiness ? (currentBusiness.businessClass || '') : '';
       document.getElementById('licenseNote').value = currentBusiness ? (currentBusiness.licenseNote || '') : '';
-      document.getElementById('businessNote').value = currentBusiness ? (currentBusiness.businessNote || '') : '';
+      document.getElementById('licenseAddressPreview').value = currentBusiness ? (currentBusiness.addressText || '') : '';
       setMessage('licenseMessage', '', '');
     }
 
@@ -3374,7 +3371,7 @@ app.get("/businesses/:id", (req, res) => {
       document.getElementById('inspectionSubmitBtn').style.display = sectionName === 'inspection' ? 'inline-flex' : 'none';
       if (sectionName === 'license') {
         document.getElementById('drawerTitle').textContent = 'Ruhsat Bilgisi Düzenle';
-        document.getElementById('drawerSubtitle').textContent = 'Ruhsat ve firma iç notları bu panelden kaydedilir.';
+        document.getElementById('drawerSubtitle').textContent = 'Ruhsat bilgileri bu panelden kaydedilir. Adres firma kaydından otomatik gelir.';
       } else {
         var editing = !!document.getElementById('editingInspectionId').value;
         document.getElementById('drawerTitle').textContent = editing ? 'Denetim Kaydı Düzenle' : 'Yeni Denetim Ekle';
@@ -3442,8 +3439,7 @@ app.get("/businesses/:id", (req, res) => {
             licenseNo: document.getElementById('licenseNo').value.trim(),
             licenseDate: document.getElementById('licenseDate').value,
             businessClass: document.getElementById('businessClass').value.trim(),
-            licenseNote: document.getElementById('licenseNote').value.trim(),
-            businessNote: document.getElementById('businessNote').value.trim()
+            licenseNote: document.getElementById('licenseNote').value.trim()
           })
         });
         var data = await response.json();
