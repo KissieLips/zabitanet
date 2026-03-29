@@ -2908,9 +2908,11 @@ app.get("/businesses/:id", (req, res) => {
       --danger: #dc2626;
       --warning: #f59e0b;
       --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+      --shadow-strong: 0 20px 48px rgba(15, 23, 42, 0.16);
     }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Inter, "Segoe UI", Arial, sans-serif; background: #f3f6fa; color: var(--text); }
+    body.drawer-open { overflow: hidden; }
     .app { min-height: 100vh; display: grid; grid-template-columns: 208px minmax(0, 1fr); }
     .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #fff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 0; height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); }
     .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
@@ -2937,64 +2939,74 @@ app.get("/businesses/:id", (req, res) => {
     .btn-secondary { background: #64748b; color: #ffffff; }
     .btn-ghost { background: #eef2ff; color: #1d4ed8; border: 1px solid #dbe7ff; }
     .btn-danger { background: var(--danger); color: #ffffff; }
+    .btn[disabled] { opacity: 0.65; cursor: wait; transform: none; }
     .stats-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
     .stat-card { padding: 14px; display: grid; gap: 7px; }
     .stat-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
     .stat-value { font-size: 22px; font-weight: 700; line-height: 1.05; }
     .stat-sub { font-size: 12px; color: var(--muted); }
+    .panel { padding: 16px; margin-bottom: 12px; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    .panel-title { font-size: 15px; font-weight: 700; }
+    .panel-subtitle { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+    .action-row { display: flex; gap: 8px; flex-wrap: wrap; }
     .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-    .info-item { border: 1px solid #e8eef5; border-radius: 12px; background: #fbfdff; padding: 12px; min-height: 88px; }
-    .info-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 7px; }
-    .info-value { font-size: 14px; font-weight: 700; line-height: 1.45; color: #0f172a; white-space: pre-line; }
-    .panel { padding: 14px; margin-bottom: 12px; }
-    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
-    .panel-title { font-size: 16px; font-weight: 700; line-height: 1.25; }
-    .panel-subtitle { font-size: 12px; color: var(--muted); }
-    .license-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
-    .license-note-box { border: 1px solid #e8eef5; border-radius: 12px; background: #fbfdff; padding: 12px; min-height: 100%; }
-    .note-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 7px; }
-    .note-body { font-size: 13px; line-height: 1.7; color: #334155; white-space: pre-line; }
-    .badge { display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .info-item { border: 1px solid var(--line); background: var(--panel-soft); border-radius: 12px; padding: 12px; min-height: 88px; }
+    .info-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; color: var(--muted); margin-bottom: 7px; }
+    .info-value { font-size: 13px; line-height: 1.55; white-space: pre-line; }
+    .license-layout { display: grid; grid-template-columns: 1.3fr 1fr; gap: 12px; }
+    .license-note-box { border: 1px solid var(--line); background: var(--panel-soft); border-radius: 12px; padding: 12px; height: 100%; }
+    .note-title { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+    .note-body { font-size: 13px; line-height: 1.6; white-space: pre-line; }
+    .mini-btn { border: 1px solid var(--line); background: #ffffff; border-radius: 9px; padding: 7px 10px; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none; color: #111827; display: inline-flex; align-items: center; gap: 6px; }
+    .mini-btn.primary { border-color: #cfe0ff; color: #1d4ed8; background: #eef4ff; }
+    .mini-btn.danger { border-color: #fecaca; color: #b91c1c; background: #fff1f2; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
     .badge.success { background: #dcfce7; color: #166534; }
     .badge.warn { background: #fef3c7; color: #92400e; }
-    .badge.gray { background: #eef2f7; color: #475569; }
-    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
-    table { width: 100%; border-collapse: collapse; min-width: 860px; background: #ffffff; }
-    th { text-align: left; padding: 13px 12px; font-size: 12px; color: #475569; border-bottom: 1px solid var(--line); font-weight: 700; background: #f8fafc; }
-    td { padding: 13px 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; vertical-align: top; }
-    tbody tr:hover { background: #f8fbff; }
+    .badge.gray { background: #e5e7eb; color: #374151; }
+    .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; min-width: 860px; }
+    th, td { padding: 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; text-align: left; vertical-align: top; }
+    th { background: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    tr:last-child td { border-bottom: none; }
     .stack { display: grid; gap: 4px; }
-    .muted { color: var(--muted); font-size: 12px; line-height: 1.6; }
-    .mini-btn { border: 1px solid var(--line); background: #ffffff; color: #1f2937; padding: 7px 9px; border-radius: 9px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; }
-    .mini-btn:hover { background: #f8fafc; }
-    .mini-btn.primary { color: #1d4ed8; border-color: #bfdbfe; background: #eff6ff; }
-    .mini-btn.danger { color: #dc2626; border-color: #fecaca; background: #fff1f2; }
-    .action-row { display: flex; gap: 8px; flex-wrap: wrap; }
-    .empty-state { border: 1px dashed var(--line); border-radius: 14px; padding: 20px; text-align: center; color: var(--muted); background: #fafcff; }
-    .loading { padding: 18px; color: var(--muted); }
-    .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 90; }
-    .modal-overlay.show { display: flex; }
-    .modal { width: min(860px, 100%); max-height: calc(100vh - 40px); overflow: auto; background: #ffffff; border-radius: 16px; box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18); border: 1px solid rgba(219, 227, 238, 0.9); }
-    .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); font-size: 16px; font-weight: 700; }
-    .close-btn { border: none; background: #f8fafc; color: #475569; width: 32px; height: 32px; border-radius: 10px; cursor: pointer; font-size: 20px; }
-    .modal-body { padding: 18px; }
-    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 18px; border-top: 1px solid var(--line); }
+    .muted { color: var(--muted); font-size: 12px; }
+    .empty-state, .loading { border: 1px dashed var(--line); border-radius: 12px; background: #fbfdff; padding: 22px; text-align: center; color: var(--muted); font-size: 13px; }
+
+    .drawer-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.42); opacity: 0; pointer-events: none; transition: opacity 0.18s ease; z-index: 120; }
+    .drawer-overlay.show { opacity: 1; pointer-events: auto; }
+    .drawer { position: absolute; right: 0; top: 0; bottom: 0; width: min(560px, 100vw); background: #ffffff; box-shadow: var(--shadow-strong); transform: translateX(100%); transition: transform 0.22s ease; display: flex; flex-direction: column; }
+    .drawer-overlay.show .drawer { transform: translateX(0); }
+    .drawer-header { padding: 18px 18px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .drawer-title { font-size: 17px; font-weight: 700; margin: 0; }
+    .drawer-subtitle { font-size: 12.5px; color: var(--muted); margin-top: 4px; line-height: 1.6; }
+    .close-btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: #ffffff; cursor: pointer; font-size: 18px; }
+    .drawer-body { padding: 18px; overflow: auto; flex: 1; }
+    .drawer-section { display: none; }
+    .drawer-section.active { display: block; }
     .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     .form-group { display: grid; gap: 6px; }
     .form-group.full { grid-column: 1 / -1; }
-    .form-group label { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }
-    .editor-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
-    #licenseEditorSection, #inspectionEditorSection { scroll-margin-top: 18px; }
-    input, select, textarea { width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; background: #ffffff; color: var(--text); }
-    input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+    label { font-size: 12px; font-weight: 700; color: #334155; }
+    input, select, textarea { width: 100%; border: 1px solid #d6dfeb; border-radius: 10px; padding: 11px 12px; font: inherit; background: #ffffff; }
     textarea { min-height: 110px; resize: vertical; }
-    @media (max-width: 1100px) {
-      .summary-grid, .license-layout, .stats-grid { grid-template-columns: 1fr; }
-    }
-    @media (max-width: 760px) {
-      .app { grid-template-columns: 1fr; }
-      .sidebar { position: relative; height: auto; }
-      .form-grid { grid-template-columns: 1fr; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12); }
+    .hint-card { background: #f8fafc; border: 1px solid var(--line); border-radius: 12px; padding: 12px; font-size: 12.5px; color: var(--muted); line-height: 1.6; margin-bottom: 14px; }
+    .drawer-footer { padding: 14px 18px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; background: #ffffff; }
+    .form-message { min-height: 18px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+    .form-message.error { color: #b91c1c; }
+    .form-message.success { color: #166534; }
+    .toast { position: fixed; right: 18px; bottom: 18px; background: #0f172a; color: #ffffff; padding: 12px 14px; border-radius: 12px; font-size: 13px; box-shadow: var(--shadow-strong); opacity: 0; transform: translateY(8px); pointer-events: none; transition: all 0.18s ease; z-index: 140; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 980px) {
+      .app { grid-template-columns: minmax(0, 1fr); }
+      .sidebar { display: none; }
+      .main { padding: 14px; }
+      .stats-grid, .summary-grid, .license-layout, .form-grid { grid-template-columns: 1fr; }
+      .hero-title { font-size: 22px; }
+      .drawer { width: 100vw; }
     }
   </style>
 </head>
@@ -3020,12 +3032,12 @@ app.get("/businesses/:id", (req, res) => {
         <div>
           <div class="crumb"><a href="/businesses">Firma Listesi</a> / <span>Firma Detayı</span></div>
           <h1 class="hero-title" id="pageTitle">Firma Detayı</h1>
-          <p class="hero-text">Bu ekranda firmaya ait temel bilgiler, ruhsat yapısı ve denetim geçmişi tek sayfada izlenir. Sonraki aşamada evrak ve fotoğraf bölümü bunun altına eklenecektir.</p>
+          <p class="hero-text">Bu ekranda firmaya ait temel bilgiler, ruhsat yapısı ve denetim geçmişi tek sayfada izlenir. Ruhsat ve denetim işlemleri sağ panelden düzenlenir.</p>
         </div>
         <div class="toolbar">
           <a class="btn btn-ghost" href="/businesses">← Listeye Dön</a>
-          <a class="btn btn-secondary" id="openLicenseBtnTop" href="#licenseEditorSection" onclick="openLicenseModal(); return false;">Ruhsat Bilgisi Düzenle</a>
-          <a class="btn btn-primary" id="openInspectionBtnTop" href="#inspectionEditorSection" onclick="openInspectionModal(); return false;">+ Yeni Denetim Ekle</a>
+          <button class="btn btn-secondary" type="button" id="openLicenseBtnTop">Ruhsat Bilgisi Düzenle</button>
+          <button class="btn btn-primary" type="button" id="openInspectionBtnTop">+ Yeni Denetim Ekle</button>
         </div>
       </section>
 
@@ -3064,7 +3076,7 @@ app.get("/businesses/:id", (req, res) => {
             <div class="panel-title">Ruhsat Bilgisi</div>
             <div class="panel-subtitle">Ruhsat durumu, numarası, veriliş tarihi ve firma iç notları tek kartta tutulur.</div>
           </div>
-          <a class="btn btn-ghost" id="openLicenseBtnSection" href="#licenseEditorSection" onclick="openLicenseModal(); return false;">Düzenle</a>
+          <button class="btn btn-ghost" type="button" id="openLicenseBtnSection">Düzenle</button>
         </div>
         <div id="licenseContainer" class="loading">Ruhsat bilgileri yükleniyor...</div>
       </section>
@@ -3075,121 +3087,128 @@ app.get("/businesses/:id", (req, res) => {
             <div class="panel-title">Denetim Geçmişi</div>
             <div class="panel-subtitle">Bu firmaya ait denetim kayıtları tarih sırasıyla burada tutulur.</div>
           </div>
-          <a class="btn btn-primary" id="openInspectionBtnSection" href="#inspectionEditorSection" onclick="openInspectionModal(); return false;">+ Yeni Denetim Ekle</a>
+          <button class="btn btn-primary" type="button" id="openInspectionBtnSection">+ Yeni Denetim Ekle</button>
         </div>
         <div id="inspectionContainer" class="loading">Denetim geçmişi yükleniyor...</div>
       </section>
     </main>
   </div>
 
-  <section class="panel" id="licenseEditorSection">
-    <div class="panel-header">
-      <div>
-        <div class="panel-title">Ruhsat Düzenleme Alanı</div>
-        <div class="panel-subtitle">Ruhsat ve firma iç notlarını burada düzenleyip kaydedebilirsiniz.</div>
+  <div class="drawer-overlay" id="editorOverlay" aria-hidden="true">
+    <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+      <div class="drawer-header">
+        <div>
+          <h2 class="drawer-title" id="drawerTitle">Düzenleme Paneli</h2>
+          <div class="drawer-subtitle" id="drawerSubtitle">Seçilen işlem burada açılır.</div>
+        </div>
+        <button class="close-btn" type="button" id="closeDrawerBtn">×</button>
       </div>
-      <div class="muted">Düzenleme alanı</div>
-    </div>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Faaliyet Konusu</label>
-        <input type="text" id="licenseActivitySubject" placeholder="Örnek: Gıda satışı" />
-      </div>
-      <div class="form-group">
-        <label>Ruhsat Durumu</label>
-        <select id="licenseStatus">
-          <option value="Yok">Yok</option>
-          <option value="Var">Var</option>
-          <option value="Başvuru Aşamasında">Başvuru Aşamasında</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Ruhsat No</label>
-        <input type="text" id="licenseNo" placeholder="Ruhsat numarası" />
-      </div>
-      <div class="form-group">
-        <label>Veriliş Tarihi</label>
-        <input type="date" id="licenseDate" />
-      </div>
-      <div class="form-group">
-        <label>İşyeri Sınıfı / Türü</label>
-        <input type="text" id="businessClass" placeholder="Örnek: 2. Sınıf Gayrisıhhi Müessese" />
-      </div>
-      <div class="form-group full">
-        <label>Ruhsat Açıklaması</label>
-        <textarea id="licenseNote" placeholder="Ruhsatla ilgili açıklama veya takip notu"></textarea>
-      </div>
-      <div class="form-group full">
-        <label>Firma Notu</label>
-        <textarea id="businessNote" placeholder="Firmaya özel iç not"></textarea>
-      </div>
-    </div>
-    <div class="editor-actions">
-      <button class="btn btn-secondary" type="button" onclick="openLicenseModal()">Formu Yenile</button>
-      <button class="btn btn-primary" type="button" onclick="saveLicenseInfo()">Kaydet</button>
-    </div>
-  </section>
+      <div class="drawer-body">
+        <section class="drawer-section" id="licenseSection">
+          <div class="hint-card">Ruhsat ve firma iç notlarını bu panelden düzenleyebilirsin. Kaydet dediğinde kart hemen güncellenir.</div>
+          <form id="licenseForm">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="licenseActivitySubject">Faaliyet Konusu</label>
+                <input type="text" id="licenseActivitySubject" placeholder="Örnek: Gıda satışı" />
+              </div>
+              <div class="form-group">
+                <label for="licenseStatus">Ruhsat Durumu</label>
+                <select id="licenseStatus">
+                  <option value="Yok">Yok</option>
+                  <option value="Var">Var</option>
+                  <option value="Başvuru Aşamasında">Başvuru Aşamasında</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="licenseNo">Ruhsat No</label>
+                <input type="text" id="licenseNo" placeholder="Ruhsat numarası" />
+              </div>
+              <div class="form-group">
+                <label for="licenseDate">Veriliş Tarihi</label>
+                <input type="date" id="licenseDate" />
+              </div>
+              <div class="form-group full">
+                <label for="businessClass">İşyeri Sınıfı / Türü</label>
+                <input type="text" id="businessClass" placeholder="Örnek: 2. Sınıf Gayrisıhhi Müessese" />
+              </div>
+              <div class="form-group full">
+                <label for="licenseNote">Ruhsat Açıklaması</label>
+                <textarea id="licenseNote" placeholder="Ruhsatla ilgili açıklama veya takip notu"></textarea>
+              </div>
+              <div class="form-group full">
+                <label for="businessNote">Firma Notu</label>
+                <textarea id="businessNote" placeholder="Firmaya özel iç not"></textarea>
+              </div>
+            </div>
+            <div id="licenseMessage" class="form-message"></div>
+          </form>
+        </section>
 
-  <section class="panel" id="inspectionEditorSection">
-    <div class="panel-header">
-      <div>
-        <div class="panel-title" id="inspectionModalTitle">Yeni Denetim Ekle</div>
-        <div class="panel-subtitle" id="inspectionEditorHint">Yeni denetim kaydını bu alandan oluşturabilirsiniz.</div>
+        <section class="drawer-section" id="inspectionSection">
+          <div class="hint-card">Yeni denetim ekleyebilir ya da mevcut kaydı düzenleyebilirsin. Süre verildi ise kontrol tarihini de gir.</div>
+          <form id="inspectionForm">
+            <input type="hidden" id="editingInspectionId" />
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="inspectionDate">Denetim Tarihi *</label>
+                <input type="date" id="inspectionDate" required />
+              </div>
+              <div class="form-group">
+                <label for="inspectionType">Denetim Türü</label>
+                <input type="text" id="inspectionType" placeholder="Örnek: Genel denetim" />
+              </div>
+              <div class="form-group">
+                <label for="inspectionResultStatus">Sonuç</label>
+                <select id="inspectionResultStatus">
+                  <option value="">Seçiniz</option>
+                  <option value="Uygun">Uygun</option>
+                  <option value="Eksik Var">Eksik Var</option>
+                  <option value="Uyarı Yapıldı">Uyarı Yapıldı</option>
+                  <option value="İşlem Yapıldı">İşlem Yapıldı</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="inspectionCurrentStatus">Durum</label>
+                <select id="inspectionCurrentStatus">
+                  <option value="">Seçiniz</option>
+                  <option value="Açık">Açık</option>
+                  <option value="Kapatıldı">Kapatıldı</option>
+                  <option value="Süre Verildi">Süre Verildi</option>
+                </select>
+              </div>
+              <div class="form-group full">
+                <label for="inspectionActionTaken">Yapılan İşlem</label>
+                <input type="text" id="inspectionActionTaken" placeholder="Örnek: İhtar verildi" />
+              </div>
+              <div class="form-group" id="inspectionControlDateGroup" style="display:none;">
+                <label for="inspectionControlDate">Kontrol Tarihi</label>
+                <input type="date" id="inspectionControlDate" />
+              </div>
+              <div class="form-group full">
+                <label for="inspectionNote">Not</label>
+                <textarea id="inspectionNote" placeholder="Denetim tespitleri veya kısa açıklama"></textarea>
+              </div>
+            </div>
+            <div id="inspectionMessage" class="form-message"></div>
+          </form>
+        </section>
       </div>
-      <div class="muted">Düzenleme alanı</div>
-    </div>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Denetim Tarihi *</label>
-        <input type="date" id="inspectionDate" />
+      <div class="drawer-footer">
+        <button class="btn btn-secondary" type="button" id="cancelDrawerBtn">Kapat</button>
+        <button class="btn btn-primary" type="submit" form="licenseForm" id="licenseSubmitBtn">Kaydet</button>
+        <button class="btn btn-primary" type="submit" form="inspectionForm" id="inspectionSubmitBtn">Kaydet</button>
       </div>
-      <div class="form-group">
-        <label>Denetim Türü</label>
-        <input type="text" id="inspectionType" placeholder="Örnek: Genel denetim" />
-      </div>
-      <div class="form-group">
-        <label>Sonuç</label>
-        <select id="inspectionResultStatus">
-          <option value="">Seçiniz</option>
-          <option value="Uygun">Uygun</option>
-          <option value="Eksik Var">Eksik Var</option>
-          <option value="Uyarı Yapıldı">Uyarı Yapıldı</option>
-          <option value="İşlem Yapıldı">İşlem Yapıldı</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Durum</label>
-        <select id="inspectionCurrentStatus" onchange="toggleInspectionControlDate()">
-          <option value="">Seçiniz</option>
-          <option value="Açık">Açık</option>
-          <option value="Kapatıldı">Kapatıldı</option>
-          <option value="Süre Verildi">Süre Verildi</option>
-        </select>
-      </div>
-      <div class="form-group full">
-        <label>Yapılan İşlem</label>
-        <input type="text" id="inspectionActionTaken" placeholder="Örnek: İhtar verildi" />
-      </div>
-      <div class="form-group" id="inspectionControlDateGroup" style="display:none;">
-        <label>Kontrol Tarihi</label>
-        <input type="date" id="inspectionControlDate" />
-      </div>
-      <div class="form-group full">
-        <label>Not</label>
-        <textarea id="inspectionNote" placeholder="Denetim tespitleri veya kısa açıklama"></textarea>
-      </div>
-    </div>
-    <div class="editor-actions">
-      <button class="btn btn-secondary" type="button" onclick="openInspectionModal()">Yeni Kayıt Formu</button>
-      <button class="btn btn-primary" type="button" onclick="saveInspection()">Kaydet</button>
-    </div>
-  </section>
+    </aside>
+  </div>
+
+  <div class="toast" id="toast"></div>
 
   <script>
     var businessId = ${businessId};
     var currentBusiness = null;
     var inspections = [];
-    var editingInspectionId = null;
+    var activeEditor = null;
 
     function escapeHtml(value) {
       if (value === null || value === undefined) return '';
@@ -3199,24 +3218,6 @@ app.get("/businesses/:id", (req, res) => {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
-    }
-
-    function closeModal(id) {
-      return;
-    }
-
-    function openModal(id) {
-      return;
-    }
-
-    function scrollToId(id) {
-      var el = document.getElementById(id);
-      if (!el) return;
-      try {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } catch (error) {
-        el.scrollIntoView();
-      }
     }
 
     function badgeForLicense(status) {
@@ -3232,6 +3233,25 @@ app.get("/businesses/:id", (req, res) => {
       return '<span class="badge gray">Belirtilmedi</span>';
     }
 
+    function setMessage(id, message, kind) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = message || '';
+      el.className = 'form-message' + (kind ? ' ' + kind : '');
+    }
+
+    var toastTimer = null;
+    function showToast(message) {
+      var toast = document.getElementById('toast');
+      if (!toast) return;
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function() {
+        toast.classList.remove('show');
+      }, 2200);
+    }
+
     function renderSummary() {
       if (!currentBusiness) return;
       document.getElementById('pageTitle').textContent = currentBusiness.tradeName || 'Firma Detayı';
@@ -3243,7 +3263,8 @@ app.get("/businesses/:id", (req, res) => {
           '<div class="info-item"><div class="info-label">İşyeri Sahibi</div><div class="info-value">' + escapeHtml(currentBusiness.ownerName || '-') + '</div></div>' +
           '<div class="info-item"><div class="info-label">Telefon</div><div class="info-value">' + escapeHtml(currentBusiness.phone || 'Belirtilmedi') + '</div></div>' +
           '<div class="info-item"><div class="info-label">Adres</div><div class="info-value">' + escapeHtml(currentBusiness.addressText || 'Adres girilmedi') + '</div></div>' +
-          '<div class="info-item"><div class="info-label">Ada / Parsel</div><div class="info-value">Ada: ' + escapeHtml(currentBusiness.ada || '-') + '\nParsel: ' + escapeHtml(currentBusiness.parcel || '-') + '</div></div>' +
+          '<div class="info-item"><div class="info-label">Ada / Parsel</div><div class="info-value">Ada: ' + escapeHtml(currentBusiness.ada || '-') + '
+Parsel: ' + escapeHtml(currentBusiness.parcel || '-') + '</div></div>' +
           '<div class="info-item"><div class="info-label">Faaliyet Konusu</div><div class="info-value">' + escapeHtml(currentBusiness.activitySubject || 'Henüz girilmedi') + '</div></div>' +
           '<div class="info-item"><div class="info-label">Kayıt Tarihi</div><div class="info-value">' + escapeHtml(currentBusiness.createdAt || '-') + '</div></div>' +
           '<div class="info-item"><div class="info-label">Konum</div><div class="info-value">' + escapeHtml(currentBusiness.locationText || 'Konum eklenmedi') + '</div></div>' +
@@ -3306,14 +3327,14 @@ app.get("/businesses/:id", (req, res) => {
           '<td>' + escapeHtml(item.resultStatus || 'Belirtilmedi') + '</td>' +
           '<td><div class="stack"><span>' + escapeHtml(item.actionTaken || 'Belirtilmedi') + '</span>' + (item.note ? '<span class="muted">' + escapeHtml(item.note) + '</span>' : '') + '</div></td>' +
           '<td><div class="stack">' + badgeForInspectionStatus(item.currentStatus) + (item.controlDateText ? '<span class="muted">Kontrol: ' + escapeHtml(item.controlDateText) + '</span>' : '') + '</div></td>' +
-          '<td><div class="action-row"><button class="mini-btn primary" onclick="openInspectionModal(' + item.id + ')">Düzenle</button><button class="mini-btn danger" onclick="deleteInspection(' + item.id + ')">Sil</button></div></td>' +
+          '<td><div class="action-row"><button class="mini-btn primary" type="button" onclick="openInspectionEditor(' + item.id + ')">Düzenle</button><button class="mini-btn danger" type="button" onclick="deleteInspectionRecord(' + item.id + ')">Sil</button></div></td>' +
         '</tr>';
       }
 
       container.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Tarih</th><th>Denetim Türü</th><th>Sonuç</th><th>Yapılan İşlem / Not</th><th>Durum</th><th>İşlemler</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
     }
 
-    function openLicenseModal() {
+    function fillLicenseForm() {
       document.getElementById('licenseActivitySubject').value = currentBusiness ? (currentBusiness.activitySubject || '') : '';
       document.getElementById('licenseStatus').value = currentBusiness ? (currentBusiness.licenseStatus || 'Yok') : 'Yok';
       document.getElementById('licenseNo').value = currentBusiness ? (currentBusiness.licenseNo || '') : '';
@@ -3321,10 +3342,97 @@ app.get("/businesses/:id", (req, res) => {
       document.getElementById('businessClass').value = currentBusiness ? (currentBusiness.businessClass || '') : '';
       document.getElementById('licenseNote').value = currentBusiness ? (currentBusiness.licenseNote || '') : '';
       document.getElementById('businessNote').value = currentBusiness ? (currentBusiness.businessNote || '') : '';
-      scrollToId('licenseEditorSection');
+      setMessage('licenseMessage', '', '');
     }
 
-    async function saveLicenseInfo() {
+    function resetInspectionForm() {
+      document.getElementById('editingInspectionId').value = '';
+      document.getElementById('inspectionDate').value = new Date().toISOString().slice(0, 10);
+      document.getElementById('inspectionType').value = '';
+      document.getElementById('inspectionResultStatus').value = '';
+      document.getElementById('inspectionCurrentStatus').value = '';
+      document.getElementById('inspectionActionTaken').value = '';
+      document.getElementById('inspectionControlDate').value = '';
+      document.getElementById('inspectionNote').value = '';
+      toggleInspectionControlDate();
+      setMessage('inspectionMessage', '', '');
+    }
+
+    function toggleInspectionControlDate() {
+      var group = document.getElementById('inspectionControlDateGroup');
+      var status = document.getElementById('inspectionCurrentStatus').value;
+      group.style.display = status === 'Süre Verildi' ? 'grid' : 'none';
+      if (status !== 'Süre Verildi') {
+        document.getElementById('inspectionControlDate').value = '';
+      }
+    }
+
+    function setActiveSection(sectionName) {
+      activeEditor = sectionName;
+      document.getElementById('licenseSection').classList.toggle('active', sectionName === 'license');
+      document.getElementById('inspectionSection').classList.toggle('active', sectionName === 'inspection');
+      document.getElementById('licenseSubmitBtn').style.display = sectionName === 'license' ? 'inline-flex' : 'none';
+      document.getElementById('inspectionSubmitBtn').style.display = sectionName === 'inspection' ? 'inline-flex' : 'none';
+      if (sectionName === 'license') {
+        document.getElementById('drawerTitle').textContent = 'Ruhsat Bilgisi Düzenle';
+        document.getElementById('drawerSubtitle').textContent = 'Ruhsat ve firma iç notları bu panelden kaydedilir.';
+      } else {
+        var editing = !!document.getElementById('editingInspectionId').value;
+        document.getElementById('drawerTitle').textContent = editing ? 'Denetim Kaydı Düzenle' : 'Yeni Denetim Ekle';
+        document.getElementById('drawerSubtitle').textContent = editing ? 'Seçilen denetim kaydını düzenliyorsun.' : 'Firmaya yeni denetim kaydı ekliyorsun.';
+      }
+    }
+
+    function openDrawer(sectionName) {
+      setActiveSection(sectionName);
+      document.getElementById('editorOverlay').classList.add('show');
+      document.body.classList.add('drawer-open');
+    }
+
+    function closeDrawer() {
+      document.getElementById('editorOverlay').classList.remove('show');
+      document.body.classList.remove('drawer-open');
+      setMessage('licenseMessage', '', '');
+      setMessage('inspectionMessage', '', '');
+    }
+
+    function openLicenseEditor() {
+      fillLicenseForm();
+      openDrawer('license');
+    }
+
+    function openInspectionEditor(id) {
+      resetInspectionForm();
+      if (id) {
+        for (var i = 0; i < inspections.length; i++) {
+          if (String(inspections[i].id) === String(id)) {
+            document.getElementById('editingInspectionId').value = id;
+            document.getElementById('inspectionDate').value = inspections[i].inspectionDate || '';
+            document.getElementById('inspectionType').value = inspections[i].inspectionType || '';
+            document.getElementById('inspectionResultStatus').value = inspections[i].resultStatus || '';
+            document.getElementById('inspectionCurrentStatus').value = inspections[i].currentStatus || '';
+            document.getElementById('inspectionActionTaken').value = inspections[i].actionTaken || '';
+            document.getElementById('inspectionControlDate').value = inspections[i].controlDate || '';
+            document.getElementById('inspectionNote').value = inspections[i].note || '';
+            break;
+          }
+        }
+      }
+      toggleInspectionControlDate();
+      openDrawer('inspection');
+    }
+
+    function setSaving(buttonId, saving) {
+      var button = document.getElementById(buttonId);
+      if (!button) return;
+      button.disabled = !!saving;
+      button.textContent = saving ? 'Kaydediliyor...' : 'Kaydet';
+    }
+
+    async function handleLicenseSubmit(event) {
+      event.preventDefault();
+      setMessage('licenseMessage', '', '');
+      setSaving('licenseSubmitBtn', true);
       try {
         var response = await fetch('/api/businesses/' + businessId + '/license', {
           method: 'PUT',
@@ -3339,67 +3447,30 @@ app.get("/businesses/:id", (req, res) => {
             businessNote: document.getElementById('businessNote').value.trim()
           })
         });
-
         var data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Ruhsat bilgisi kaydedilemedi.');
         currentBusiness = data;
         renderSummary();
         renderLicense();
-        openLicenseModal();
-        scrollToId('licenseContainer');
+        closeDrawer();
+        showToast('Ruhsat bilgisi kaydedildi.');
       } catch (error) {
-        alert(error.message || 'Ruhsat bilgisi kaydedilemedi.');
+        setMessage('licenseMessage', error.message || 'Ruhsat bilgisi kaydedilemedi.', 'error');
+      } finally {
+        setSaving('licenseSubmitBtn', false);
       }
     }
 
-    function resetInspectionForm() {
-      editingInspectionId = null;
-      document.getElementById('inspectionModalTitle').textContent = 'Yeni Denetim Ekle';
-      document.getElementById('inspectionEditorHint').textContent = 'Yeni denetim kaydını bu alandan oluşturabilirsiniz.';
-      document.getElementById('inspectionDate').value = new Date().toISOString().slice(0, 10);
-      document.getElementById('inspectionType').value = '';
-      document.getElementById('inspectionResultStatus').value = '';
-      document.getElementById('inspectionCurrentStatus').value = '';
-      document.getElementById('inspectionActionTaken').value = '';
-      document.getElementById('inspectionControlDate').value = '';
-      document.getElementById('inspectionNote').value = '';
-      toggleInspectionControlDate();
-    }
-
-    function toggleInspectionControlDate() {
-      var group = document.getElementById('inspectionControlDateGroup');
-      var status = document.getElementById('inspectionCurrentStatus').value;
-      group.style.display = status === 'Süre Verildi' ? 'grid' : 'none';
-      if (status !== 'Süre Verildi') {
-        document.getElementById('inspectionControlDate').value = '';
+    async function handleInspectionSubmit(event) {
+      event.preventDefault();
+      setMessage('inspectionMessage', '', '');
+      if (!document.getElementById('inspectionDate').value) {
+        setMessage('inspectionMessage', 'Denetim tarihi zorunludur.', 'error');
+        return;
       }
-    }
-
-    function openInspectionModal(id) {
-      resetInspectionForm();
-      if (id) {
-        for (var i = 0; i < inspections.length; i++) {
-          if (String(inspections[i].id) === String(id)) {
-            editingInspectionId = id;
-            document.getElementById('inspectionModalTitle').textContent = 'Denetim Kaydı Düzenle';
-            document.getElementById('inspectionEditorHint').textContent = 'Seçilen denetim kaydını düzenliyorsunuz.';
-            document.getElementById('inspectionDate').value = inspections[i].inspectionDate || '';
-            document.getElementById('inspectionType').value = inspections[i].inspectionType || '';
-            document.getElementById('inspectionResultStatus').value = inspections[i].resultStatus || '';
-            document.getElementById('inspectionCurrentStatus').value = inspections[i].currentStatus || '';
-            document.getElementById('inspectionActionTaken').value = inspections[i].actionTaken || '';
-            document.getElementById('inspectionControlDate').value = inspections[i].controlDate || '';
-            document.getElementById('inspectionNote').value = inspections[i].note || '';
-            toggleInspectionControlDate();
-            break;
-          }
-        }
-      }
-      scrollToId('inspectionEditorSection');
-    }
-
-    async function saveInspection() {
+      setSaving('inspectionSubmitBtn', true);
       try {
+        var editingInspectionId = document.getElementById('editingInspectionId').value;
         var payload = {
           inspectionDate: document.getElementById('inspectionDate').value,
           inspectionType: document.getElementById('inspectionType').value.trim(),
@@ -3409,7 +3480,6 @@ app.get("/businesses/:id", (req, res) => {
           controlDate: document.getElementById('inspectionControlDate').value,
           note: document.getElementById('inspectionNote').value.trim()
         };
-
         var url = '/api/businesses/' + businessId + '/inspections' + (editingInspectionId ? '/' + editingInspectionId : '');
         var method = editingInspectionId ? 'PUT' : 'POST';
         var response = await fetch(url, {
@@ -3420,20 +3490,23 @@ app.get("/businesses/:id", (req, res) => {
         var data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Denetim kaydı kaydedilemedi.');
         await loadInspections();
-        openInspectionModal();
-        scrollToId('inspectionContainer');
+        closeDrawer();
+        showToast(editingInspectionId ? 'Denetim kaydı güncellendi.' : 'Yeni denetim kaydı eklendi.');
       } catch (error) {
-        alert(error.message || 'Denetim kaydı kaydedilemedi.');
+        setMessage('inspectionMessage', error.message || 'Denetim kaydı kaydedilemedi.', 'error');
+      } finally {
+        setSaving('inspectionSubmitBtn', false);
       }
     }
 
-    async function deleteInspection(id) {
+    async function deleteInspectionRecord(id) {
       if (!confirm('Bu denetim kaydı silinsin mi?')) return;
       try {
         var response = await fetch('/api/businesses/' + businessId + '/inspections/' + id, { method: 'DELETE' });
         var data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Denetim kaydı silinemedi.');
         await loadInspections();
+        showToast('Denetim kaydı silindi.');
       } catch (error) {
         alert(error.message || 'Denetim kaydı silinemedi.');
       }
@@ -3460,37 +3533,26 @@ app.get("/businesses/:id", (req, res) => {
       renderInspections();
     }
 
-
     function bindDetailPageActions() {
-      var buttonIds = ['openLicenseBtnTop', 'openLicenseBtnSection'];
-      for (var i = 0; i < buttonIds.length; i++) {
-        var button = document.getElementById(buttonIds[i]);
-        if (button) {
-          button.addEventListener('click', function(event) {
-            event.preventDefault();
-            openLicenseModal();
-          });
+      document.getElementById('openLicenseBtnTop').addEventListener('click', openLicenseEditor);
+      document.getElementById('openLicenseBtnSection').addEventListener('click', openLicenseEditor);
+      document.getElementById('openInspectionBtnTop').addEventListener('click', function() { openInspectionEditor(); });
+      document.getElementById('openInspectionBtnSection').addEventListener('click', function() { openInspectionEditor(); });
+      document.getElementById('closeDrawerBtn').addEventListener('click', closeDrawer);
+      document.getElementById('cancelDrawerBtn').addEventListener('click', closeDrawer);
+      document.getElementById('editorOverlay').addEventListener('click', function(event) {
+        if (event.target === document.getElementById('editorOverlay')) {
+          closeDrawer();
         }
-      }
-
-      var inspectionButtonIds = ['openInspectionBtnTop', 'openInspectionBtnSection'];
-      for (var j = 0; j < inspectionButtonIds.length; j++) {
-        var inspectionButton = document.getElementById(inspectionButtonIds[j]);
-        if (inspectionButton) {
-          inspectionButton.addEventListener('click', function(event) {
-            event.preventDefault();
-            openInspectionModal();
-          });
-        }
-      }
-
-      window.openLicenseModal = openLicenseModal;
-      window.openInspectionModal = openInspectionModal;
-      window.closeModal = closeModal;
-      window.saveLicenseInfo = saveLicenseInfo;
-      window.saveInspection = saveInspection;
-      window.deleteInspection = deleteInspection;
-      window.toggleInspectionControlDate = toggleInspectionControlDate;
+      });
+      document.getElementById('inspectionCurrentStatus').addEventListener('change', toggleInspectionControlDate);
+      document.getElementById('licenseForm').addEventListener('submit', handleLicenseSubmit);
+      document.getElementById('inspectionForm').addEventListener('submit', handleInspectionSubmit);
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') closeDrawer();
+      });
+      window.openInspectionEditor = openInspectionEditor;
+      window.deleteInspectionRecord = deleteInspectionRecord;
     }
 
     async function initPage() {
