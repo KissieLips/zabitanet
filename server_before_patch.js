@@ -2983,8 +2983,6 @@ app.get("/businesses/:id", (req, res) => {
     .form-group { display: grid; gap: 6px; }
     .form-group.full { grid-column: 1 / -1; }
     .form-group label { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }
-    .editor-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
-    #licenseEditorSection, #inspectionEditorSection { scroll-margin-top: 18px; }
     input, select, textarea { width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; background: #ffffff; color: var(--text); }
     input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
     textarea { min-height: 110px; resize: vertical; }
@@ -3024,8 +3022,8 @@ app.get("/businesses/:id", (req, res) => {
         </div>
         <div class="toolbar">
           <a class="btn btn-ghost" href="/businesses">← Listeye Dön</a>
-          <a class="btn btn-secondary" id="openLicenseBtnTop" href="#licenseEditorSection" onclick="openLicenseModal(); return false;">Ruhsat Bilgisi Düzenle</a>
-          <a class="btn btn-primary" id="openInspectionBtnTop" href="#inspectionEditorSection" onclick="openInspectionModal(); return false;">+ Yeni Denetim Ekle</a>
+          <button class="btn btn-secondary" id="openLicenseBtnTop" type="button" onclick="openLicenseModal()">Ruhsat Bilgisi Düzenle</button>
+          <button class="btn btn-primary" id="openInspectionBtnTop" type="button" onclick="openInspectionModal()">+ Yeni Denetim Ekle</button>
         </div>
       </section>
 
@@ -3064,7 +3062,7 @@ app.get("/businesses/:id", (req, res) => {
             <div class="panel-title">Ruhsat Bilgisi</div>
             <div class="panel-subtitle">Ruhsat durumu, numarası, veriliş tarihi ve firma iç notları tek kartta tutulur.</div>
           </div>
-          <a class="btn btn-ghost" id="openLicenseBtnSection" href="#licenseEditorSection" onclick="openLicenseModal(); return false;">Düzenle</a>
+          <button class="btn btn-ghost" id="openLicenseBtnSection" type="button" onclick="openLicenseModal()">Düzenle</button>
         </div>
         <div id="licenseContainer" class="loading">Ruhsat bilgileri yükleniyor...</div>
       </section>
@@ -3075,115 +3073,117 @@ app.get("/businesses/:id", (req, res) => {
             <div class="panel-title">Denetim Geçmişi</div>
             <div class="panel-subtitle">Bu firmaya ait denetim kayıtları tarih sırasıyla burada tutulur.</div>
           </div>
-          <a class="btn btn-primary" id="openInspectionBtnSection" href="#inspectionEditorSection" onclick="openInspectionModal(); return false;">+ Yeni Denetim Ekle</a>
+          <button class="btn btn-primary" id="openInspectionBtnSection" type="button" onclick="openInspectionModal()">+ Yeni Denetim Ekle</button>
         </div>
         <div id="inspectionContainer" class="loading">Denetim geçmişi yükleniyor...</div>
       </section>
     </main>
   </div>
 
-  <section class="panel" id="licenseEditorSection">
-    <div class="panel-header">
-      <div>
-        <div class="panel-title">Ruhsat Düzenleme Alanı</div>
-        <div class="panel-subtitle">Ruhsat ve firma iç notlarını burada düzenleyip kaydedebilirsiniz.</div>
+  <div class="modal-overlay" id="licenseModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span>Ruhsat ve Firma Bilgisi Düzenle</span>
+        <button class="close-btn" onclick="closeModal('licenseModal')">&times;</button>
       </div>
-      <div class="muted">Düzenleme alanı</div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Faaliyet Konusu</label>
+            <input type="text" id="licenseActivitySubject" placeholder="Örnek: Gıda satışı" />
+          </div>
+          <div class="form-group">
+            <label>Ruhsat Durumu</label>
+            <select id="licenseStatus">
+              <option value="Yok">Yok</option>
+              <option value="Var">Var</option>
+              <option value="Başvuru Aşamasında">Başvuru Aşamasında</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Ruhsat No</label>
+            <input type="text" id="licenseNo" placeholder="Ruhsat numarası" />
+          </div>
+          <div class="form-group">
+            <label>Veriliş Tarihi</label>
+            <input type="date" id="licenseDate" />
+          </div>
+          <div class="form-group">
+            <label>İşyeri Sınıfı / Türü</label>
+            <input type="text" id="businessClass" placeholder="Örnek: 2. Sınıf Gayrisıhhi Müessese" />
+          </div>
+          <div class="form-group full">
+            <label>Ruhsat Açıklaması</label>
+            <textarea id="licenseNote" placeholder="Ruhsatla ilgili açıklama veya takip notu"></textarea>
+          </div>
+          <div class="form-group full">
+            <label>Firma Notu</label>
+            <textarea id="businessNote" placeholder="Firmaya özel iç not"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('licenseModal')">İptal</button>
+        <button class="btn btn-primary" onclick="saveLicenseInfo()">Kaydet</button>
+      </div>
     </div>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Faaliyet Konusu</label>
-        <input type="text" id="licenseActivitySubject" placeholder="Örnek: Gıda satışı" />
-      </div>
-      <div class="form-group">
-        <label>Ruhsat Durumu</label>
-        <select id="licenseStatus">
-          <option value="Yok">Yok</option>
-          <option value="Var">Var</option>
-          <option value="Başvuru Aşamasında">Başvuru Aşamasında</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Ruhsat No</label>
-        <input type="text" id="licenseNo" placeholder="Ruhsat numarası" />
-      </div>
-      <div class="form-group">
-        <label>Veriliş Tarihi</label>
-        <input type="date" id="licenseDate" />
-      </div>
-      <div class="form-group">
-        <label>İşyeri Sınıfı / Türü</label>
-        <input type="text" id="businessClass" placeholder="Örnek: 2. Sınıf Gayrisıhhi Müessese" />
-      </div>
-      <div class="form-group full">
-        <label>Ruhsat Açıklaması</label>
-        <textarea id="licenseNote" placeholder="Ruhsatla ilgili açıklama veya takip notu"></textarea>
-      </div>
-      <div class="form-group full">
-        <label>Firma Notu</label>
-        <textarea id="businessNote" placeholder="Firmaya özel iç not"></textarea>
-      </div>
-    </div>
-    <div class="editor-actions">
-      <button class="btn btn-secondary" type="button" onclick="openLicenseModal()">Formu Yenile</button>
-      <button class="btn btn-primary" type="button" onclick="saveLicenseInfo()">Kaydet</button>
-    </div>
-  </section>
+  </div>
 
-  <section class="panel" id="inspectionEditorSection">
-    <div class="panel-header">
-      <div>
-        <div class="panel-title" id="inspectionModalTitle">Yeni Denetim Ekle</div>
-        <div class="panel-subtitle" id="inspectionEditorHint">Yeni denetim kaydını bu alandan oluşturabilirsiniz.</div>
+  <div class="modal-overlay" id="inspectionModal">
+    <div class="modal">
+      <div class="modal-header">
+        <span id="inspectionModalTitle">Yeni Denetim Ekle</span>
+        <button class="close-btn" onclick="closeModal('inspectionModal')">&times;</button>
       </div>
-      <div class="muted">Düzenleme alanı</div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Denetim Tarihi *</label>
+            <input type="date" id="inspectionDate" />
+          </div>
+          <div class="form-group">
+            <label>Denetim Türü</label>
+            <input type="text" id="inspectionType" placeholder="Örnek: Genel denetim" />
+          </div>
+          <div class="form-group">
+            <label>Sonuç</label>
+            <select id="inspectionResultStatus">
+              <option value="">Seçiniz</option>
+              <option value="Uygun">Uygun</option>
+              <option value="Eksik Var">Eksik Var</option>
+              <option value="Uyarı Yapıldı">Uyarı Yapıldı</option>
+              <option value="İşlem Yapıldı">İşlem Yapıldı</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Durum</label>
+            <select id="inspectionCurrentStatus" onchange="toggleInspectionControlDate()">
+              <option value="">Seçiniz</option>
+              <option value="Açık">Açık</option>
+              <option value="Kapatıldı">Kapatıldı</option>
+              <option value="Süre Verildi">Süre Verildi</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label>Yapılan İşlem</label>
+            <input type="text" id="inspectionActionTaken" placeholder="Örnek: İhtar verildi" />
+          </div>
+          <div class="form-group" id="inspectionControlDateGroup" style="display:none;">
+            <label>Kontrol Tarihi</label>
+            <input type="date" id="inspectionControlDate" />
+          </div>
+          <div class="form-group full">
+            <label>Not</label>
+            <textarea id="inspectionNote" placeholder="Denetim tespitleri veya kısa açıklama"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('inspectionModal')">İptal</button>
+        <button class="btn btn-primary" onclick="saveInspection()">Kaydet</button>
+      </div>
     </div>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>Denetim Tarihi *</label>
-        <input type="date" id="inspectionDate" />
-      </div>
-      <div class="form-group">
-        <label>Denetim Türü</label>
-        <input type="text" id="inspectionType" placeholder="Örnek: Genel denetim" />
-      </div>
-      <div class="form-group">
-        <label>Sonuç</label>
-        <select id="inspectionResultStatus">
-          <option value="">Seçiniz</option>
-          <option value="Uygun">Uygun</option>
-          <option value="Eksik Var">Eksik Var</option>
-          <option value="Uyarı Yapıldı">Uyarı Yapıldı</option>
-          <option value="İşlem Yapıldı">İşlem Yapıldı</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Durum</label>
-        <select id="inspectionCurrentStatus" onchange="toggleInspectionControlDate()">
-          <option value="">Seçiniz</option>
-          <option value="Açık">Açık</option>
-          <option value="Kapatıldı">Kapatıldı</option>
-          <option value="Süre Verildi">Süre Verildi</option>
-        </select>
-      </div>
-      <div class="form-group full">
-        <label>Yapılan İşlem</label>
-        <input type="text" id="inspectionActionTaken" placeholder="Örnek: İhtar verildi" />
-      </div>
-      <div class="form-group" id="inspectionControlDateGroup" style="display:none;">
-        <label>Kontrol Tarihi</label>
-        <input type="date" id="inspectionControlDate" />
-      </div>
-      <div class="form-group full">
-        <label>Not</label>
-        <textarea id="inspectionNote" placeholder="Denetim tespitleri veya kısa açıklama"></textarea>
-      </div>
-    </div>
-    <div class="editor-actions">
-      <button class="btn btn-secondary" type="button" onclick="openInspectionModal()">Yeni Kayıt Formu</button>
-      <button class="btn btn-primary" type="button" onclick="saveInspection()">Kaydet</button>
-    </div>
-  </section>
+  </div>
 
   <script>
     var businessId = ${businessId};
@@ -3202,21 +3202,15 @@ app.get("/businesses/:id", (req, res) => {
     }
 
     function closeModal(id) {
-      return;
+      var modal = document.getElementById(id);
+      if (!modal) return;
+      modal.classList.remove('show');
     }
 
     function openModal(id) {
-      return;
-    }
-
-    function scrollToId(id) {
-      var el = document.getElementById(id);
-      if (!el) return;
-      try {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } catch (error) {
-        el.scrollIntoView();
-      }
+      var modal = document.getElementById(id);
+      if (!modal) return;
+      modal.classList.add('show');
     }
 
     function badgeForLicense(status) {
@@ -3321,7 +3315,7 @@ app.get("/businesses/:id", (req, res) => {
       document.getElementById('businessClass').value = currentBusiness ? (currentBusiness.businessClass || '') : '';
       document.getElementById('licenseNote').value = currentBusiness ? (currentBusiness.licenseNote || '') : '';
       document.getElementById('businessNote').value = currentBusiness ? (currentBusiness.businessNote || '') : '';
-      scrollToId('licenseEditorSection');
+      openModal('licenseModal');
     }
 
     async function saveLicenseInfo() {
@@ -3345,8 +3339,7 @@ app.get("/businesses/:id", (req, res) => {
         currentBusiness = data;
         renderSummary();
         renderLicense();
-        openLicenseModal();
-        scrollToId('licenseContainer');
+        closeModal('licenseModal');
       } catch (error) {
         alert(error.message || 'Ruhsat bilgisi kaydedilemedi.');
       }
@@ -3355,7 +3348,6 @@ app.get("/businesses/:id", (req, res) => {
     function resetInspectionForm() {
       editingInspectionId = null;
       document.getElementById('inspectionModalTitle').textContent = 'Yeni Denetim Ekle';
-      document.getElementById('inspectionEditorHint').textContent = 'Yeni denetim kaydını bu alandan oluşturabilirsiniz.';
       document.getElementById('inspectionDate').value = new Date().toISOString().slice(0, 10);
       document.getElementById('inspectionType').value = '';
       document.getElementById('inspectionResultStatus').value = '';
@@ -3382,7 +3374,6 @@ app.get("/businesses/:id", (req, res) => {
           if (String(inspections[i].id) === String(id)) {
             editingInspectionId = id;
             document.getElementById('inspectionModalTitle').textContent = 'Denetim Kaydı Düzenle';
-            document.getElementById('inspectionEditorHint').textContent = 'Seçilen denetim kaydını düzenliyorsunuz.';
             document.getElementById('inspectionDate').value = inspections[i].inspectionDate || '';
             document.getElementById('inspectionType').value = inspections[i].inspectionType || '';
             document.getElementById('inspectionResultStatus').value = inspections[i].resultStatus || '';
@@ -3395,7 +3386,7 @@ app.get("/businesses/:id", (req, res) => {
           }
         }
       }
-      scrollToId('inspectionEditorSection');
+      openModal('inspectionModal');
     }
 
     async function saveInspection() {
@@ -3419,9 +3410,8 @@ app.get("/businesses/:id", (req, res) => {
         });
         var data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Denetim kaydı kaydedilemedi.');
+        closeModal('inspectionModal');
         await loadInspections();
-        openInspectionModal();
-        scrollToId('inspectionContainer');
       } catch (error) {
         alert(error.message || 'Denetim kaydı kaydedilemedi.');
       }
@@ -3503,6 +3493,12 @@ app.get("/businesses/:id", (req, res) => {
         document.getElementById('inspectionContainer').innerHTML = '<div class="empty-state">Denetim geçmişi alınamadı.</div>';
       }
     }
+
+    document.addEventListener('click', function(event) {
+      if (event.target.classList.contains('modal-overlay')) {
+        event.target.classList.remove('show');
+      }
+    });
 
     bindDetailPageActions();
     initPage();
