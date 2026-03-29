@@ -1267,6 +1267,15 @@ app.get("/businesses", (req, res) => {
     .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     .form-group { display: grid; gap: 6px; }
     .form-group.full { grid-column: 1 / -1; }
+    .form-group label { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }
+    .section-block { grid-column: 1 / -1; border: 1px solid #e2e8f0; border-radius: 14px; background: linear-gradient(180deg, #fbfdff 0%, #f8fbff 100%); padding: 14px; display: grid; gap: 12px; }
+    .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .section-title-sm { font-size: 13px; font-weight: 700; color: #0f172a; line-height: 1.3; }
+    .section-note { font-size: 11.5px; color: #64748b; line-height: 1.5; max-width: 680px; }
+    .section-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .address-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .address-inline { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .is-readonly { background: #f8fafc; color: #334155; border-color: #dbe3ee; }
     .parcel-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; grid-column: 1 / -1; }
     .location-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; gap: 8px; align-items: end; }
     .google-link-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; margin-top: 8px; }
@@ -1275,7 +1284,7 @@ app.get("/businesses", (req, res) => {
       .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 840px) {
-      .filters, .form-grid, .location-row, .parcel-row, .google-link-row { grid-template-columns: 1fr; }
+      .filters, .form-grid, .section-grid, .address-grid, .address-inline, .location-row, .parcel-row, .google-link-row { grid-template-columns: 1fr; }
     }
     @media (max-width: 720px) {
       .app { grid-template-columns: 1fr; }
@@ -1340,7 +1349,7 @@ app.get("/businesses", (req, res) => {
         <div class="panel-header">
           <div>
             <div class="panel-title">Firma Listesi</div>
-            <div class="panel-subtitle">Firmaları kategoriye bağlı şekilde yönetin. Mahalle alanı Bucak'ın resmi mahalle listesine göre düzenlendi; cadde / sokak ve kapı no alanlarında önerili + manuel giriş yapısı kullanılır.</div>
+            <div class="panel-subtitle">Firmaları kategoriye bağlı şekilde yönetin. Adres alanları daha düzenli ve kurumsal bir form yapısıyla sunulur.</div>
           </div>
           <div class="toolbar-actions">
             <button class="btn btn-ghost" onclick="openCategoryModal()">Kategori Ekle</button>
@@ -1400,59 +1409,81 @@ app.get("/businesses", (req, res) => {
             <label>Telefon Numarası</label>
             <input type="text" id="businessPhone" placeholder="05xx xxx xx xx" />
           </div>
-          <div class="form-group">
-            <label>İl</label>
-            <select id="businessProvince" disabled>
-              <option value="Burdur">Burdur</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>İlçe</label>
-            <select id="businessDistrict" disabled>
-              <option value="Bucak">Bucak</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Mahalle</label>
-            <select id="businessNeighborhood" onchange="handleNeighborhoodChange()">
-              <option value="">Mahalle seçiniz</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Cadde / Sokak</label>
-            <input type="text" id="businessStreet" list="businessStreetList" placeholder="Önce mahalle seçiniz" oninput="handleStreetInput()" />
-            <datalist id="businessStreetList"></datalist>
-          </div>
-          <div class="parcel-row">
-            <div class="form-group">
-              <label>Kapı No</label>
-              <input type="text" id="businessDoorNo" list="businessDoorNoList" placeholder="Önce cadde / sokak seçiniz" oninput="updateLocationPreview()" />
-              <datalist id="businessDoorNoList"></datalist>
+
+          <div class="section-block">
+            <div class="section-head">
+              <div>
+                <div class="section-title-sm">Adres Bilgisi</div>
+                <div class="section-note">Adres alanları seçim düzeniyle yapılandırıldı. İl ve ilçe sabittir; mahalle, cadde / sokak ve kapı no alanları seçime göre ilerler.</div>
+              </div>
             </div>
-            <div class="form-group">
-              <label>Ada</label>
-              <input type="text" id="businessAda" placeholder="Ada" />
+            <div class="section-grid">
+              <div class="form-group">
+                <label>İl</label>
+                <select id="businessProvince" class="is-readonly" disabled>
+                  <option value="Burdur">Burdur</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>İlçe</label>
+                <select id="businessDistrict" class="is-readonly" disabled>
+                  <option value="Bucak">Bucak</option>
+                </select>
+              </div>
             </div>
-            <div class="form-group">
-              <label>Parsel</label>
-              <input type="text" id="businessParcel" placeholder="Parsel" />
+            <div class="address-grid">
+              <div class="form-group">
+                <label>Mahalle</label>
+                <select id="businessNeighborhood" onchange="handleNeighborhoodChange()">
+                  <option value="">Mahalle seçiniz</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Cadde / Sokak</label>
+                <input type="text" id="businessStreet" list="businessStreetList" placeholder="Önce mahalle seçiniz" oninput="handleStreetInput()" />
+                <datalist id="businessStreetList"></datalist>
+              </div>
+            </div>
+            <div class="address-inline">
+              <div class="form-group">
+                <label>Kapı No</label>
+                <input type="text" id="businessDoorNo" list="businessDoorNoList" placeholder="Önce cadde / sokak seçiniz" oninput="updateLocationPreview()" />
+                <datalist id="businessDoorNoList"></datalist>
+              </div>
+              <div class="form-group">
+                <label>Ada</label>
+                <input type="text" id="businessAda" placeholder="Ada" />
+              </div>
+              <div class="form-group">
+                <label>Parsel</label>
+                <input type="text" id="businessParcel" placeholder="Parsel" />
+              </div>
             </div>
           </div>
-          <div class="form-group full">
-            <label>Konum</label>
-            <div class="location-row">
-              <input type="text" id="businessLocationLat" placeholder="Enlem (Latitude)" />
-              <input type="text" id="businessLocationLng" placeholder="Boylam (Longitude)" />
-              <button class="btn btn-success" id="getLocationBtn" type="button" onclick="fillCurrentLocation()">Konum Al</button>
-              <button class="btn btn-ghost" type="button" onclick="openCurrentLocationInGoogleMaps()">Google Maps Aç</button>
+
+          <div class="section-block">
+            <div class="section-head">
+              <div>
+                <div class="section-title-sm">Konum Bilgisi</div>
+                <div class="section-note">Konum alanında koordinat girişi, cihazdan konum alma ve Google Maps bağlantısından koordinat çözme seçenekleri birlikte sunulur.</div>
+              </div>
             </div>
-            <div class="google-link-row">
-              <input type="text" id="businessGoogleMapsLink" placeholder="Google Maps bağlantısını buraya yapıştırın" />
-              <button class="btn btn-ghost" type="button" onclick="fillLocationFromGoogleMapsLink()">Linkten Al</button>
+            <div class="form-group full">
+              <label>Koordinat Bilgisi</label>
+              <div class="location-row">
+                <input type="text" id="businessLocationLat" placeholder="Enlem (Latitude)" />
+                <input type="text" id="businessLocationLng" placeholder="Boylam (Longitude)" />
+                <button class="btn btn-success" id="getLocationBtn" type="button" onclick="fillCurrentLocation()">Konum Al</button>
+                <button class="btn btn-ghost" type="button" onclick="openCurrentLocationInGoogleMaps()">Google Maps Aç</button>
+              </div>
+              <div class="google-link-row">
+                <input type="text" id="businessGoogleMapsLink" placeholder="Google Maps bağlantısını buraya yapıştırın" />
+                <button class="btn btn-ghost" type="button" onclick="fillLocationFromGoogleMapsLink()">Linkten Al</button>
+              </div>
+              <div class="location-note" id="locationInfoText">Konumu telefondan alabilirsiniz. Telefon yanlış konum verirse Google Maps uygulamasında işyerine uzun basıp bağlantıyı kopyalayın ve buraya yapıştırın.</div>
+              <div class="map-preview" id="locationPreviewRow"></div>
+              <div class="location-note" id="locationResolvedText"></div>
             </div>
-            <div class="location-note" id="locationInfoText">Konumu telefondan alabilirsiniz. Telefon yanlış konum verirse Google Maps uygulamasında işyerine uzun basıp bağlantıyı kopyalayın ve buraya yapıştırın.</div>
-            <div class="map-preview" id="locationPreviewRow"></div>
-            <div class="location-note" id="locationResolvedText"></div>
           </div>
         </div>
       </div>
