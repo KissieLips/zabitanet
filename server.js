@@ -3263,8 +3263,7 @@ app.get("/businesses/:id", (req, res) => {
           '<div class="info-item"><div class="info-label">İşyeri Sahibi</div><div class="info-value">' + escapeHtml(currentBusiness.ownerName || '-') + '</div></div>' +
           '<div class="info-item"><div class="info-label">Telefon</div><div class="info-value">' + escapeHtml(currentBusiness.phone || 'Belirtilmedi') + '</div></div>' +
           '<div class="info-item"><div class="info-label">Adres</div><div class="info-value">' + escapeHtml(currentBusiness.addressText || 'Adres girilmedi') + '</div></div>' +
-          '<div class="info-item"><div class="info-label">Ada / Parsel</div><div class="info-value">Ada: ' + escapeHtml(currentBusiness.ada || '-') + '
-Parsel: ' + escapeHtml(currentBusiness.parcel || '-') + '</div></div>' +
+          '<div class="info-item"><div class="info-label">Ada / Parsel</div><div class="info-value">Ada: ' + escapeHtml(currentBusiness.ada || '-') + '<br>Parsel: ' + escapeHtml(currentBusiness.parcel || '-') + '</div></div>' +
           '<div class="info-item"><div class="info-label">Faaliyet Konusu</div><div class="info-value">' + escapeHtml(currentBusiness.activitySubject || 'Henüz girilmedi') + '</div></div>' +
           '<div class="info-item"><div class="info-label">Kayıt Tarihi</div><div class="info-value">' + escapeHtml(currentBusiness.createdAt || '-') + '</div></div>' +
           '<div class="info-item"><div class="info-label">Konum</div><div class="info-value">' + escapeHtml(currentBusiness.locationText || 'Konum eklenmedi') + '</div></div>' +
