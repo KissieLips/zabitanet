@@ -4,6 +4,7 @@ const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
+const XLSX = require("xlsx");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1432,73 +1433,202 @@ app.delete("/api/businesses/:id/inspections/:inspectionId", async (req, res) => 
   }
 });
 
+function buildInspectionFeedFilters(rawQuery = {}) {
+  return {
+    month: rawQuery.month ? String(rawQuery.month).trim() : '',
+    categoryId: rawQuery.categoryId && String(rawQuery.categoryId).trim() !== 'all' ? Number(rawQuery.categoryId) : null,
+    resultStatus: rawQuery.resultStatus && String(rawQuery.resultStatus).trim() !== 'all' ? String(rawQuery.resultStatus).trim() : '',
+    currentStatus: rawQuery.currentStatus && String(rawQuery.currentStatus).trim() !== 'all' ? String(rawQuery.currentStatus).trim() : '',
+    licenseStatus: rawQuery.licenseStatus && String(rawQuery.licenseStatus).trim() !== 'all' ? String(rawQuery.licenseStatus).trim() : '',
+    search: rawQuery.search ? String(rawQuery.search).trim() : '',
+    categoryName: rawQuery.categoryName ? String(rawQuery.categoryName).trim() : '',
+  };
+}
+
+function buildInspectionFeedQuery(filters = {}) {
+  const { month, categoryId, resultStatus, currentStatus, licenseStatus, search } = buildInspectionFeedFilters(filters);
+  const conditions = [];
+  const values = [];
+
+  if (month) {
+    values.push(String(month) + '-01');
+    conditions.push("DATE_TRUNC('month', bi.inspection_date) = DATE_TRUNC('month', $" + values.length + "::date)");
+  }
+
+  if (Number.isFinite(categoryId) && categoryId > 0) {
+    values.push(categoryId);
+    conditions.push("b.category_id = $" + values.length);
+  }
+
+  if (resultStatus) {
+    values.push(resultStatus);
+    conditions.push("COALESCE(bi.result_status, '') = $" + values.length);
+  }
+
+  if (currentStatus) {
+    values.push(currentStatus);
+    conditions.push("COALESCE(bi.current_status, '') = $" + values.length);
+  }
+
+  if (licenseStatus) {
+    values.push(licenseStatus);
+    conditions.push("COALESCE(b.license_status, 'Yok') = $" + values.length);
+  }
+
+  if (search) {
+    values.push('%' + search + '%');
+    const idx = values.length;
+    conditions.push("(COALESCE(b.trade_name, '') ILIKE $" + idx + " OR COALESCE(b.owner_name, '') ILIKE $" + idx + " OR COALESCE(b.phone, '') ILIKE $" + idx + " OR COALESCE(bc.name, '') ILIKE $" + idx + " OR COALESCE(b.neighborhood, '') ILIKE $" + idx + " OR COALESCE(b.street, '') ILIKE $" + idx + ")");
+  }
+
+  const whereSql = conditions.length ? ('WHERE ' + conditions.join(' AND ')) : '';
+
+  return {
+    whereSql,
+    values,
+    filters: { month, categoryId, resultStatus, currentStatus, licenseStatus, search }
+  };
+}
+
+async function queryInspectionFeed(rawQuery = {}) {
+  const { whereSql, values, filters } = buildInspectionFeedQuery(rawQuery);
+  const result = await pool.query(
+    `
+      SELECT
+        bi.*,
+        b.trade_name,
+        b.owner_name,
+        b.phone,
+        b.category_id,
+        bc.name AS category_name,
+        b.neighborhood,
+        b.street,
+        b.door_no,
+        b.license_status,
+        b.location_lat,
+        b.location_lng
+      FROM business_inspections bi
+      INNER JOIN businesses b ON b.id = bi.business_id
+      LEFT JOIN business_categories bc ON bc.id = b.category_id
+      ${whereSql}
+      ORDER BY bi.inspection_date DESC, bi.id DESC
+    `,
+    values
+  );
+
+  return {
+    rows: result.rows.map(mapInspectionFeed),
+    filters
+  };
+}
+
+function buildInspectionExportFileName(filters = {}) {
+  const monthText = filters.month ? filters.month.replace(/[^0-9-]/g, '') : 'tum-kayitlar';
+  return 'toplu-denetimler-' + monthText + '.xlsx';
+}
+
+function buildInspectionSummaryRows(rows, filters = {}) {
+  const uniqueBusinesses = new Set();
+  let deadlineCount = 0;
+  let overdueCount = 0;
+  const today = new Date().toISOString().slice(0, 10);
+
+  rows.forEach((item) => {
+    if (item.businessId) uniqueBusinesses.add(item.businessId);
+    if (item.currentStatus === 'Süre Verildi') {
+      deadlineCount += 1;
+      if (item.controlDate && item.controlDate < today) overdueCount += 1;
+    }
+  });
+
+  return [
+    { 'Alan': 'Ay', 'Değer': filters.month || 'Tüm aylar' },
+    { 'Alan': 'Kategori', 'Değer': filters.categoryName || (filters.categoryId ? 'Kategori #' + String(filters.categoryId) : 'Tüm kategoriler') },
+    { 'Alan': 'Ruhsat Durumu', 'Değer': filters.licenseStatus || 'Tüm ruhsat durumları' },
+    { 'Alan': 'Sonuç', 'Değer': filters.resultStatus || 'Tüm sonuçlar' },
+    { 'Alan': 'Durum', 'Değer': filters.currentStatus || 'Tüm durumlar' },
+    { 'Alan': 'Arama', 'Değer': filters.search || '-' },
+    { 'Alan': 'Toplam Denetim', 'Değer': rows.length },
+    { 'Alan': 'Firma Sayısı', 'Değer': uniqueBusinesses.size },
+    { 'Alan': 'Süre Verilen', 'Değer': deadlineCount },
+    { 'Alan': 'Geciken Kontrol', 'Değer': overdueCount },
+    { 'Alan': 'Oluşturulma Tarihi', 'Değer': formatDateTime(new Date()) },
+  ];
+}
+
+function createInspectionWorkbook(rows, filters = {}) {
+  const workbook = XLSX.utils.book_new();
+
+  const summaryRows = buildInspectionSummaryRows(rows, filters);
+  const summarySheet = XLSX.utils.json_to_sheet(summaryRows, { header: ['Alan', 'Değer'] });
+  summarySheet['!cols'] = [{ wch: 24 }, { wch: 42 }];
+  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Filtre Özeti');
+
+  const dataRows = rows.map((item, index) => ({
+    'Sıra': index + 1,
+    'Denetim Tarihi': item.inspectionDateText || '',
+    'Firma Ünvanı': item.tradeName || '',
+    'Kategori': item.categoryName || '',
+    'Firma Sahibi': item.ownerName || '',
+    'Telefon': item.phone || '',
+    'Adres': item.addressText || '',
+    'Sonuç': item.resultStatus || '',
+    'Durum': item.currentStatus || '',
+    'Yapılan İşlem': item.actionTaken || '',
+    'Kontrol Tarihi': item.controlDateText || '',
+    'Ruhsat Durumu': item.licenseStatus || 'Yok',
+    'Not': item.note || '',
+    'Kayıt Zamanı': item.createdAt || '',
+    'Harita Linki': item.mapsUrl || '',
+  }));
+
+  const dataSheet = XLSX.utils.json_to_sheet(dataRows);
+  dataSheet['!autofilter'] = { ref: dataSheet['!ref'] || 'A1' };
+  dataSheet['!cols'] = [
+    { wch: 8 },
+    { wch: 14 },
+    { wch: 32 },
+    { wch: 24 },
+    { wch: 24 },
+    { wch: 16 },
+    { wch: 40 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 34 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 28 },
+    { wch: 22 },
+    { wch: 28 },
+  ];
+  XLSX.utils.book_append_sheet(workbook, dataSheet, 'Denetimler');
+
+  return workbook;
+}
+
 app.get("/api/inspections", async (req, res) => {
   try {
-    const { month, categoryId, resultStatus, currentStatus, licenseStatus, search } = req.query;
-    const conditions = [];
-    const values = [];
-
-    if (month) {
-      values.push(String(month) + '-01');
-      conditions.push("DATE_TRUNC('month', bi.inspection_date) = DATE_TRUNC('month', $" + values.length + "::date)");
-    }
-
-    if (categoryId) {
-      values.push(Number(categoryId));
-      conditions.push("b.category_id = $" + values.length);
-    }
-
-    if (resultStatus) {
-      values.push(String(resultStatus));
-      conditions.push("COALESCE(bi.result_status, '') = $" + values.length);
-    }
-
-    if (currentStatus) {
-      values.push(String(currentStatus));
-      conditions.push("COALESCE(bi.current_status, '') = $" + values.length);
-    }
-
-    if (licenseStatus) {
-      values.push(String(licenseStatus));
-      conditions.push("COALESCE(b.license_status, 'Yok') = $" + values.length);
-    }
-
-    if (search) {
-      values.push('%' + String(search).trim() + '%');
-      const idx = values.length;
-      conditions.push("(COALESCE(b.trade_name, '') ILIKE $" + idx + " OR COALESCE(b.owner_name, '') ILIKE $" + idx + " OR COALESCE(b.phone, '') ILIKE $" + idx + " OR COALESCE(bc.name, '') ILIKE $" + idx + " OR COALESCE(b.neighborhood, '') ILIKE $" + idx + " OR COALESCE(b.street, '') ILIKE $" + idx + ")");
-    }
-
-    const whereSql = conditions.length ? ('WHERE ' + conditions.join(' AND ')) : '';
-
-    const result = await pool.query(
-      `
-        SELECT
-          bi.*,
-          b.trade_name,
-          b.owner_name,
-          b.phone,
-          b.category_id,
-          bc.name AS category_name,
-          b.neighborhood,
-          b.street,
-          b.door_no,
-          b.license_status,
-          b.location_lat,
-          b.location_lng
-        FROM business_inspections bi
-        INNER JOIN businesses b ON b.id = bi.business_id
-        LEFT JOIN business_categories bc ON bc.id = b.category_id
-        ${whereSql}
-        ORDER BY bi.inspection_date DESC, bi.id DESC
-      `,
-      values
-    );
-
-    res.json(result.rows.map(mapInspectionFeed));
+    const { rows } = await queryInspectionFeed(req.query);
+    res.json(rows);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Toplu denetim kayıtları alınamadı." });
+  }
+});
+
+app.get("/api/inspections/export.xlsx", async (req, res) => {
+  try {
+    const { rows, filters } = await queryInspectionFeed(req.query);
+    const workbook = createInspectionWorkbook(rows, filters);
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const fileName = buildInspectionExportFileName(filters);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + fileName + '"');
+    res.send(buffer);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Excel çıktısı oluşturulamadı.' });
   }
 });
 
@@ -3840,6 +3970,7 @@ app.get("/inspections", (req, res) => {
         <div class="toolbar">
           <a class="btn btn-ghost" href="/businesses">Firma Listesi</a>
           <button class="btn btn-secondary" type="button" onclick="clearFilters()">Filtreyi Temizle</button>
+          <button class="btn btn-secondary" type="button" onclick="exportExcel()">Excel'e Aktar</button>
           <button class="btn btn-primary" type="button" onclick="printFilteredView()">Yazdır / PDF</button>
         </div>
       </section>
@@ -3864,7 +3995,7 @@ app.get("/inspections", (req, res) => {
       </section>
       <div class="print-meta" id="printMeta"></div>
       <section class="panel">
-        <div class="panel-header"><div><div class="panel-title">Denetim Listesi</div><div class="panel-subtitle">Filtreler uygulandıkça liste ve yazdır/PDF çıktısı aynı anda güncellenir.</div></div></div>
+        <div class="panel-header"><div><div class="panel-title">Denetim Listesi</div><div class="panel-subtitle">Filtreler uygulandıkça liste, yazdır/PDF çıktısı ve Excel aktarımı aynı filtrelerle çalışır.</div></div></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Denetim Tarihi</th><th>Firma / Kategori</th><th>Adres</th><th>Sonuç</th><th>Durum</th><th>Yapılan İşlem</th><th>Kontrol Tarihi</th><th>Ruhsat</th><th>İşlemler</th></tr></thead>
@@ -3952,6 +4083,29 @@ app.get("/inspections", (req, res) => {
         '</tr>';
       }
       body.innerHTML = html;
+    }
+    function buildFilterQueryString() {
+      var params = new URLSearchParams();
+      var month = document.getElementById('filterMonth').value;
+      var category = document.getElementById('filterCategory').value;
+      var categoryText = document.getElementById('filterCategory').selectedOptions[0] ? document.getElementById('filterCategory').selectedOptions[0].textContent : '';
+      var license = document.getElementById('filterLicense').value;
+      var result = document.getElementById('filterResult').value;
+      var status = document.getElementById('filterStatus').value;
+      var search = document.getElementById('searchInput').value.trim();
+      if (month) params.set('month', month);
+      if (category && category !== 'all') { params.set('categoryId', category); params.set('categoryName', categoryText); }
+      if (license && license !== 'all') params.set('licenseStatus', license);
+      if (result && result !== 'all') params.set('resultStatus', result);
+      if (status && status !== 'all') params.set('currentStatus', status);
+      if (search) params.set('search', search);
+      return params.toString();
+    }
+    function exportExcel() {
+      var rows = getFilteredInspections();
+      if (!rows.length) { alert('Bu filtreye uygun Excel çıktısı oluşturulacak kayıt bulunmuyor.'); return; }
+      var query = buildFilterQueryString();
+      window.location.href = '/api/inspections/export.xlsx' + (query ? ('?' + query) : '');
     }
     function clearFilters() { document.getElementById('filterMonth').value = ''; document.getElementById('filterCategory').value = 'all'; document.getElementById('filterLicense').value = 'all'; document.getElementById('filterResult').value = 'all'; document.getElementById('filterStatus').value = 'all'; document.getElementById('searchInput').value = ''; renderInspectionTable(); }
     function printFilteredView() { updatePrintMeta(getFilteredInspections()); window.print(); }
