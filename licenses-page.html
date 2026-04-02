@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zabıta Yönetim Sistemi - Ruhsat Yönetimi</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --panel-soft: #f8fafc;
+      --line: #dbe3ee;
+      --text: #17202f;
+      --muted: #667085;
+      --navy: #163a63;
+      --primary: #2563eb;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --info: #0f766e;
+      --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+      --shadow-strong: 0 20px 48px rgba(15, 23, 42, 0.16);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, "Segoe UI", Arial, sans-serif; background: #f3f6fa; color: var(--text); }
+    .app { min-height: 100vh; display: grid; grid-template-columns: 208px minmax(0, 1fr); }
+    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #fff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 0; height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); }
+    .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.16); }
+    .brand { font-size: 14px; font-weight: 700; line-height: 1.3; }
+    .nav-section-title { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.42); margin-top: 6px; padding: 0 2px; font-weight: 700; }
+    .menu { display: flex; flex-direction: column; gap: 4px; }
+    .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border-radius: 10px; font-size: 12.5px; text-decoration: none; color: rgba(255,255,255,0.84); transition: 0.18s ease; border: 1px solid transparent; font-weight: 500; }
+    .menu-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.08); }
+    .menu-item.active { background: rgba(255,255,255,0.08); color: #ffffff; border-color: rgba(255,255,255,0.1); font-weight: 600; }
+    .menu-left { display: inline-flex; align-items: center; gap: 8px; }
+    .main { padding: 18px 20px; min-width: 0; }
+    .hero, .panel, .stat-card { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+    .hero { padding: 16px 18px; display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 12px; }
+    .hero-title { margin: 0; font-size: 26px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 700; }
+    .hero-text { margin: 6px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.6; max-width: 860px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .date-card { background: #f8fafc; color: var(--text); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; border: 1px solid var(--line); min-width: 200px; }
+    .date-card span { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
+    .date-card strong { font-size: 13px; line-height: 1.35; font-weight: 700; }
+    .btn { border: none; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; transition: 0.15s ease; }
+    .btn:hover { transform: translateY(-1px); opacity: 0.96; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-secondary { background: #64748b; color: #fff; }
+    .btn-ghost { background: #eef2ff; color: #1d4ed8; border: 1px solid #dbe7ff; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-success { background: var(--success); color: #fff; }
+    .stats-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .stat-card { padding: 14px; display: grid; gap: 7px; }
+    .stat-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
+    .stat-value { font-size: 22px; font-weight: 700; line-height: 1.05; }
+    .stat-sub { font-size: 12px; color: var(--muted); }
+    .panel { padding: 16px; margin-bottom: 12px; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    .panel-title { font-size: 15px; font-weight: 700; }
+    .panel-subtitle { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+    .filters { display: grid; grid-template-columns: 210px 170px 170px 190px minmax(220px, 1fr) auto auto; gap: 10px; align-items: center; }
+    input, select, textarea { width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; background: #fff; color: var(--text); }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+    .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; min-width: 1580px; }
+    th, td { padding: 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; text-align: left; vertical-align: top; }
+    th { background: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: #fbfdff; }
+    .stack { display: grid; gap: 4px; }
+    .cell-title { font-weight: 700; color: #0f172a; line-height: 1.4; }
+    .cell-sub { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; border: 1px solid transparent; white-space: nowrap; }
+    .badge.active { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+    .badge.passive { background: #e0f2fe; color: #075985; border-color: #bae6fd; }
+    .badge.cancelled { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .badge.application { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+    .badge.gray { background: #e5e7eb; color: #374151; border-color: #d1d5db; }
+    .action-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .mini-btn { border: 1px solid var(--line); background: #fff; border-radius: 9px; padding: 7px 10px; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none; color: #111827; display: inline-flex; align-items: center; gap: 6px; }
+    .mini-btn.primary { border-color: #cfe0ff; color: #1d4ed8; background: #eef4ff; }
+    .mini-btn.danger { border-color: #fecaca; color: #b91c1c; background: #fff1f2; }
+    .empty-state { border: 1px dashed var(--line); border-radius: 12px; background: #fbfdff; padding: 22px; text-align: center; color: var(--muted); font-size: 13px; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.52); display: none; align-items: center; justify-content: center; padding: 18px; z-index: 50; }
+    .modal-overlay.show { display: flex; }
+    .modal { width: min(1260px, 100%); max-height: calc(100vh - 36px); overflow: hidden; background: #fff; border-radius: 18px; box-shadow: var(--shadow-strong); border: 1px solid rgba(219,227,238,0.9); display: grid; grid-template-rows: auto minmax(0,1fr) auto; }
+    .modal-header { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .modal-title { font-size: 16px; font-weight: 700; }
+    .modal-subtitle { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .close-btn { border: none; background: #f8fafc; color: #475569; width: 34px; height: 34px; border-radius: 10px; cursor: pointer; font-size: 22px; }
+    .modal-body { padding: 18px; overflow: auto; }
+    .modal-footer { padding: 14px 18px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .form-group { display: grid; gap: 6px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-group.double { grid-column: span 2; }
+    .form-group label { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }
+    .section-block { grid-column: 1 / -1; border: 1px solid #e2e8f0; border-radius: 14px; background: linear-gradient(180deg, #fbfdff 0%, #f8fbff 100%); padding: 14px; display: grid; gap: 12px; }
+    .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .section-title { font-size: 13px; font-weight: 700; color: #0f172a; line-height: 1.3; }
+    .section-note { font-size: 11.5px; color: #64748b; line-height: 1.5; max-width: 700px; }
+    .message { display: none; margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 13px; }
+    .message.show { display: block; }
+    .message.error { background: #fee2e2; color: #991b1b; }
+    .message.success { background: #dcfce7; color: #166534; }
+    .toast { position: fixed; right: 18px; bottom: 18px; min-width: 260px; max-width: 360px; background: rgba(15, 23, 42, 0.95); color: #fff; padding: 12px 14px; border-radius: 12px; box-shadow: 0 12px 24px rgba(15,23,42,0.18); opacity: 0; pointer-events: none; transform: translateY(12px); transition: opacity 0.2s ease, transform 0.2s ease; z-index: 80; font-size: 13px; line-height: 1.5; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .hidden { display: none !important; }
+    @media (max-width: 1380px) {
+      .stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 980px) {
+      .app { grid-template-columns: minmax(0, 1fr); }
+      .sidebar { display: none; }
+      .main { padding: 16px; }
+      .stats-grid, .filters, .form-grid { grid-template-columns: 1fr; }
+      table { min-width: 980px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <div class="brand-mark">ZY</div>
+        <div><div class="brand">Zabıta Yönetim Sistemi</div></div>
+      </div>
+      <nav class="menu">
+        <div class="nav-section-title">Genel</div>
+        <a href="#" class="menu-item"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
+        <div class="nav-section-title">Modüller</div>
+        <a href="/" class="menu-item"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span></a>
+        <a href="/businesses" class="menu-item"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
+        <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
+        <a href="/licenses" class="menu-item active"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
+      </nav>
+    </aside>
+    <main class="main">
+      <section class="hero">
+        <div>
+          <h1 class="hero-title">Ruhsat Yönetimi</h1>
+          <p class="hero-text">Ruhsat kayıtları firma detayından bağımsız olarak burada tutulur. Aktif, pasif, iptal edilen ve başvuru sürecindeki tüm ruhsatları aynı ekrandan takip edebilirsiniz.</p>
+        </div>
+        <div class="toolbar">
+          <div class="date-card"><span>Tarih</span><strong id="todayText">-</strong></div>
+          <button class="btn btn-secondary" type="button" onclick="clearFilters()">Filtreleri Temizle</button>
+          <button class="btn btn-primary" type="button" onclick="openLicenseModal()">+ Yeni Ruhsat Kaydı</button>
+        </div>
+      </section>
+
+      <section class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Toplam Kayıt</div><div class="stat-value" id="statTotal">0</div><div class="stat-sub">Sistemdeki toplam ruhsat / başvuru kaydı</div></div>
+        <div class="stat-card"><div class="stat-label">Aktif Ruhsat</div><div class="stat-value" id="statActive">0</div><div class="stat-sub">Kullanımda olan geçerli ruhsatlar</div></div>
+        <div class="stat-card"><div class="stat-label">Başvuru Süreci</div><div class="stat-value" id="statApplication">0</div><div class="stat-sub">İşlem ve takip aşamasındaki dosyalar</div></div>
+        <div class="stat-card"><div class="stat-label">Pasif Kayıt</div><div class="stat-value" id="statPassive">0</div><div class="stat-sub">Arşivde tutulan pasif ruhsatlar</div></div>
+        <div class="stat-card"><div class="stat-label">İptal Edilen</div><div class="stat-value" id="statCancelled">0</div><div class="stat-sub">İptal edilip görünürlüğü korunan kayıtlar</div></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Ruhsat Listesi</div>
+            <div class="panel-subtitle">Filtreleyin, düzenleyin ve firma detayına tek tıkla geçin.</div>
+          </div>
+        </div>
+        <div class="filters">
+          <select id="filterBusiness" onchange="renderLicenseTable()"></select>
+          <select id="filterRecordStatus" onchange="renderLicenseTable()">
+            <option value="all">Tüm Kayıt Durumları</option>
+            <option value="Aktif">Aktif</option>
+            <option value="Pasif">Pasif</option>
+            <option value="İptal">İptal</option>
+          </select>
+          <select id="filterProcessStatus" onchange="renderLicenseTable()">
+            <option value="all">Tüm Süreç Durumları</option>
+            <option value="Ruhsat Verildi">Ruhsat Verildi</option>
+            <option value="Başvuru Alındı">Başvuru Alındı</option>
+            <option value="Evrak Kontrol">Evrak Kontrol</option>
+            <option value="Eksik Evrak">Eksik Evrak</option>
+            <option value="İncelemede">İncelemede</option>
+            <option value="Komisyon Bekliyor">Komisyon Bekliyor</option>
+            <option value="Onay Bekliyor">Onay Bekliyor</option>
+            <option value="Reddedildi">Reddedildi</option>
+          </select>
+          <input type="date" id="filterFollowupDate" onchange="renderLicenseTable()" />
+          <input type="text" id="searchInput" placeholder="Ünvan, sahip, ruhsat no, başvuru no, mahalle ara" oninput="renderLicenseTable()" />
+          <a class="btn btn-ghost" href="/businesses">Firma Listesi</a>
+          <a class="btn btn-ghost" href="/inspections">Tüm Denetimler</a>
+        </div>
+        <div class="table-wrap" style="margin-top:12px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Firma</th>
+                <th>Ruhsat / Başvuru</th>
+                <th>Durum</th>
+                <th>Faaliyet / Sınıf</th>
+                <th>Adres</th>
+                <th>Takip</th>
+                <th>İşlem</th>
+              </tr>
+            </thead>
+            <tbody id="licenseTableBody">
+              <tr><td colspan="7"><div class="empty-state">Ruhsat kayıtları yükleniyor...</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="licenseModal">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="licenseModalTitle">Yeni Ruhsat Kaydı</div>
+          <div class="modal-subtitle">Ruhsat, iptal ve başvuru süreçlerini tek form üzerinden yönetin.</div>
+        </div>
+        <button class="close-btn" type="button" onclick="closeModal()">×</button>
+      </div>
+      <form id="licenseForm">
+        <div class="modal-body">
+          <input type="hidden" id="editingLicenseId" />
+          <div class="form-grid">
+            <div class="section-block">
+              <div class="section-head">
+                <div>
+                  <div class="section-title">Bağlantı ve durum</div>
+                  <div class="section-note">Önce firmayı seçin. Adres ve temel bilgiler otomatik dolacak, isterseniz ruhsat kaydı özelinde değiştirebilirsiniz.</div>
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="form-group double">
+                  <label for="businessId">Firma</label>
+                  <select id="businessId" required onchange="prefillFromBusiness()"></select>
+                </div>
+                <div class="form-group">
+                  <label for="recordStatus">Kayıt Durumu</label>
+                  <select id="recordStatus" onchange="toggleConditionalFields()">
+                    <option value="Aktif">Aktif</option>
+                    <option value="Pasif">Pasif</option>
+                    <option value="İptal">İptal</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="processStatus">Süreç Durumu</label>
+                  <select id="processStatus" onchange="toggleConditionalFields()">
+                    <option value="Ruhsat Verildi">Ruhsat Verildi</option>
+                    <option value="Başvuru Alındı">Başvuru Alındı</option>
+                    <option value="Evrak Kontrol">Evrak Kontrol</option>
+                    <option value="Eksik Evrak">Eksik Evrak</option>
+                    <option value="İncelemede">İncelemede</option>
+                    <option value="Komisyon Bekliyor">Komisyon Bekliyor</option>
+                    <option value="Onay Bekliyor">Onay Bekliyor</option>
+                    <option value="Reddedildi">Reddedildi</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-block" id="applicationSection">
+              <div class="section-head">
+                <div>
+                  <div class="section-title">Başvuru takibi</div>
+                  <div class="section-note">Başvuru aşamasındaki veya onay bekleyen ruhsatlarda bu alanları kullanın.</div>
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="applicationDate">Başvuru Tarihi</label>
+                  <input type="date" id="applicationDate" />
+                </div>
+                <div class="form-group">
+                  <label for="applicationNo">Başvuru No</label>
+                  <input type="text" id="applicationNo" />
+                </div>
+                <div class="form-group double">
+                  <label for="applicationStage">Başvuru Aşaması</label>
+                  <input type="text" id="applicationStage" placeholder="Örnek: Evrak kontrolünde / Komisyona sevk edildi" />
+                </div>
+                <div class="form-group">
+                  <label for="followupDate">Sonraki Takip Tarihi</label>
+                  <input type="date" id="followupDate" />
+                </div>
+              </div>
+            </div>
+
+            <div class="section-block">
+              <div class="section-head">
+                <div>
+                  <div class="section-title">Ruhsat ana bilgileri</div>
+                  <div class="section-note">Elinizdeki fiziksel ruhsat üzerinde gördüğünüz resmi alanları burada takip edin.</div>
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="issueDate">Veriliş Tarihi</label>
+                  <input type="date" id="issueDate" />
+                </div>
+                <div class="form-group">
+                  <label for="licenseSerialNo">Ruhsat Sıra No</label>
+                  <input type="text" id="licenseSerialNo" />
+                </div>
+                <div class="form-group">
+                  <label for="ownerName">İşyeri Sahibinin Adı Soyadı</label>
+                  <input type="text" id="ownerName" />
+                </div>
+                <div class="form-group">
+                  <label for="tradeName">İşyerinin Ünvanı</label>
+                  <input type="text" id="tradeName" />
+                </div>
+                <div class="form-group double">
+                  <label for="activitySubject">Faaliyet Konusu</label>
+                  <input type="text" id="activitySubject" />
+                </div>
+                <div class="form-group double">
+                  <label for="workplaceClass">İşyerinin Sınıfı</label>
+                  <select id="workplaceClass">
+                    <option value="">Seçiniz</option>
+                    <option value="Sıhhi Müesseseler">Sıhhi Müesseseler</option>
+                    <option value="1. Sınıf Gayrisıhhi Müesseseler">1. Sınıf Gayrisıhhi Müesseseler</option>
+                    <option value="2. Sınıf Gayrisıhhi Müesseseler">2. Sınıf Gayrisıhhi Müesseseler</option>
+                    <option value="3. Sınıf Gayrisıhhi Müesseseler">3. Sınıf Gayrisıhhi Müesseseler</option>
+                    <option value="Umuma Açık İstirahat ve Eğlence Yerleri">Umuma Açık İstirahat ve Eğlence Yerleri</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-block">
+              <div class="section-head">
+                <div>
+                  <div class="section-title">Adres ve fiziksel bilgiler</div>
+                  <div class="section-note">Firma kaydındaki adres otomatik gelir. Gerekirse ruhsat üzerindeki haline göre düzenleyebilirsiniz.</div>
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="neighborhood">Mahalle</label>
+                  <input type="text" id="neighborhood" />
+                </div>
+                <div class="form-group">
+                  <label for="street">Cadde / Sokak</label>
+                  <input type="text" id="street" />
+                </div>
+                <div class="form-group">
+                  <label for="doorNo">Kapı No</label>
+                  <input type="text" id="doorNo" />
+                </div>
+                <div class="form-group">
+                  <label for="ada">Ada</label>
+                  <input type="text" id="ada" />
+                </div>
+                <div class="form-group">
+                  <label for="parcel">Parsel</label>
+                  <input type="text" id="parcel" />
+                </div>
+                <div class="form-group">
+                  <label for="usageArea">Kullanım Alanı</label>
+                  <input type="text" id="usageArea" placeholder="Örnek: 40 m2" />
+                </div>
+                <div class="form-group">
+                  <label for="otherUsageArea">Diğer Kullanım Alanı</label>
+                  <input type="text" id="otherUsageArea" />
+                </div>
+                <div class="form-group">
+                  <label for="totalMotorPower">Kullanılan Toplam Motor Gücü</label>
+                  <input type="text" id="totalMotorPower" />
+                </div>
+              </div>
+            </div>
+
+            <div class="section-block">
+              <div class="section-head">
+                <div>
+                  <div class="section-title">Saat, kimlik ve imza bilgileri</div>
+                  <div class="section-note">Ruhsat üzerinde yer alan yardımcı bilgiler arşiv ve takip amaçlıdır.</div>
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="winterOpeningTime">Kış Açılış</label>
+                  <input type="time" id="winterOpeningTime" />
+                </div>
+                <div class="form-group">
+                  <label for="winterClosingTime">Kış Kapanış</label>
+                  <input type="time" id="winterClosingTime" />
+                </div>
+                <div class="form-group">
+                  <label for="summerOpeningTime">Yaz Açılış</label>
+                  <input type="time" id="summerOpeningTime" />
+                </div>
+                <div class="form-group">
+                  <label for="summerClosingTime">Yaz Kapanış</label>
+                  <input type="time" id="summerClosingTime" />
+                </div>
+                <div class="form-group double">
+                  <label for="otherActivityAreas">Diğer Faaliyet Alanları</label>
+                  <input type="text" id="otherActivityAreas" />
+                </div>
+                <div class="form-group">
+                  <label for="identityNumber">T.C. Kimlik No</label>
+                  <input type="text" id="identityNumber" />
+                </div>
+                <div class="form-group">
+                  <label for="taxNumber">Vergi Numarası</label>
+                  <input type="text" id="taxNumber" />
+                </div>
+                <div class="form-group">
+                  <label for="policeChiefName">Zabıta Müdürü</label>
+                  <input type="text" id="policeChiefName" />
+                </div>
+                <div class="form-group">
+                  <label for="mayorName">Belediye Başkanı</label>
+                  <input type="text" id="mayorName" />
+                </div>
+              </div>
+            </div>
+
+            <div class="section-block hidden" id="cancelSection">
+              <div class="section-head">
+                <div>
+                  <div class="section-title">İptal bilgisi</div>
+                  <div class="section-note">Sadece iptal edilen ruhsatlarda doldurulmalıdır.</div>
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="cancelDate">İptal Tarihi</label>
+                  <input type="date" id="cancelDate" />
+                </div>
+                <div class="form-group double">
+                  <label for="cancelReason">İptal Nedeni</label>
+                  <input type="text" id="cancelReason" />
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group full">
+              <label for="notes">Not / Açıklama</label>
+              <textarea id="notes" rows="4" placeholder="İlgili açıklamalar, süreç notları veya arşiv bilgisi"></textarea>
+            </div>
+          </div>
+          <div class="message" id="formMessage"></div>
+        </div>
+        <div class="modal-footer">
+          <div class="muted">Bu modülde dosya yükleme kapalı tutuldu.</div>
+          <div class="action-row">
+            <button type="button" class="btn btn-secondary" onclick="closeModal()">Vazgeç</button>
+            <button type="submit" class="btn btn-primary" id="saveButton">Kaydet</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    var licenses = [];
+    var businesses = [];
+    var businessMap = {};
+    var queryParams = new URLSearchParams(window.location.search);
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function setTodayText() {
+      document.getElementById('todayText').textContent = new Intl.DateTimeFormat('tr-TR', {
+        day: '2-digit', month: '2-digit', year: 'numeric', weekday: 'long'
+      }).format(new Date());
+    }
+
+    function showToast(message) {
+      var toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(showToast._timer);
+      showToast._timer = setTimeout(function() { toast.classList.remove('show'); }, 2600);
+    }
+
+    function setMessage(text, type) {
+      var el = document.getElementById('formMessage');
+      if (!text) {
+        el.textContent = '';
+        el.className = 'message';
+        return;
+      }
+      el.textContent = text;
+      el.className = 'message show ' + (type || 'error');
+    }
+
+    function recordBadge(status) {
+      if (status === 'Aktif') return '<span class="badge active">Aktif</span>';
+      if (status === 'Pasif') return '<span class="badge passive">Pasif</span>';
+      if (status === 'İptal') return '<span class="badge cancelled">İptal</span>';
+      return '<span class="badge gray">' + escapeHtml(status || '-') + '</span>';
+    }
+
+    function processBadge(status) {
+      if (status === 'Ruhsat Verildi') return '<span class="badge active">Ruhsat Verildi</span>';
+      if (status === 'Reddedildi') return '<span class="badge cancelled">Reddedildi</span>';
+      if (status) return '<span class="badge application">' + escapeHtml(status) + '</span>';
+      return '<span class="badge gray">Belirtilmedi</span>';
+    }
+
+    function fillBusinessOptions() {
+      var filter = document.getElementById('filterBusiness');
+      var select = document.getElementById('businessId');
+      var filterHtml = '<option value="all">Tüm Firmalar</option>';
+      var formHtml = '<option value="">Firma seçin</option>';
+      for (var i = 0; i < businesses.length; i++) {
+        var item = businesses[i];
+        filterHtml += '<option value="' + item.id + '">' + escapeHtml(item.tradeName || ('Firma #' + item.id)) + '</option>';
+        formHtml += '<option value="' + item.id + '">' + escapeHtml(item.tradeName || ('Firma #' + item.id)) + '</option>';
+      }
+      filter.innerHTML = filterHtml;
+      select.innerHTML = formHtml;
+
+      var preselectedBusinessId = queryParams.get('businessId');
+      if (preselectedBusinessId) {
+        filter.value = preselectedBusinessId;
+      }
+    }
+
+    function prefillFromBusiness() {
+      var businessId = document.getElementById('businessId').value;
+      var business = businessMap[businessId];
+      if (!business) return;
+      if (!document.getElementById('ownerName').value.trim()) document.getElementById('ownerName').value = business.ownerName || '';
+      if (!document.getElementById('tradeName').value.trim()) document.getElementById('tradeName').value = business.tradeName || '';
+      if (!document.getElementById('activitySubject').value.trim()) document.getElementById('activitySubject').value = business.activitySubject || '';
+      if (!document.getElementById('neighborhood').value.trim()) document.getElementById('neighborhood').value = business.neighborhood || '';
+      if (!document.getElementById('street').value.trim()) document.getElementById('street').value = business.street || '';
+      if (!document.getElementById('doorNo').value.trim()) document.getElementById('doorNo').value = business.doorNo || '';
+      if (!document.getElementById('ada').value.trim()) document.getElementById('ada').value = business.ada || '';
+      if (!document.getElementById('parcel').value.trim()) document.getElementById('parcel').value = business.parcel || '';
+    }
+
+    function resetForm() {
+      document.getElementById('editingLicenseId').value = '';
+      document.getElementById('licenseModalTitle').textContent = 'Yeni Ruhsat Kaydı';
+      document.getElementById('licenseForm').reset();
+      document.getElementById('recordStatus').value = 'Aktif';
+      document.getElementById('processStatus').value = 'Ruhsat Verildi';
+      setMessage('', '');
+      var preselectedBusinessId = queryParams.get('businessId');
+      document.getElementById('businessId').value = preselectedBusinessId || '';
+      prefillFromBusiness();
+      toggleConditionalFields();
+    }
+
+    function openLicenseModal(id) {
+      resetForm();
+      if (id) {
+        var item = null;
+        for (var i = 0; i < licenses.length; i++) {
+          if (String(licenses[i].id) === String(id)) { item = licenses[i]; break; }
+        }
+        if (!item) return;
+        document.getElementById('editingLicenseId').value = item.id;
+        document.getElementById('licenseModalTitle').textContent = 'Ruhsat Kaydını Düzenle';
+        document.getElementById('businessId').value = item.businessId || '';
+        document.getElementById('recordStatus').value = item.recordStatus || 'Aktif';
+        document.getElementById('processStatus').value = item.processStatus || 'Ruhsat Verildi';
+        document.getElementById('applicationDate').value = item.applicationDate || '';
+        document.getElementById('applicationNo').value = item.applicationNo || '';
+        document.getElementById('applicationStage').value = item.applicationStage || '';
+        document.getElementById('followupDate').value = item.followupDate || '';
+        document.getElementById('issueDate').value = item.issueDate || '';
+        document.getElementById('licenseSerialNo').value = item.licenseSerialNo || '';
+        document.getElementById('ownerName').value = item.ownerName || '';
+        document.getElementById('tradeName').value = item.tradeName || '';
+        document.getElementById('activitySubject').value = item.activitySubject || '';
+        document.getElementById('workplaceClass').value = item.workplaceClass || '';
+        document.getElementById('neighborhood').value = item.neighborhood || '';
+        document.getElementById('street').value = item.street || '';
+        document.getElementById('doorNo').value = item.doorNo || '';
+        document.getElementById('ada').value = item.ada || '';
+        document.getElementById('parcel').value = item.parcel || '';
+        document.getElementById('usageArea').value = item.usageArea || '';
+        document.getElementById('otherUsageArea').value = item.otherUsageArea || '';
+        document.getElementById('totalMotorPower').value = item.totalMotorPower || '';
+        document.getElementById('winterOpeningTime').value = item.winterOpeningTime || '';
+        document.getElementById('winterClosingTime').value = item.winterClosingTime || '';
+        document.getElementById('summerOpeningTime').value = item.summerOpeningTime || '';
+        document.getElementById('summerClosingTime').value = item.summerClosingTime || '';
+        document.getElementById('otherActivityAreas').value = item.otherActivityAreas || '';
+        document.getElementById('identityNumber').value = item.identityNumber || '';
+        document.getElementById('taxNumber').value = item.taxNumber || '';
+        document.getElementById('policeChiefName').value = item.policeChiefName || '';
+        document.getElementById('mayorName').value = item.mayorName || '';
+        document.getElementById('cancelDate').value = item.cancelDate || '';
+        document.getElementById('cancelReason').value = item.cancelReason || '';
+        document.getElementById('notes').value = item.notes || '';
+      }
+      toggleConditionalFields();
+      document.getElementById('licenseModal').classList.add('show');
+    }
+
+    function closeModal() {
+      document.getElementById('licenseModal').classList.remove('show');
+      setMessage('', '');
+    }
+
+    function toggleConditionalFields() {
+      var recordStatus = document.getElementById('recordStatus').value;
+      var processStatus = document.getElementById('processStatus').value;
+      var isApplication = processStatus !== 'Ruhsat Verildi';
+      document.getElementById('applicationSection').classList.toggle('hidden', !isApplication);
+      document.getElementById('cancelSection').classList.toggle('hidden', recordStatus !== 'İptal');
+      if (recordStatus !== 'İptal') {
+        document.getElementById('cancelDate').value = '';
+        document.getElementById('cancelReason').value = '';
+      }
+      if (!isApplication) {
+        document.getElementById('applicationDate').value = '';
+        document.getElementById('applicationNo').value = '';
+        document.getElementById('applicationStage').value = '';
+        document.getElementById('followupDate').value = '';
+      }
+    }
+
+    function currentFilters() {
+      return {
+        businessId: document.getElementById('filterBusiness').value,
+        recordStatus: document.getElementById('filterRecordStatus').value,
+        processStatus: document.getElementById('filterProcessStatus').value,
+        followupDate: document.getElementById('filterFollowupDate').value,
+        search: document.getElementById('searchInput').value.trim().toLocaleLowerCase('tr-TR')
+      };
+    }
+
+    function filteredLicenses() {
+      var filters = currentFilters();
+      return licenses.filter(function(item) {
+        var matchesBusiness = filters.businessId === 'all' || String(item.businessId) === String(filters.businessId);
+        var matchesRecord = filters.recordStatus === 'all' || item.recordStatus === filters.recordStatus;
+        var matchesProcess = filters.processStatus === 'all' || item.processStatus === filters.processStatus;
+        var matchesFollowup = !filters.followupDate || String(item.followupDate || '') === filters.followupDate;
+        var haystack = [
+          item.tradeName,
+          item.ownerName,
+          item.licenseSerialNo,
+          item.applicationNo,
+          item.applicationStage,
+          item.activitySubject,
+          item.neighborhood,
+          item.street,
+          item.doorNo,
+          item.notes
+        ].join(' ').toLocaleLowerCase('tr-TR');
+        var matchesSearch = !filters.search || haystack.indexOf(filters.search) !== -1;
+        return matchesBusiness && matchesRecord && matchesProcess && matchesFollowup && matchesSearch;
+      });
+    }
+
+    function renderStats() {
+      var rows = filteredLicenses();
+      var active = 0, application = 0, passive = 0, cancelled = 0;
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i].recordStatus === 'Aktif' && rows[i].processStatus === 'Ruhsat Verildi') active += 1;
+        else if (rows[i].recordStatus === 'İptal') cancelled += 1;
+        else if (rows[i].processStatus !== 'Ruhsat Verildi') application += 1;
+        else passive += 1;
+      }
+      document.getElementById('statTotal').textContent = rows.length;
+      document.getElementById('statActive').textContent = active;
+      document.getElementById('statApplication').textContent = application;
+      document.getElementById('statPassive').textContent = passive;
+      document.getElementById('statCancelled').textContent = cancelled;
+    }
+
+    function renderLicenseTable() {
+      var rows = filteredLicenses();
+      renderStats();
+      var body = document.getElementById('licenseTableBody');
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="7"><div class="empty-state">Bu filtreye uygun ruhsat kaydı bulunmuyor.</div></td></tr>';
+        return;
+      }
+
+      var html = '';
+      for (var i = 0; i < rows.length; i++) {
+        var item = rows[i];
+        var addressParts = [];
+        if (item.neighborhood) addressParts.push(escapeHtml(item.neighborhood + ' Mah.'));
+        if (item.street) addressParts.push(escapeHtml(item.street));
+        if (item.doorNo) addressParts.push('No: ' + escapeHtml(item.doorNo));
+        var followupBlock = item.followupDateText ? ('<div class="cell-sub">Takip: ' + escapeHtml(item.followupDateText) + '</div>') : '<div class="cell-sub">Takip tarihi yok</div>';
+        if (item.recordStatus === 'İptal' && item.cancelDateText) {
+          followupBlock += '<div class="cell-sub">İptal: ' + escapeHtml(item.cancelDateText) + '</div>';
+        }
+
+        html += '<tr>' +
+          '<td><div class="stack"><div class="cell-title">' + escapeHtml(item.tradeName || '-') + '</div><div class="cell-sub">' + escapeHtml(item.ownerName || 'Sahip bilgisi yok') + '</div><div class="cell-sub"><a href="/businesses/' + item.businessId + '">Firma detayına git</a></div></div></td>' +
+          '<td><div class="stack"><div class="cell-title">Ruhsat No: ' + escapeHtml(item.licenseSerialNo || '-') + '</div><div class="cell-sub">Veriliş: ' + escapeHtml(item.issueDateText || '-') + '</div><div class="cell-sub">Başvuru No: ' + escapeHtml(item.applicationNo || '-') + '</div></div></td>' +
+          '<td><div class="stack">' + recordBadge(item.recordStatus) + processBadge(item.processStatus) + '</div></td>' +
+          '<td><div class="stack"><div class="cell-title">' + escapeHtml(item.activitySubject || 'Faaliyet konusu girilmedi') + '</div><div class="cell-sub">' + escapeHtml(item.workplaceClass || 'Sınıf girilmedi') + '</div></div></td>' +
+          '<td><div class="stack"><div class="cell-title">' + (addressParts.join(', ') || '<span class="muted">Adres yok</span>') + '</div><div class="cell-sub">Ada: ' + escapeHtml(item.ada || '-') + ' · Parsel: ' + escapeHtml(item.parcel || '-') + '</div></div></td>' +
+          '<td><div class="stack">' + followupBlock + '<div class="cell-sub">Aşama: ' + escapeHtml(item.applicationStage || '-') + '</div></div></td>' +
+          '<td><div class="action-row"><button class="mini-btn primary" type="button" onclick="openLicenseModal(' + item.id + ')">Düzenle</button><a class="mini-btn" href="/licenses?businessId=' + item.businessId + '">Firmaya Göre Listele</a><button class="mini-btn danger" type="button" onclick="deleteLicense(' + item.id + ')">Sil</button></div></td>' +
+        '</tr>';
+      }
+
+      body.innerHTML = html;
+    }
+
+    function clearFilters() {
+      document.getElementById('filterBusiness').value = queryParams.get('businessId') || 'all';
+      document.getElementById('filterRecordStatus').value = 'all';
+      document.getElementById('filterProcessStatus').value = 'all';
+      document.getElementById('filterFollowupDate').value = '';
+      document.getElementById('searchInput').value = '';
+      renderLicenseTable();
+    }
+
+    async function loadBusinesses() {
+      var response = await fetch('/api/businesses');
+      var data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Firmalar alınamadı.');
+      businesses = data;
+      businessMap = {};
+      for (var i = 0; i < businesses.length; i++) businessMap[String(businesses[i].id)] = businesses[i];
+      fillBusinessOptions();
+    }
+
+    async function loadLicenses() {
+      var response = await fetch('/api/licenses');
+      var data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Ruhsat kayıtları alınamadı.');
+      licenses = data;
+      renderLicenseTable();
+    }
+
+    async function saveLicense(event) {
+      event.preventDefault();
+      setMessage('', '');
+      var saveButton = document.getElementById('saveButton');
+      saveButton.disabled = true;
+      saveButton.textContent = 'Kaydediliyor...';
+      try {
+        var businessId = document.getElementById('businessId').value;
+        if (!businessId) throw new Error('Lütfen firma seçin.');
+        var payload = {
+          businessId: businessId,
+          recordStatus: document.getElementById('recordStatus').value,
+          processStatus: document.getElementById('processStatus').value,
+          applicationDate: document.getElementById('applicationDate').value,
+          applicationNo: document.getElementById('applicationNo').value.trim(),
+          applicationStage: document.getElementById('applicationStage').value.trim(),
+          followupDate: document.getElementById('followupDate').value,
+          issueDate: document.getElementById('issueDate').value,
+          licenseSerialNo: document.getElementById('licenseSerialNo').value.trim(),
+          ownerName: document.getElementById('ownerName').value.trim(),
+          tradeName: document.getElementById('tradeName').value.trim(),
+          activitySubject: document.getElementById('activitySubject').value.trim(),
+          workplaceClass: document.getElementById('workplaceClass').value,
+          neighborhood: document.getElementById('neighborhood').value.trim(),
+          street: document.getElementById('street').value.trim(),
+          doorNo: document.getElementById('doorNo').value.trim(),
+          ada: document.getElementById('ada').value.trim(),
+          parcel: document.getElementById('parcel').value.trim(),
+          usageArea: document.getElementById('usageArea').value.trim(),
+          otherUsageArea: document.getElementById('otherUsageArea').value.trim(),
+          totalMotorPower: document.getElementById('totalMotorPower').value.trim(),
+          winterOpeningTime: document.getElementById('winterOpeningTime').value,
+          winterClosingTime: document.getElementById('winterClosingTime').value,
+          summerOpeningTime: document.getElementById('summerOpeningTime').value,
+          summerClosingTime: document.getElementById('summerClosingTime').value,
+          otherActivityAreas: document.getElementById('otherActivityAreas').value.trim(),
+          identityNumber: document.getElementById('identityNumber').value.trim(),
+          taxNumber: document.getElementById('taxNumber').value.trim(),
+          policeChiefName: document.getElementById('policeChiefName').value.trim(),
+          mayorName: document.getElementById('mayorName').value.trim(),
+          cancelDate: document.getElementById('cancelDate').value,
+          cancelReason: document.getElementById('cancelReason').value.trim(),
+          notes: document.getElementById('notes').value.trim()
+        };
+        var editingId = document.getElementById('editingLicenseId').value;
+        var response = await fetch(editingId ? ('/api/licenses/' + editingId) : '/api/licenses', {
+          method: editingId ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        var data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Kayıt kaydedilemedi.');
+        await loadBusinesses();
+        await loadLicenses();
+        closeModal();
+        showToast(editingId ? 'Ruhsat kaydı güncellendi.' : 'Yeni ruhsat kaydı eklendi.');
+      } catch (error) {
+        setMessage(error.message || 'Kayıt kaydedilemedi.', 'error');
+      } finally {
+        saveButton.disabled = false;
+        saveButton.textContent = 'Kaydet';
+      }
+    }
+
+    async function deleteLicense(id) {
+      if (!confirm('Bu ruhsat kaydı silinsin mi?')) return;
+      try {
+        var response = await fetch('/api/licenses/' + id, { method: 'DELETE' });
+        var data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Ruhsat kaydı silinemedi.');
+        await loadBusinesses();
+        await loadLicenses();
+        showToast('Ruhsat kaydı silindi.');
+      } catch (error) {
+        alert(error.message || 'Ruhsat kaydı silinemedi.');
+      }
+    }
+
+    document.getElementById('licenseForm').addEventListener('submit', saveLicense);
+    document.getElementById('licenseModal').addEventListener('click', function(event) {
+      if (event.target === this) closeModal();
+    });
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape') closeModal();
+    });
+
+    async function init() {
+      setTodayText();
+      try {
+        await loadBusinesses();
+        await loadLicenses();
+      } catch (error) {
+        document.getElementById('licenseTableBody').innerHTML = '<tr><td colspan="7"><div class="empty-state">' + escapeHtml(error.message || 'Veriler yüklenemedi.') + '</div></td></tr>';
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

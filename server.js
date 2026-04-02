@@ -497,6 +497,139 @@ function mapInspectionFeed(row) {
   };
 }
 
+function buildLicenseAddress(row) {
+  const parts = [];
+  const neighborhood = getCanonicalBusinessNeighborhood(row.neighborhood || '');
+  if (neighborhood) parts.push(neighborhood + ' Mah.');
+  if (row.street) parts.push(row.street);
+  if (row.door_no) parts.push('No: ' + row.door_no);
+  return parts.join(', ');
+}
+
+function mapLicense(row) {
+  return {
+    id: row.id,
+    businessId: row.business_id,
+    businessName: row.business_trade_name || row.trade_name || '',
+    categoryName: row.category_name || '',
+    issueDate: toInputDate(row.issue_date),
+    issueDateText: formatDate(row.issue_date),
+    licenseSerialNo: row.license_serial_no || '',
+    ownerName: row.owner_name || '',
+    tradeName: row.trade_name || '',
+    activitySubject: row.activity_subject || '',
+    neighborhood: getCanonicalBusinessNeighborhood(row.neighborhood || ''),
+    street: row.street || '',
+    doorNo: row.door_no || '',
+    ada: row.ada || '',
+    parcel: row.parcel || '',
+    usageArea: row.usage_area || '',
+    otherUsageArea: row.other_usage_area || '',
+    totalMotorPower: row.total_motor_power || '',
+    workplaceClass: row.workplace_class || '',
+    winterOpeningTime: row.winter_opening_time || '',
+    winterClosingTime: row.winter_closing_time || '',
+    summerOpeningTime: row.summer_opening_time || '',
+    summerClosingTime: row.summer_closing_time || '',
+    otherActivityAreas: row.other_activity_areas || '',
+    identityNumber: row.identity_number || '',
+    taxNumber: row.tax_number || '',
+    policeChiefName: row.police_chief_name || '',
+    mayorName: row.mayor_name || '',
+    recordStatus: row.record_status || 'Aktif',
+    processStatus: row.process_status || 'Ruhsat Verildi',
+    applicationDate: toInputDate(row.application_date),
+    applicationDateText: formatDate(row.application_date),
+    applicationNo: row.application_no || '',
+    applicationStage: row.application_stage || '',
+    followupDate: toInputDate(row.followup_date),
+    followupDateText: formatDate(row.followup_date),
+    cancelDate: toInputDate(row.cancel_date),
+    cancelDateText: formatDate(row.cancel_date),
+    cancelReason: row.cancel_reason || '',
+    notes: row.notes || '',
+    addressText: buildLicenseAddress(row),
+    createdAt: formatDateTime(row.created_at),
+    updatedAt: formatDateTime(row.updated_at),
+  };
+}
+
+function buildLicenseBusinessSnapshot(licenseRow) {
+  if (!licenseRow) {
+    return {
+      licenseStatus: 'Yok',
+      licenseNo: '',
+      licenseDate: null,
+      businessClass: '',
+      activitySubject: '',
+      licenseNote: ''
+    };
+  }
+
+  const processStatus = String(licenseRow.process_status || '');
+  const recordStatus = String(licenseRow.record_status || '');
+
+  let licenseStatus = 'Yok';
+  if (processStatus !== 'Ruhsat Verildi') licenseStatus = 'Başvuru Aşamasında';
+  else if (recordStatus === 'Aktif') licenseStatus = 'Var';
+
+  return {
+    licenseStatus: licenseStatus,
+    licenseNo: licenseRow.license_serial_no || '',
+    licenseDate: licenseRow.issue_date || null,
+    businessClass: licenseRow.workplace_class || '',
+    activitySubject: licenseRow.activity_subject || '',
+    licenseNote: licenseRow.notes || ''
+  };
+}
+
+async function updateBusinessLicenseSnapshot(businessId) {
+  const latestResult = await pool.query(
+    `
+      SELECT *
+      FROM licenses
+      WHERE business_id = $1
+      ORDER BY
+        CASE
+          WHEN process_status = 'Ruhsat Verildi' AND record_status = 'Aktif' THEN 1
+          WHEN process_status <> 'Ruhsat Verildi' AND record_status <> 'İptal' THEN 2
+          WHEN process_status = 'Ruhsat Verildi' AND record_status = 'Pasif' THEN 3
+          WHEN record_status = 'İptal' THEN 4
+          ELSE 5
+        END,
+        COALESCE(issue_date, application_date, updated_at, created_at) DESC,
+        id DESC
+      LIMIT 1
+    `,
+    [businessId]
+  );
+
+  const snapshot = buildLicenseBusinessSnapshot(latestResult.rows[0]);
+
+  await pool.query(
+    `
+      UPDATE businesses
+      SET
+        license_status = $1,
+        license_no = $2,
+        license_date = $3,
+        business_class = $4,
+        activity_subject = CASE WHEN COALESCE(TRIM($5), '') <> '' THEN $5 ELSE activity_subject END,
+        license_note = $6
+      WHERE id = $7
+    `,
+    [
+      snapshot.licenseStatus,
+      snapshot.licenseNo,
+      snapshot.licenseDate,
+      snapshot.businessClass,
+      snapshot.activitySubject,
+      snapshot.licenseNote,
+      businessId
+    ]
+  );
+}
+
 function safeUnlink(filePath) {
   try {
     if (filePath && fs.existsSync(filePath)) {
@@ -745,9 +878,119 @@ async function initDb() {
   `);
 
   await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_business_inspection_files_inspection_id
-    ON business_inspection_files(inspection_id)
+    CREATE TABLE IF NOT EXISTS licenses (
+      id SERIAL PRIMARY KEY,
+      business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+      issue_date DATE,
+      license_serial_no VARCHAR(120),
+      owner_name VARCHAR(255),
+      trade_name VARCHAR(255),
+      activity_subject VARCHAR(255),
+      neighborhood VARCHAR(120),
+      street VARCHAR(150),
+      door_no VARCHAR(50),
+      ada VARCHAR(50),
+      parcel VARCHAR(50),
+      usage_area VARCHAR(120),
+      other_usage_area VARCHAR(255),
+      total_motor_power VARCHAR(120),
+      workplace_class VARCHAR(160),
+      winter_opening_time VARCHAR(10),
+      winter_closing_time VARCHAR(10),
+      summer_opening_time VARCHAR(10),
+      summer_closing_time VARCHAR(10),
+      other_activity_areas TEXT,
+      identity_number VARCHAR(20),
+      tax_number VARCHAR(20),
+      police_chief_name VARCHAR(255),
+      mayor_name VARCHAR(255),
+      record_status VARCHAR(30) NOT NULL DEFAULT 'Aktif',
+      process_status VARCHAR(40) NOT NULL DEFAULT 'Ruhsat Verildi',
+      application_date DATE,
+      application_no VARCHAR(120),
+      application_stage VARCHAR(255),
+      followup_date DATE,
+      cancel_date DATE,
+      cancel_reason TEXT,
+      notes TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
   `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_licenses_business_id
+    ON licenses(business_id)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_licenses_record_status
+    ON licenses(record_status)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_licenses_process_status
+    ON licenses(process_status)
+  `);
+
+  const legacyLicenses = await pool.query(`
+    SELECT *
+    FROM businesses b
+    WHERE (COALESCE(TRIM(b.license_no), '') <> '' OR b.license_date IS NOT NULL OR COALESCE(TRIM(b.business_class), '') <> '' OR COALESCE(TRIM(b.activity_subject), '') <> '' OR COALESCE(TRIM(b.license_note), '') <> '' OR COALESCE(TRIM(b.license_status), '') IN ('Var', 'Başvuru Aşamasında'))
+      AND NOT EXISTS (SELECT 1 FROM licenses l WHERE l.business_id = b.id)
+  `);
+
+  for (const row of legacyLicenses.rows) {
+    const isApplication = String(row.license_status || '') === 'Başvuru Aşamasında';
+    await pool.query(
+      `
+        INSERT INTO licenses (
+          business_id,
+          issue_date,
+          license_serial_no,
+          owner_name,
+          trade_name,
+          activity_subject,
+          neighborhood,
+          street,
+          door_no,
+          ada,
+          parcel,
+          workplace_class,
+          record_status,
+          process_status,
+          application_date,
+          application_stage,
+          notes
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      `,
+      [
+        row.id,
+        row.license_date || null,
+        row.license_no || '',
+        row.owner_name || '',
+        row.trade_name || '',
+        row.activity_subject || '',
+        row.neighborhood || '',
+        row.street || '',
+        row.door_no || '',
+        row.ada || '',
+        row.parcel || '',
+        row.business_class || '',
+        isApplication ? 'Pasif' : 'Aktif',
+        isApplication ? 'Başvuru Alındı' : 'Ruhsat Verildi',
+        isApplication ? (row.license_date || null) : null,
+        isApplication ? 'Eski sistemden aktarıldı' : '',
+        row.license_note || ''
+      ]
+    );
+  }
+
+  const businessIdsForSnapshot = await pool.query('SELECT id FROM businesses');
+  for (const row of businessIdsForSnapshot.rows) {
+    await updateBusinessLicenseSnapshot(row.id);
+  }
 
   const defaultCategories = [
     'Market / Bakkal',
@@ -1973,7 +2216,7 @@ function filterBusinessRows(rows, filters = {}) {
   return rows.filter((item) => {
     const matchesCategory = !categoryId || String(item.categoryId) === categoryId;
     const normalizedLicense = String(item.licenseStatus || 'Yok');
-    const matchesLicense = licenseFilter === 'all' || normalizedLicense === licenseFilter;
+    const matchesLicense = licenseFilter === 'all' || normalizedLicense === licenseFilter || (licenseFilter === 'İptal / Pasif' && normalizedLicense === 'Yok');
     const hasLocation = item.locationLat !== null && item.locationLng !== null;
     const matchesLocation = locationFilter === 'all' || (locationFilter === 'with' ? hasLocation : !hasLocation);
     const text = [
@@ -2423,6 +2666,7 @@ app.get("/businesses", (req, res) => {
         <a href="/" class="menu-item"><span class="menu-left"><span>📌</span><span>Şikayet Takip</span></span></a>
         <a href="/businesses" class="menu-item active"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
         <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
+        <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
       </nav>
     </aside>
 
@@ -2481,6 +2725,7 @@ app.get("/businesses", (req, res) => {
             <option value="Var">Ruhsatlı Firmalar</option>
             <option value="Yok">Ruhsatsız Firmalar</option>
             <option value="Başvuru Aşamasında">Başvuru Aşamasında</option>
+            <option value="İptal / Pasif">İptal / Pasif Özeti</option>
           </select>
           <select id="locationFilter" onchange="renderBusinessTable()">
             <option value="all">Tüm Konumlar</option>
@@ -3109,7 +3354,7 @@ app.get("/businesses", (req, res) => {
       return businesses.filter(function(item) {
         var matchesCategory = !categoryId || String(item.categoryId) === String(categoryId);
         var normalizedLicense = String(item.licenseStatus || 'Yok');
-        var matchesLicense = licenseFilter === 'all' || normalizedLicense === licenseFilter;
+        var matchesLicense = licenseFilter === 'all' || normalizedLicense === licenseFilter || (licenseFilter === 'İptal / Pasif' && normalizedLicense === 'Yok');
         var hasLocation = item.locationLat !== null && item.locationLng !== null;
         var matchesLocation = locationFilter === "all" || (locationFilter === "with" ? hasLocation : !hasLocation);
         var text = [item.categoryName, item.tradeName, item.ownerName, item.phone, item.neighborhood, item.street, item.doorNo, item.ada, item.parcel, item.licenseStatus].join(" ").toLocaleLowerCase("tr-TR");
@@ -3162,6 +3407,7 @@ app.get("/businesses", (req, res) => {
           '<td>' +
             '<div class="action-row">' +
               '<a class="mini-btn primary" href="/businesses/' + item.id + '">Detay</a>' +
+              '<a class="mini-btn" href="/licenses?businessId=' + item.id + '">Ruhsat</a>' +
               '<button class="mini-btn" onclick="editBusiness(' + item.id + ')">Düzenle</button>' +
               ((item.mapsUrl || item.addressMapsUrl) ? '<a class="mini-btn" href="' + escapeHtml(item.mapsUrl || item.addressMapsUrl) + '" target="_blank" rel="noopener noreferrer">Google Maps Aç</a>' : '') +
               '<button class="mini-btn danger" onclick="deleteBusiness(' + item.id + ')">Sil</button>' +
@@ -3913,6 +4159,7 @@ app.get("/businesses/:id", (req, res) => {
         <a href="/" class="menu-item"><span class="menu-left"><span>📌</span><span>Şikayet Takip</span></span></a>
         <a href="/businesses" class="menu-item active"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
         <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
+        <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
       </nav>
     </aside>
 
@@ -3926,7 +4173,7 @@ app.get("/businesses/:id", (req, res) => {
         <div class="toolbar">
           <a class="btn btn-ghost" href="/businesses">← Listeye Dön</a>
           <a class="btn btn-ghost" href="/inspections">Tüm Denetimler</a>
-          <button class="btn btn-secondary" type="button" id="openLicenseBtnTop">Ruhsat Bilgisi Düzenle</button>
+          <a class="btn btn-secondary" id="openLicenseBtnTop" href="/licenses?businessId=${businessId}">Ruhsat Modülüne Git</a>
           <button class="btn btn-primary" type="button" id="openInspectionBtnTop">+ Yeni Denetim Ekle</button>
         </div>
       </section>
@@ -3963,10 +4210,10 @@ app.get("/businesses/:id", (req, res) => {
       <section class="panel">
         <div class="panel-header">
           <div>
-            <div class="panel-title">Ruhsat Bilgisi</div>
+            <div class="panel-title">Ruhsat Özeti</div>
             <div class="panel-subtitle">Ruhsat durumu, numarası, veriliş tarihi ve adres bilgisi tek kartta tutulur.</div>
           </div>
-          <button class="btn btn-ghost" type="button" id="openLicenseBtnSection">Düzenle</button>
+          <a class="btn btn-ghost" id="openLicenseBtnSection" href="/licenses?businessId=${businessId}">Ruhsat Modülünü Aç</a>
         </div>
         <div id="licenseContainer" class="loading">Ruhsat bilgileri yükleniyor...</div>
       </section>
@@ -4008,6 +4255,7 @@ app.get("/businesses/:id", (req, res) => {
                   <option value="Yok">Yok</option>
                   <option value="Var">Var</option>
                   <option value="Başvuru Aşamasında">Başvuru Aşamasında</option>
+            <option value="İptal / Pasif">İptal / Pasif Özeti</option>
                 </select>
               </div>
               <div class="form-group">
@@ -4243,6 +4491,7 @@ app.get("/businesses/:id", (req, res) => {
       if (currentBusiness.mapsUrl || currentBusiness.addressMapsUrl) {
         actions += '<a class="mini-btn primary" target="_blank" rel="noopener noreferrer" href="' + escapeHtml(currentBusiness.mapsUrl || currentBusiness.addressMapsUrl) + '">Haritada Aç</a>';
       }
+      actions += '<a class="mini-btn primary" href="/licenses?businessId=' + currentBusiness.id + '">Ruhsat Modülünü Aç</a>';
       actions += '<a class="mini-btn" href="/businesses">Firma Listesine Dön</a>';
       document.getElementById('summaryActions').innerHTML = actions;
     }
@@ -4613,8 +4862,6 @@ app.get("/businesses/:id", (req, res) => {
     }
 
     function bindDetailPageActions() {
-      document.getElementById('openLicenseBtnTop').addEventListener('click', openLicenseEditor);
-      document.getElementById('openLicenseBtnSection').addEventListener('click', openLicenseEditor);
       document.getElementById('openInspectionBtnTop').addEventListener('click', function() { openInspectionEditor(); });
       document.getElementById('openInspectionBtnSection').addEventListener('click', function() { openInspectionEditor(); });
       document.getElementById('closeDrawerBtn').addEventListener('click', closeDrawer);
@@ -4668,6 +4915,281 @@ app.get("/businesses/:id", (req, res) => {
   </script>
 </body>
 </html>`);
+});
+
+app.get('/api/licenses', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        l.*,
+        b.trade_name AS business_trade_name,
+        bc.name AS category_name
+      FROM licenses l
+      INNER JOIN businesses b ON b.id = l.business_id
+      LEFT JOIN business_categories bc ON bc.id = b.category_id
+      ORDER BY COALESCE(l.issue_date, l.application_date, l.updated_at, l.created_at) DESC, l.id DESC
+    `);
+    res.json(result.rows.map(mapLicense));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Ruhsat kayıtları alınamadı.' });
+  }
+});
+
+app.get('/api/businesses/:id/licenses', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
+      SELECT
+        l.*,
+        b.trade_name AS business_trade_name,
+        bc.name AS category_name
+      FROM licenses l
+      INNER JOIN businesses b ON b.id = l.business_id
+      LEFT JOIN business_categories bc ON bc.id = b.category_id
+      WHERE l.business_id = $1
+      ORDER BY COALESCE(l.issue_date, l.application_date, l.updated_at, l.created_at) DESC, l.id DESC
+    `, [id]);
+    res.json(result.rows.map(mapLicense));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Firma ruhsat kayıtları alınamadı.' });
+  }
+});
+
+app.get('/api/licenses/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
+      SELECT
+        l.*,
+        b.trade_name AS business_trade_name,
+        bc.name AS category_name
+      FROM licenses l
+      INNER JOIN businesses b ON b.id = l.business_id
+      LEFT JOIN business_categories bc ON bc.id = b.category_id
+      WHERE l.id = $1
+      LIMIT 1
+    `, [id]);
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Ruhsat kaydı bulunamadı.' });
+    }
+
+    res.json(mapLicense(result.rows[0]));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Ruhsat kaydı alınamadı.' });
+  }
+});
+
+app.post('/api/licenses', async (req, res) => {
+  try {
+    const {
+      businessId, issueDate, licenseSerialNo, ownerName, tradeName, activitySubject, neighborhood, street, doorNo, ada, parcel, usageArea, otherUsageArea, totalMotorPower, workplaceClass, winterOpeningTime, winterClosingTime, summerOpeningTime, summerClosingTime, otherActivityAreas, identityNumber, taxNumber, policeChiefName, mayorName, recordStatus, processStatus, applicationDate, applicationNo, applicationStage, followupDate, cancelDate, cancelReason, notes
+    } = req.body;
+
+    if (!businessId) {
+      return res.status(400).json({ error: 'Firma seçimi zorunludur.' });
+    }
+
+    const businessExists = await pool.query('SELECT id FROM businesses WHERE id = $1', [businessId]);
+    if (!businessExists.rows.length) {
+      return res.status(404).json({ error: 'Seçilen firma bulunamadı.' });
+    }
+
+    const insertResult = await pool.query(`
+      INSERT INTO licenses (
+        business_id, issue_date, license_serial_no, owner_name, trade_name, activity_subject, neighborhood, street, door_no, ada, parcel, usage_area, other_usage_area, total_motor_power, workplace_class, winter_opening_time, winter_closing_time, summer_opening_time, summer_closing_time, other_activity_areas, identity_number, tax_number, police_chief_name, mayor_name, record_status, process_status, application_date, application_no, application_stage, followup_date, cancel_date, cancel_reason, notes, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, CURRENT_TIMESTAMP
+      ) RETURNING *
+    `, [
+      businessId,
+      issueDate || null,
+      licenseSerialNo ? String(licenseSerialNo).trim() : '',
+      ownerName ? String(ownerName).trim() : '',
+      tradeName ? String(tradeName).trim() : '',
+      activitySubject ? String(activitySubject).trim() : '',
+      neighborhood ? String(neighborhood).trim() : '',
+      street ? String(street).trim() : '',
+      doorNo ? String(doorNo).trim() : '',
+      ada ? String(ada).trim() : '',
+      parcel ? String(parcel).trim() : '',
+      usageArea ? String(usageArea).trim() : '',
+      otherUsageArea ? String(otherUsageArea).trim() : '',
+      totalMotorPower ? String(totalMotorPower).trim() : '',
+      workplaceClass ? String(workplaceClass).trim() : '',
+      winterOpeningTime ? String(winterOpeningTime).trim() : '',
+      winterClosingTime ? String(winterClosingTime).trim() : '',
+      summerOpeningTime ? String(summerOpeningTime).trim() : '',
+      summerClosingTime ? String(summerClosingTime).trim() : '',
+      otherActivityAreas ? String(otherActivityAreas).trim() : '',
+      identityNumber ? String(identityNumber).trim() : '',
+      taxNumber ? String(taxNumber).trim() : '',
+      policeChiefName ? String(policeChiefName).trim() : '',
+      mayorName ? String(mayorName).trim() : '',
+      recordStatus ? String(recordStatus).trim() : 'Aktif',
+      processStatus ? String(processStatus).trim() : 'Ruhsat Verildi',
+      applicationDate || null,
+      applicationNo ? String(applicationNo).trim() : '',
+      applicationStage ? String(applicationStage).trim() : '',
+      followupDate || null,
+      cancelDate || null,
+      cancelReason ? String(cancelReason).trim() : '',
+      notes ? String(notes).trim() : ''
+    ]);
+
+    await updateBusinessLicenseSnapshot(businessId);
+
+    const rowResult = await pool.query(`
+      SELECT l.*, b.trade_name AS business_trade_name, bc.name AS category_name
+      FROM licenses l
+      INNER JOIN businesses b ON b.id = l.business_id
+      LEFT JOIN business_categories bc ON bc.id = b.category_id
+      WHERE l.id = $1
+    `, [insertResult.rows[0].id]);
+
+    res.json(mapLicense(rowResult.rows[0]));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Ruhsat kaydı eklenemedi.' });
+  }
+});
+
+app.put('/api/licenses/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      businessId, issueDate, licenseSerialNo, ownerName, tradeName, activitySubject, neighborhood, street, doorNo, ada, parcel, usageArea, otherUsageArea, totalMotorPower, workplaceClass, winterOpeningTime, winterClosingTime, summerOpeningTime, summerClosingTime, otherActivityAreas, identityNumber, taxNumber, policeChiefName, mayorName, recordStatus, processStatus, applicationDate, applicationNo, applicationStage, followupDate, cancelDate, cancelReason, notes
+    } = req.body;
+
+    if (!businessId) {
+      return res.status(400).json({ error: 'Firma seçimi zorunludur.' });
+    }
+
+    const existing = await pool.query('SELECT id, business_id FROM licenses WHERE id = $1', [id]);
+    if (!existing.rows.length) {
+      return res.status(404).json({ error: 'Ruhsat kaydı bulunamadı.' });
+    }
+
+    const oldBusinessId = existing.rows[0].business_id;
+
+    await pool.query(`
+      UPDATE licenses
+      SET
+        business_id = $1,
+        issue_date = $2,
+        license_serial_no = $3,
+        owner_name = $4,
+        trade_name = $5,
+        activity_subject = $6,
+        neighborhood = $7,
+        street = $8,
+        door_no = $9,
+        ada = $10,
+        parcel = $11,
+        usage_area = $12,
+        other_usage_area = $13,
+        total_motor_power = $14,
+        workplace_class = $15,
+        winter_opening_time = $16,
+        winter_closing_time = $17,
+        summer_opening_time = $18,
+        summer_closing_time = $19,
+        other_activity_areas = $20,
+        identity_number = $21,
+        tax_number = $22,
+        police_chief_name = $23,
+        mayor_name = $24,
+        record_status = $25,
+        process_status = $26,
+        application_date = $27,
+        application_no = $28,
+        application_stage = $29,
+        followup_date = $30,
+        cancel_date = $31,
+        cancel_reason = $32,
+        notes = $33,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $34
+    `, [
+      businessId,
+      issueDate || null,
+      licenseSerialNo ? String(licenseSerialNo).trim() : '',
+      ownerName ? String(ownerName).trim() : '',
+      tradeName ? String(tradeName).trim() : '',
+      activitySubject ? String(activitySubject).trim() : '',
+      neighborhood ? String(neighborhood).trim() : '',
+      street ? String(street).trim() : '',
+      doorNo ? String(doorNo).trim() : '',
+      ada ? String(ada).trim() : '',
+      parcel ? String(parcel).trim() : '',
+      usageArea ? String(usageArea).trim() : '',
+      otherUsageArea ? String(otherUsageArea).trim() : '',
+      totalMotorPower ? String(totalMotorPower).trim() : '',
+      workplaceClass ? String(workplaceClass).trim() : '',
+      winterOpeningTime ? String(winterOpeningTime).trim() : '',
+      winterClosingTime ? String(winterClosingTime).trim() : '',
+      summerOpeningTime ? String(summerOpeningTime).trim() : '',
+      summerClosingTime ? String(summerClosingTime).trim() : '',
+      otherActivityAreas ? String(otherActivityAreas).trim() : '',
+      identityNumber ? String(identityNumber).trim() : '',
+      taxNumber ? String(taxNumber).trim() : '',
+      policeChiefName ? String(policeChiefName).trim() : '',
+      mayorName ? String(mayorName).trim() : '',
+      recordStatus ? String(recordStatus).trim() : 'Aktif',
+      processStatus ? String(processStatus).trim() : 'Ruhsat Verildi',
+      applicationDate || null,
+      applicationNo ? String(applicationNo).trim() : '',
+      applicationStage ? String(applicationStage).trim() : '',
+      followupDate || null,
+      cancelDate || null,
+      cancelReason ? String(cancelReason).trim() : '',
+      notes ? String(notes).trim() : '',
+      id
+    ]);
+
+    if (String(oldBusinessId) !== String(businessId)) {
+      await updateBusinessLicenseSnapshot(oldBusinessId);
+    }
+    await updateBusinessLicenseSnapshot(businessId);
+
+    const rowResult = await pool.query(`
+      SELECT l.*, b.trade_name AS business_trade_name, bc.name AS category_name
+      FROM licenses l
+      INNER JOIN businesses b ON b.id = l.business_id
+      LEFT JOIN business_categories bc ON bc.id = b.category_id
+      WHERE l.id = $1
+    `, [id]);
+
+    res.json(mapLicense(rowResult.rows[0]));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Ruhsat kaydı güncellenemedi.' });
+  }
+});
+
+app.delete('/api/licenses/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = await pool.query('SELECT id, business_id FROM licenses WHERE id = $1', [id]);
+    if (!existing.rows.length) {
+      return res.status(404).json({ error: 'Ruhsat kaydı bulunamadı.' });
+    }
+
+    const businessId = existing.rows[0].business_id;
+    await pool.query('DELETE FROM licenses WHERE id = $1', [id]);
+    await updateBusinessLicenseSnapshot(businessId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Ruhsat kaydı silinemedi.' });
+  }
+});
+
+app.get('/licenses', (req, res) => {
+  res.sendFile(path.join(__dirname, 'licenses-page.html'));
 });
 
 app.get("/inspections", (req, res) => {
@@ -4748,6 +5270,7 @@ app.get("/inspections", (req, res) => {
         <a href="/" class="menu-item"><span class="menu-left"><span>📌</span><span>Şikayet Takip</span></span></a>
         <a href="/businesses" class="menu-item"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
         <a href="/inspections" class="menu-item active"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
+        <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
       </nav>
     </aside>
     <main class="main">
@@ -4774,7 +5297,8 @@ app.get("/inspections", (req, res) => {
         <div class="filters">
           <input type="month" id="filterMonth" onchange="renderInspectionTable()" />
           <select id="filterCategory" onchange="renderInspectionTable()"></select>
-          <select id="filterLicense" onchange="renderInspectionTable()"><option value="all">Tüm Ruhsat Durumları</option><option value="Var">Ruhsatlı</option><option value="Yok">Ruhsatsız</option><option value="Başvuru Aşamasında">Başvuru Aşamasında</option></select>
+          <select id="filterLicense" onchange="renderInspectionTable()"><option value="all">Tüm Ruhsat Durumları</option><option value="Var">Ruhsatlı</option><option value="Yok">Ruhsatsız</option><option value="Başvuru Aşamasında">Başvuru Aşamasında</option>
+            <option value="İptal / Pasif">İptal / Pasif Özeti</option></select>
           <select id="filterResult" onchange="renderInspectionTable()"><option value="all">Tüm Sonuçlar</option><option value="Uygun">Uygun</option><option value="Eksik Var">Eksik Var</option><option value="Uyarı Yapıldı">Uyarı Yapıldı</option><option value="İşlem Yapıldı">İşlem Yapıldı</option></select>
           <select id="filterStatus" onchange="renderInspectionTable()"><option value="all">Tüm Durumlar</option><option value="Açık">Açık</option><option value="Süre Verildi">Süre Verildi</option><option value="Kapatıldı">Kapatıldı</option></select>
           <input type="text" id="searchInput" placeholder="Firma, sahip, telefon, mahalle / cadde ara" oninput="renderInspectionTable()" />
@@ -5103,6 +5627,7 @@ app.get("/", (req, res) => {
         <a href="#" class="menu-item active"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span></a>
         <a href="/businesses" class="menu-item"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
         <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
+        <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
       </nav>
     </aside>
     <main class="main">
