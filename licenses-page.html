@@ -59,11 +59,11 @@
     .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
     .panel-title { font-size: 15px; font-weight: 700; }
     .panel-subtitle { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
-    .filters { display: grid; grid-template-columns: 210px 170px 170px 190px minmax(220px, 1fr) auto auto; gap: 10px; align-items: center; }
+    .filters { display: grid; grid-template-columns: 210px 170px 170px minmax(260px, 1fr) auto auto; gap: 10px; align-items: center; }
     input, select, textarea { width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; background: #fff; color: var(--text); }
     input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
     .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
-    table { width: 100%; border-collapse: collapse; min-width: 1580px; }
+    table { width: 100%; border-collapse: collapse; min-width: 1080px; }
     th, td { padding: 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; text-align: left; vertical-align: top; }
     th { background: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
     tr:last-child td { border-bottom: none; }
@@ -85,13 +85,14 @@
     .empty-state { border: 1px dashed var(--line); border-radius: 12px; background: #fbfdff; padding: 22px; text-align: center; color: var(--muted); font-size: 13px; }
     .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.52); display: none; align-items: center; justify-content: center; padding: 18px; z-index: 50; }
     .modal-overlay.show { display: flex; }
-    .modal { width: min(1260px, 100%); max-height: calc(100vh - 36px); overflow: hidden; background: #fff; border-radius: 18px; box-shadow: var(--shadow-strong); border: 1px solid rgba(219,227,238,0.9); display: grid; grid-template-rows: auto minmax(0,1fr) auto; }
+    .modal { width: min(1260px, 100%); max-height: calc(100vh - 36px); overflow: hidden; background: #fff; border-radius: 18px; box-shadow: var(--shadow-strong); border: 1px solid rgba(219,227,238,0.9); display: flex; flex-direction: column; }
     .modal-header { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .modal-title { font-size: 16px; font-weight: 700; }
     .modal-subtitle { font-size: 12px; color: var(--muted); margin-top: 3px; }
     .close-btn { border: none; background: #f8fafc; color: #475569; width: 34px; height: 34px; border-radius: 10px; cursor: pointer; font-size: 22px; }
-    .modal-body { padding: 18px; overflow: auto; }
-    .modal-footer { padding: 14px 18px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    #licenseForm { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow: hidden; }
+    .modal-body { padding: 18px; overflow: auto; flex: 1; }
+    .modal-footer { padding: 14px 18px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: #fff; position: sticky; bottom: 0; z-index: 2; }
     .form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
     .form-group { display: grid; gap: 6px; }
     .form-group.full { grid-column: 1 / -1; }
@@ -118,7 +119,7 @@
       .sidebar { display: none; }
       .main { padding: 16px; }
       .stats-grid, .filters, .form-grid { grid-template-columns: 1fr; }
-      table { min-width: 980px; }
+      table { min-width: 820px; }
     }
   </style>
 </head>
@@ -185,9 +186,7 @@
             <option value="Komisyon Bekliyor">Komisyon Bekliyor</option>
             <option value="Onay Bekliyor">Onay Bekliyor</option>
             <option value="Reddedildi">Reddedildi</option>
-          </select>
-          <input type="date" id="filterFollowupDate" onchange="renderLicenseTable()" />
-          <input type="text" id="searchInput" placeholder="Ünvan, sahip, ruhsat no, başvuru no, mahalle ara" oninput="renderLicenseTable()" />
+          </select>          <input type="text" id="searchInput" placeholder="Ünvan, sahip, ruhsat no, başvuru no, mahalle ara" oninput="renderLicenseTable()" />
           <a class="btn btn-ghost" href="/businesses">Firma Listesi</a>
           <a class="btn btn-ghost" href="/inspections">Tüm Denetimler</a>
         </div>
@@ -200,12 +199,11 @@
                 <th>Durum</th>
                 <th>Faaliyet / Sınıf</th>
                 <th>Adres</th>
-                <th>Takip</th>
                 <th>İşlem</th>
               </tr>
             </thead>
             <tbody id="licenseTableBody">
-              <tr><td colspan="7"><div class="empty-state">Ruhsat kayıtları yükleniyor...</div></td></tr>
+              <tr><td colspan="6"><div class="empty-state">Ruhsat kayıtları yükleniyor...</div></td></tr>
             </tbody>
           </table>
         </div>
@@ -230,7 +228,7 @@
               <div class="section-head">
                 <div>
                   <div class="section-title">Bağlantı ve durum</div>
-                  <div class="section-note">Önce firmayı seçin. Adres ve temel bilgiler otomatik dolacak, isterseniz ruhsat kaydı özelinde değiştirebilirsiniz.</div>
+                  <div class="section-note">Ruhsat kaydı bu modülden yönetilir. Firmayı seçtiğinizde temel bilgiler otomatik dolar; gerekirse ruhsat üzerindeki haline göre düzenleyebilirsiniz.</div>
                 </div>
               </div>
               <div class="form-grid">
@@ -636,7 +634,6 @@
         businessId: document.getElementById('filterBusiness').value,
         recordStatus: document.getElementById('filterRecordStatus').value,
         processStatus: document.getElementById('filterProcessStatus').value,
-        followupDate: document.getElementById('filterFollowupDate').value,
         search: document.getElementById('searchInput').value.trim().toLocaleLowerCase('tr-TR')
       };
     }
@@ -647,7 +644,6 @@
         var matchesBusiness = filters.businessId === 'all' || String(item.businessId) === String(filters.businessId);
         var matchesRecord = filters.recordStatus === 'all' || item.recordStatus === filters.recordStatus;
         var matchesProcess = filters.processStatus === 'all' || item.processStatus === filters.processStatus;
-        var matchesFollowup = !filters.followupDate || String(item.followupDate || '') === filters.followupDate;
         var haystack = [
           item.tradeName,
           item.ownerName,
@@ -661,7 +657,7 @@
           item.notes
         ].join(' ').toLocaleLowerCase('tr-TR');
         var matchesSearch = !filters.search || haystack.indexOf(filters.search) !== -1;
-        return matchesBusiness && matchesRecord && matchesProcess && matchesFollowup && matchesSearch;
+        return matchesBusiness && matchesRecord && matchesProcess && matchesSearch;
       });
     }
 
@@ -686,7 +682,7 @@
       renderStats();
       var body = document.getElementById('licenseTableBody');
       if (!rows.length) {
-        body.innerHTML = '<tr><td colspan="7"><div class="empty-state">Bu filtreye uygun ruhsat kaydı bulunmuyor.</div></td></tr>';
+        body.innerHTML = '<tr><td colspan="6"><div class="empty-state">Bu filtreye uygun ruhsat kaydı bulunmuyor.</div></td></tr>';
         return;
       }
 
@@ -697,19 +693,30 @@
         if (item.neighborhood) addressParts.push(escapeHtml(item.neighborhood + ' Mah.'));
         if (item.street) addressParts.push(escapeHtml(item.street));
         if (item.doorNo) addressParts.push('No: ' + escapeHtml(item.doorNo));
-        var followupBlock = item.followupDateText ? ('<div class="cell-sub">Takip: ' + escapeHtml(item.followupDateText) + '</div>') : '<div class="cell-sub">Takip tarihi yok</div>';
-        if (item.recordStatus === 'İptal' && item.cancelDateText) {
-          followupBlock += '<div class="cell-sub">İptal: ' + escapeHtml(item.cancelDateText) + '</div>';
+
+        var businessLink = item.businessId
+          ? '<div class="cell-sub"><a href="/businesses/' + item.businessId + '">Firma detayına git</a></div>'
+          : '<div class="cell-sub">Firma bağlantısı yok</div>';
+
+        var applicationBits = [];
+        applicationBits.push('<div class="cell-sub">Veriliş: ' + escapeHtml(item.issueDateText || '-') + '</div>');
+        if (item.applicationNo) applicationBits.push('<div class="cell-sub">Başvuru No: ' + escapeHtml(item.applicationNo) + '</div>');
+        if (item.applicationStage) applicationBits.push('<div class="cell-sub">Aşama: ' + escapeHtml(item.applicationStage) + '</div>');
+        if (item.recordStatus === 'İptal' && item.cancelDateText) applicationBits.push('<div class="cell-sub">İptal Tarihi: ' + escapeHtml(item.cancelDateText) + '</div>');
+
+        var actionButtons = '<button class="mini-btn primary" type="button" onclick="openLicenseModal(' + item.id + ')">Düzenle</button>';
+        if (item.businessId) {
+          actionButtons += '<a class="mini-btn" href="/businesses/' + item.businessId + '">Firma Detayı</a>';
         }
+        actionButtons += '<button class="mini-btn danger" type="button" onclick="deleteLicense(' + item.id + ')">Sil</button>';
 
         html += '<tr>' +
-          '<td><div class="stack"><div class="cell-title">' + escapeHtml(item.tradeName || '-') + '</div><div class="cell-sub">' + escapeHtml(item.ownerName || 'Sahip bilgisi yok') + '</div><div class="cell-sub"><a href="/businesses/' + item.businessId + '">Firma detayına git</a></div></div></td>' +
-          '<td><div class="stack"><div class="cell-title">Ruhsat No: ' + escapeHtml(item.licenseSerialNo || '-') + '</div><div class="cell-sub">Veriliş: ' + escapeHtml(item.issueDateText || '-') + '</div><div class="cell-sub">Başvuru No: ' + escapeHtml(item.applicationNo || '-') + '</div></div></td>' +
+          '<td><div class="stack"><div class="cell-title">' + escapeHtml(item.tradeName || '-') + '</div><div class="cell-sub">' + escapeHtml(item.ownerName || 'Sahip bilgisi yok') + '</div>' + businessLink + '</div></td>' +
+          '<td><div class="stack"><div class="cell-title">Ruhsat No: ' + escapeHtml(item.licenseSerialNo || '-') + '</div>' + applicationBits.join('') + '</div></td>' +
           '<td><div class="stack">' + recordBadge(item.recordStatus) + processBadge(item.processStatus) + '</div></td>' +
           '<td><div class="stack"><div class="cell-title">' + escapeHtml(item.activitySubject || 'Faaliyet konusu girilmedi') + '</div><div class="cell-sub">' + escapeHtml(item.workplaceClass || 'Sınıf girilmedi') + '</div></div></td>' +
           '<td><div class="stack"><div class="cell-title">' + (addressParts.join(', ') || '<span class="muted">Adres yok</span>') + '</div><div class="cell-sub">Ada: ' + escapeHtml(item.ada || '-') + ' · Parsel: ' + escapeHtml(item.parcel || '-') + '</div></div></td>' +
-          '<td><div class="stack">' + followupBlock + '<div class="cell-sub">Aşama: ' + escapeHtml(item.applicationStage || '-') + '</div></div></td>' +
-          '<td><div class="action-row"><button class="mini-btn primary" type="button" onclick="openLicenseModal(' + item.id + ')">Düzenle</button><a class="mini-btn" href="/licenses?businessId=' + item.businessId + '">Firmaya Göre Listele</a><button class="mini-btn danger" type="button" onclick="deleteLicense(' + item.id + ')">Sil</button></div></td>' +
+          '<td><div class="action-row">' + actionButtons + '</div></td>' +
         '</tr>';
       }
 
@@ -720,7 +727,6 @@
       document.getElementById('filterBusiness').value = queryParams.get('businessId') || 'all';
       document.getElementById('filterRecordStatus').value = 'all';
       document.getElementById('filterProcessStatus').value = 'all';
-      document.getElementById('filterFollowupDate').value = '';
       document.getElementById('searchInput').value = '';
       renderLicenseTable();
     }
@@ -835,7 +841,7 @@
         await loadBusinesses();
         await loadLicenses();
       } catch (error) {
-        document.getElementById('licenseTableBody').innerHTML = '<tr><td colspan="7"><div class="empty-state">' + escapeHtml(error.message || 'Veriler yüklenemedi.') + '</div></td></tr>';
+        document.getElementById('licenseTableBody').innerHTML = '<tr><td colspan="6"><div class="empty-state">' + escapeHtml(error.message || 'Veriler yüklenemedi.') + '</div></td></tr>';
       }
     }
 

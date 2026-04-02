@@ -4168,7 +4168,7 @@ app.get("/businesses/:id", (req, res) => {
         <div>
           <div class="crumb"><a href="/businesses">Firma Listesi</a> / <span>Firma Detayı</span></div>
           <h1 class="hero-title" id="pageTitle">Firma Detayı</h1>
-          <p class="hero-text">Bu ekranda firmaya ait temel bilgiler, ruhsat yapısı ve denetim geçmişi tek sayfada izlenir. Ruhsat ve denetim işlemleri sağ panelden düzenlenir.</p>
+          <p class="hero-text">Bu ekranda firmaya ait temel bilgiler, ruhsat özeti ve denetim geçmişi tek sayfada izlenir. Ruhsat kaydı yalnızca Ruhsat Modülü üzerinden yönetilir.</p>
         </div>
         <div class="toolbar">
           <a class="btn btn-ghost" href="/businesses">← Listeye Dön</a>
@@ -4187,7 +4187,7 @@ app.get("/businesses/:id", (req, res) => {
         <div class="stat-card">
           <div class="stat-label">Ruhsat Durumu</div>
           <div class="stat-value" id="statLicenseStatus">-</div>
-          <div class="stat-sub">Ruhsat kartındaki son kayıt durumu</div>
+          <div class="stat-sub">Ruhsat modülünden gelen son durum özeti</div>
         </div>
         <div class="stat-card">
           <div class="stat-label">Son Denetim</div>
@@ -4211,7 +4211,7 @@ app.get("/businesses/:id", (req, res) => {
         <div class="panel-header">
           <div>
             <div class="panel-title">Ruhsat Özeti</div>
-            <div class="panel-subtitle">Ruhsat durumu, numarası, veriliş tarihi ve adres bilgisi tek kartta tutulur.</div>
+            <div class="panel-subtitle">Bu bölüm sadece Ruhsat Modülünden gelen son durumu özetler. Düzenleme bu ekrandan yapılmaz.</div>
           </div>
           <a class="btn btn-ghost" id="openLicenseBtnSection" href="/licenses?businessId=${businessId}">Ruhsat Modülünü Aç</a>
         </div>
@@ -4241,48 +4241,6 @@ app.get("/businesses/:id", (req, res) => {
         <button class="close-btn" type="button" id="closeDrawerBtn">×</button>
       </div>
       <div class="drawer-body">
-        <section class="drawer-section" id="licenseSection">
-          <div class="hint-card">Ruhsat bilgilerini bu panelden düzenleyebilirsin. Adres bilgisi firma kaydından otomatik çekilir.</div>
-          <form id="licenseForm">
-            <div class="form-grid">
-              <div class="form-group">
-                <label for="licenseActivitySubject">Faaliyet Konusu</label>
-                <input type="text" id="licenseActivitySubject" placeholder="Örnek: Gıda satışı" />
-              </div>
-              <div class="form-group">
-                <label for="licenseStatus">Ruhsat Durumu</label>
-                <select id="licenseStatus">
-                  <option value="Yok">Yok</option>
-                  <option value="Var">Var</option>
-                  <option value="Başvuru Aşamasında">Başvuru Aşamasında</option>
-            <option value="İptal / Pasif">İptal / Pasif Özeti</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="licenseNo">Ruhsat No</label>
-                <input type="text" id="licenseNo" placeholder="Ruhsat numarası" />
-              </div>
-              <div class="form-group">
-                <label for="licenseDate">Veriliş Tarihi</label>
-                <input type="date" id="licenseDate" />
-              </div>
-              <div class="form-group full">
-                <label for="businessClass">İşyeri Sınıfı / Türü</label>
-                <input type="text" id="businessClass" placeholder="Örnek: 2. Sınıf Gayrisıhhi Müessese" />
-              </div>
-              <div class="form-group full">
-                <label for="licenseNote">Ruhsat Açıklaması</label>
-                <textarea id="licenseNote" placeholder="Ruhsatla ilgili açıklama veya takip notu"></textarea>
-              </div>
-              <div class="form-group full">
-                <label for="licenseAddressPreview">Adres Bilgisi</label>
-                <textarea id="licenseAddressPreview" readonly placeholder="Firma adresi otomatik gelir"></textarea>
-              </div>
-            </div>
-            <div id="licenseMessage" class="form-message"></div>
-          </form>
-        </section>
-
         <section class="drawer-section" id="inspectionSection">
           <div class="hint-card">Yeni denetim ekleyebilir ya da mevcut kaydı düzenleyebilirsin. Süre verildi ise kontrol tarihini de gir.</div>
           <form id="inspectionForm">
@@ -4334,7 +4292,6 @@ app.get("/businesses/:id", (req, res) => {
       </div>
       <div class="drawer-footer">
         <button class="btn btn-secondary" type="button" id="cancelDrawerBtn">Kapat</button>
-        <button class="btn btn-primary" type="submit" form="licenseForm" id="licenseSubmitBtn">Kaydet</button>
         <button class="btn btn-primary" type="submit" form="inspectionForm" id="inspectionSubmitBtn">Kaydet</button>
       </div>
     </aside>
@@ -4596,16 +4553,6 @@ app.get("/businesses/:id", (req, res) => {
       }
     }
 
-    function fillLicenseForm() {
-      document.getElementById('licenseActivitySubject').value = currentBusiness ? (currentBusiness.activitySubject || '') : '';
-      document.getElementById('licenseStatus').value = currentBusiness ? (currentBusiness.licenseStatus || 'Yok') : 'Yok';
-      document.getElementById('licenseNo').value = currentBusiness ? (currentBusiness.licenseNo || '') : '';
-      document.getElementById('licenseDate').value = currentBusiness ? (currentBusiness.licenseDate || '') : '';
-      document.getElementById('businessClass').value = currentBusiness ? (currentBusiness.businessClass || '') : '';
-      document.getElementById('licenseNote').value = currentBusiness ? (currentBusiness.licenseNote || '') : '';
-      document.getElementById('licenseAddressPreview').value = currentBusiness ? (currentBusiness.addressText || '') : '';
-      setMessage('licenseMessage', '', '');
-    }
 
     function resetInspectionForm() {
       document.getElementById('editingInspectionId').value = '';
@@ -4631,18 +4578,11 @@ app.get("/businesses/:id", (req, res) => {
 
     function setActiveSection(sectionName) {
       activeEditor = sectionName;
-      document.getElementById('licenseSection').classList.toggle('active', sectionName === 'license');
       document.getElementById('inspectionSection').classList.toggle('active', sectionName === 'inspection');
-      document.getElementById('licenseSubmitBtn').style.display = sectionName === 'license' ? 'inline-flex' : 'none';
       document.getElementById('inspectionSubmitBtn').style.display = sectionName === 'inspection' ? 'inline-flex' : 'none';
-      if (sectionName === 'license') {
-        document.getElementById('drawerTitle').textContent = 'Ruhsat Bilgisi Düzenle';
-        document.getElementById('drawerSubtitle').textContent = 'Ruhsat bilgileri bu panelden kaydedilir. Adres firma kaydından otomatik gelir.';
-      } else {
-        var editing = !!document.getElementById('editingInspectionId').value;
-        document.getElementById('drawerTitle').textContent = editing ? 'Denetim Kaydı Düzenle' : 'Yeni Denetim Ekle';
-        document.getElementById('drawerSubtitle').textContent = editing ? 'Seçilen denetim kaydını düzenliyorsun.' : 'Firmaya yeni denetim kaydı ekliyorsun.';
-      }
+      var editing = !!document.getElementById('editingInspectionId').value;
+      document.getElementById('drawerTitle').textContent = editing ? 'Denetim Kaydı Düzenle' : 'Yeni Denetim Ekle';
+      document.getElementById('drawerSubtitle').textContent = editing ? 'Seçilen denetim kaydını düzenliyorsun.' : 'Firmaya yeni denetim kaydı ekliyorsun.';
     }
 
     function openDrawer(sectionName) {
@@ -4654,14 +4594,9 @@ app.get("/businesses/:id", (req, res) => {
     function closeDrawer() {
       document.getElementById('editorOverlay').classList.remove('show');
       document.body.classList.remove('drawer-open');
-      setMessage('licenseMessage', '', '');
       setMessage('inspectionMessage', '', '');
     }
 
-    function openLicenseEditor() {
-      fillLicenseForm();
-      openDrawer('license');
-    }
 
     function openInspectionEditor(id) {
       resetInspectionForm();
@@ -4691,36 +4626,6 @@ app.get("/businesses/:id", (req, res) => {
       button.textContent = saving ? 'Kaydediliyor...' : 'Kaydet';
     }
 
-    async function handleLicenseSubmit(event) {
-      event.preventDefault();
-      setMessage('licenseMessage', '', '');
-      setSaving('licenseSubmitBtn', true);
-      try {
-        var response = await fetch('/api/businesses/' + businessId + '/license', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            activitySubject: document.getElementById('licenseActivitySubject').value.trim(),
-            licenseStatus: document.getElementById('licenseStatus').value,
-            licenseNo: document.getElementById('licenseNo').value.trim(),
-            licenseDate: document.getElementById('licenseDate').value,
-            businessClass: document.getElementById('businessClass').value.trim(),
-            licenseNote: document.getElementById('licenseNote').value.trim()
-          })
-        });
-        var data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Ruhsat bilgisi kaydedilemedi.');
-        currentBusiness = data;
-        renderSummary();
-        renderLicense();
-        closeDrawer();
-        showToast('Ruhsat bilgisi kaydedildi.');
-      } catch (error) {
-        setMessage('licenseMessage', error.message || 'Ruhsat bilgisi kaydedilemedi.', 'error');
-      } finally {
-        setSaving('licenseSubmitBtn', false);
-      }
-    }
 
     async function handleInspectionSubmit(event) {
       event.preventDefault();
@@ -4872,7 +4777,6 @@ app.get("/businesses/:id", (req, res) => {
         }
       });
       document.getElementById('inspectionCurrentStatus').addEventListener('change', toggleInspectionControlDate);
-      document.getElementById('licenseForm').addEventListener('submit', handleLicenseSubmit);
       document.getElementById('inspectionForm').addEventListener('submit', handleInspectionSubmit);
       document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') closeDrawer();
