@@ -2660,8 +2660,10 @@ app.get("/businesses", (req, res) => {
     }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Inter, "Segoe UI", Arial, Helvetica, sans-serif; background: #f3f6fa; color: var(--text); }
-    .app { min-height: 100vh; display: grid; grid-template-columns: 208px minmax(0, 1fr); }
-    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #fff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 0; height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); z-index: 20; }
+    .app { min-height: 100vh; display: block; }
+    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #fff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: fixed; left: 0; top: 0; bottom: 0; width: min(84vw, 320px); height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); z-index: 60; transform: translateX(-100%); transition: transform 0.22s ease; box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18); overflow-y: auto; }
+    body.sidebar-open { overflow: hidden; }
+    body.sidebar-open .sidebar { transform: translateX(0); }
     .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
     .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.16); }
     .brand { font-size: 14px; font-weight: 700; line-height: 1.3; }
@@ -2672,6 +2674,9 @@ app.get("/businesses", (req, res) => {
     .menu-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.08); }
     .menu-item.active { background: rgba(255,255,255,0.08); color: #ffffff; border-color: rgba(255,255,255,0.1); font-weight: 600; }
     .menu-left { display: inline-flex; align-items: center; gap: 8px; }
+    .sidebar-toggle { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px; border: 1px solid var(--line); background: #ffffff; color: var(--text); border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 700; box-shadow: var(--shadow); cursor: pointer; }
+    .sidebar-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); opacity: 0; pointer-events: none; transition: opacity 0.18s ease; z-index: 50; }
+    body.sidebar-open .sidebar-backdrop { opacity: 1; pointer-events: auto; }
     .main { padding: 18px 20px; min-width: 0; }
     .hero { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
     .hero-title { margin: 0; font-size: 26px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 700; }
@@ -2757,15 +2762,15 @@ app.get("/businesses", (req, res) => {
       .filters, .form-grid, .section-grid, .address-grid, .address-inline, .location-row, .parcel-row, .google-link-row { grid-template-columns: 1fr; }
     }
     @media (max-width: 720px) {
-      .app { grid-template-columns: 1fr; }
-      .sidebar { position: relative; height: auto; }
       .stats-grid { grid-template-columns: 1fr; }
+      .main { padding: 14px; }
     }
   </style>
 </head>
 <body>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
   <div class="app">
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="sidebar-top">
         <div class="brand-mark">ZB</div>
         <div>
@@ -2783,6 +2788,7 @@ app.get("/businesses", (req, res) => {
     </aside>
 
     <main class="main">
+      <button class="sidebar-toggle" type="button" onclick="toggleSidebar()">☰ Modüller</button>
       <section class="hero">
         <div>
           <h1 class="hero-title">İşyeri Denetim Modülü · Firma Listesi</h1>
@@ -4030,6 +4036,11 @@ app.get("/businesses", (req, res) => {
         alert('İşyeri silinemedi.');
       }
     }
+    function toggleSidebar(forceOpen) {
+      var shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !document.body.classList.contains('sidebar-open');
+      document.body.classList.toggle('sidebar-open', shouldOpen);
+    }
+
     document.addEventListener('DOMContentLoaded', async function() {
       setTodayText();
       try {
@@ -4053,7 +4064,8 @@ app.get("/businesses", (req, res) => {
       document.addEventListener('keydown', function(event) {
         if (event.key === 'Escape') {
           var open = document.querySelector('.modal-overlay.show');
-          if (open) closeModal(open.id);
+          if (open) { closeModal(open.id); return; }
+          if (document.body.classList.contains('sidebar-open')) { toggleSidebar(false); return; }
           return;
         }
 
@@ -4102,8 +4114,10 @@ app.get("/businesses/:id", (req, res) => {
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Inter, "Segoe UI", Arial, sans-serif; background: #f3f6fa; color: var(--text); }
     body.drawer-open { overflow: hidden; }
-    .app { min-height: 100vh; display: grid; grid-template-columns: 208px minmax(0, 1fr); }
-    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #fff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 0; height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); }
+    .app { min-height: 100vh; display: block; }
+    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #fff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: fixed; left: 0; top: 0; bottom: 0; width: min(84vw, 320px); height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); z-index: 60; transform: translateX(-100%); transition: transform 0.22s ease; box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18); overflow-y: auto; }
+    body.sidebar-open { overflow: hidden; }
+    body.sidebar-open .sidebar { transform: translateX(0); }
     .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
     .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.16); }
     .brand { font-size: 14px; font-weight: 700; line-height: 1.3; }
@@ -4114,6 +4128,9 @@ app.get("/businesses/:id", (req, res) => {
     .menu-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.08); }
     .menu-item.active { background: rgba(255,255,255,0.08); color: #ffffff; border-color: rgba(255,255,255,0.1); font-weight: 600; }
     .menu-left { display: inline-flex; align-items: center; gap: 8px; }
+    .sidebar-toggle { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px; border: 1px solid var(--line); background: #ffffff; color: var(--text); border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 700; box-shadow: var(--shadow); cursor: pointer; }
+    .sidebar-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); opacity: 0; pointer-events: none; transition: opacity 0.18s ease; z-index: 50; }
+    body.sidebar-open .sidebar-backdrop { opacity: 1; pointer-events: auto; }
     .main { padding: 18px 20px; min-width: 0; }
     .hero, .panel, .stat-card { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
     .hero { padding: 16px 18px; display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 12px; }
@@ -4245,8 +4262,6 @@ app.get("/businesses/:id", (req, res) => {
     .upload-help { font-size: 12px; color: var(--muted); line-height: 1.55; margin-top: 8px; }
 
     @media (max-width: 980px) {
-      .app { grid-template-columns: minmax(0, 1fr); }
-      .sidebar { display: none; }
       .main { padding: 14px; }
       .stats-grid, .summary-grid, .license-layout, .form-grid, .inspection-summary-bar, .inspection-grid, .upload-shell, .inspection-file-columns, .inspection-upload-row { grid-template-columns: 1fr; }
       .hero-title { font-size: 22px; }
@@ -4257,8 +4272,9 @@ app.get("/businesses/:id", (req, res) => {
   </style>
 </head>
 <body>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
   <div class="app">
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="sidebar-top">
         <div class="brand-mark">ZB</div>
         <div>
@@ -4276,6 +4292,7 @@ app.get("/businesses/:id", (req, res) => {
     </aside>
 
     <main class="main">
+      <button class="sidebar-toggle" type="button" onclick="toggleSidebar()">☰ Modüller</button>
       <section class="hero">
         <div>
           <div class="crumb"><a href="/businesses">Firma Listesi</a> / <span>Firma Detayı</span></div>
@@ -4878,6 +4895,11 @@ app.get("/businesses/:id", (req, res) => {
       }
     }
 
+    function toggleSidebar(forceOpen) {
+      var shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !document.body.classList.contains('sidebar-open');
+      document.body.classList.toggle('sidebar-open', shouldOpen);
+    }
+
     function bindDetailPageActions() {
       document.getElementById('openInspectionBtnTop').addEventListener('click', function() { openInspectionEditor(); });
       document.getElementById('openInspectionBtnSection').addEventListener('click', function() { openInspectionEditor(); });
@@ -4891,7 +4913,10 @@ app.get("/businesses/:id", (req, res) => {
       document.getElementById('inspectionCurrentStatus').addEventListener('change', toggleInspectionControlDate);
       document.getElementById('inspectionForm').addEventListener('submit', handleInspectionSubmit);
       document.addEventListener('keydown', function(event) {
-        if (event.key === 'Escape') closeDrawer();
+        if (event.key !== 'Escape') return;
+        var overlay = document.getElementById('editorOverlay');
+        if (overlay && overlay.classList.contains('show')) { closeDrawer(); return; }
+        if (document.body.classList.contains('sidebar-open')) toggleSidebar(false);
       });
       window.openInspectionEditor = openInspectionEditor;
       window.deleteInspectionRecord = deleteInspectionRecord;
@@ -5215,8 +5240,10 @@ app.get("/inspections", (req, res) => {
     :root { --bg: #f4f7fb; --panel: #ffffff; --panel-soft: #f8fafc; --line: #dbe3ee; --text: #17202f; --muted: #667085; --primary: #2563eb; --danger: #dc2626; --warning: #f59e0b; --success: #16a34a; --shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Inter, "Segoe UI", Arial, sans-serif; background: #f3f6fa; color: var(--text); }
-    .app { min-height: 100vh; display: grid; grid-template-columns: 208px minmax(0, 1fr); }
-    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #fff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 0; height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); }
+    .app { min-height: 100vh; display: block; }
+    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #fff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: fixed; left: 0; top: 0; bottom: 0; width: min(84vw, 320px); height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); z-index: 60; transform: translateX(-100%); transition: transform 0.22s ease; box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18); overflow-y: auto; }
+    body.sidebar-open { overflow: hidden; }
+    body.sidebar-open .sidebar { transform: translateX(0); }
     .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
     .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.16); }
     .brand { font-size: 14px; font-weight: 700; line-height: 1.3; }
@@ -5227,6 +5254,9 @@ app.get("/inspections", (req, res) => {
     .menu-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.08); }
     .menu-item.active { background: rgba(255,255,255,0.08); color: #ffffff; border-color: rgba(255,255,255,0.1); font-weight: 600; }
     .menu-left { display: inline-flex; align-items: center; gap: 8px; }
+    .sidebar-toggle { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px; border: 1px solid var(--line); background: #ffffff; color: var(--text); border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 700; box-shadow: var(--shadow); cursor: pointer; }
+    .sidebar-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); opacity: 0; pointer-events: none; transition: opacity 0.18s ease; z-index: 50; }
+    body.sidebar-open .sidebar-backdrop { opacity: 1; pointer-events: auto; }
     .main { padding: 18px 20px; min-width: 0; }
     .hero, .panel, .stat-card { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
     .hero { padding: 16px 18px; display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 12px; }
@@ -5269,13 +5299,14 @@ app.get("/inspections", (req, res) => {
     .empty-state { border: 1px dashed var(--line); border-radius: 12px; background: #fbfdff; padding: 22px; text-align: center; color: var(--muted); font-size: 13px; }
     .print-meta { display: none; margin-bottom: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; font-size: 12.5px; color: var(--muted); }
     @media (max-width: 1220px) { .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 800px) { .app { grid-template-columns: 1fr; } .sidebar { display: none; } .main { padding: 14px; } .stats-grid, .filters { grid-template-columns: 1fr; } .hero-title { font-size: 22px; } }
-    @media print { body { background: #fff; } .sidebar, .hero .toolbar, .filters-panel { display: none !important; } .app { display: block; } .main { padding: 0; } .hero, .panel, .stat-card { box-shadow: none; border-color: #d1d5db; } .hero { margin-bottom: 10px; } .print-meta { display: block; } .table-wrap { overflow: visible; } table { min-width: 0; } th, td { font-size: 11px; padding: 8px; } a { color: inherit; text-decoration: none; } }
+    @media (max-width: 800px) { .main { padding: 14px; } .stats-grid, .filters { grid-template-columns: 1fr; } .hero-title { font-size: 22px; } }
+    @media print { body { background: #fff; } .sidebar, .sidebar-toggle, .hero .toolbar, .filters-panel { display: none !important; } .app { display: block; } .main { padding: 0; } .hero, .panel, .stat-card { box-shadow: none; border-color: #d1d5db; } .hero { margin-bottom: 10px; } .print-meta { display: block; } .table-wrap { overflow: visible; } table { min-width: 0; } th, td { font-size: 11px; padding: 8px; } a { color: inherit; text-decoration: none; } }
   </style>
 </head>
 <body>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
   <div class="app">
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="sidebar-top"><div class="brand-mark">ZB</div><div><div class="brand">Zabıta Yönetim Sistemi</div><div class="brand-sub">Kurumsal takip ve saha yönetimi</div></div></div>
       <div class="nav-section-title">Modüller</div>
       <nav class="menu">
@@ -5286,6 +5317,7 @@ app.get("/inspections", (req, res) => {
       </nav>
     </aside>
     <main class="main">
+      <button class="sidebar-toggle" type="button" onclick="toggleSidebar()">☰ Modüller</button>
       <section class="hero">
         <div>
           <h1 class="hero-title">Toplu Denetim Geçmişi</h1>
@@ -5426,6 +5458,10 @@ app.get("/inspections", (req, res) => {
       if (search) params.set('search', search);
       return params.toString();
     }
+    function toggleSidebar(forceOpen) {
+      var shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !document.body.classList.contains('sidebar-open');
+      document.body.classList.toggle('sidebar-open', shouldOpen);
+    }
     function exportExcel() {
       var rows = getFilteredInspections();
       if (!rows.length) { alert('Bu filtreye uygun Excel çıktısı oluşturulacak kayıt bulunmuyor.'); return; }
@@ -5436,7 +5472,12 @@ app.get("/inspections", (req, res) => {
     function printFilteredView() { updatePrintMeta(getFilteredInspections()); window.print(); }
     async function loadCategories() { var response = await fetch('/api/business-categories'); if (!response.ok) throw new Error('Kategoriler yüklenemedi.'); categories = await response.json(); renderCategoryOptions(); }
     async function loadInspections() { var response = await fetch('/api/inspections'); if (!response.ok) throw new Error('Denetim listesi yüklenemedi.'); inspections = await response.json(); renderInspectionTable(); }
-    document.addEventListener('DOMContentLoaded', async function() { try { await loadCategories(); await loadInspections(); } catch (error) { document.getElementById('inspectionTableBody').innerHTML = '<tr><td colspan="9"><div class="empty-state">' + escapeHtml(error.message || 'Denetim listesi yüklenemedi.') + '</div></td></tr>'; } });
+    document.addEventListener('DOMContentLoaded', async function() {
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' && document.body.classList.contains('sidebar-open')) toggleSidebar(false);
+      });
+      try { await loadCategories(); await loadInspections(); } catch (error) { document.getElementById('inspectionTableBody').innerHTML = '<tr><td colspan="9"><div class="empty-state">' + escapeHtml(error.message || 'Denetim listesi yüklenemedi.') + '</div></td></tr>'; }
+    });
   </script>
 </body>
 </html>`);
@@ -5473,8 +5514,10 @@ app.get("/", (req, res) => {
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
     body { margin: 0; font-family: Inter, "Segoe UI", Arial, Helvetica, sans-serif; background: #f3f6fa; color: var(--text); -webkit-font-smoothing: antialiased; }
-    .app { min-height: 100vh; display: grid; grid-template-columns: 208px minmax(0, 1fr); }
-    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #ffffff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 0; height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); z-index: 40; }
+    .app { min-height: 100vh; display: block; }
+    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #ffffff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: fixed; left: 0; top: 0; bottom: 0; width: min(84vw, 320px); height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); z-index: 60; transform: translateX(-100%); transition: transform 0.22s ease; box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18); overflow-y: auto; }
+    body.sidebar-open { overflow: hidden; }
+    body.sidebar-open .sidebar { transform: translateX(0); }
     .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
     .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.16); }
     .brand { font-size: 14px; font-weight: 700; line-height: 1.3; margin-bottom: 2px; letter-spacing: -0.01em; }
@@ -5486,11 +5529,15 @@ app.get("/", (req, res) => {
     .menu-item.active { background: rgba(255, 255, 255, 0.08); color: #ffffff; border-color: rgba(255,255,255,0.1); box-shadow: none; font-weight: 600; }
     .menu-left { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
     .menu-badge { display: none; }
+    .sidebar-toggle { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px; border: 1px solid var(--line); background: #ffffff; color: var(--text); border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 700; box-shadow: var(--shadow); cursor: pointer; }
+    .sidebar-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); opacity: 0; pointer-events: none; transition: opacity 0.18s ease; z-index: 50; }
+    body.sidebar-open .sidebar-backdrop { opacity: 1; pointer-events: auto; }
     .sidebar-footer { display: none; }
     .sidebar-footer-title { display: none; }
     .sidebar-footer-text { display: none; }
-    .sidebar-toggle { display: none; margin-bottom: 14px; border: 1px solid var(--line); background: #ffffff; color: var(--text); border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 700; box-shadow: var(--shadow); cursor: pointer; }
-    .sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); z-index: 30; }
+    .sidebar-toggle { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px; border: 1px solid var(--line); background: #ffffff; color: var(--text); border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 700; box-shadow: var(--shadow); cursor: pointer; }
+    .sidebar-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); opacity: 0; pointer-events: none; transition: opacity 0.18s ease; z-index: 50; }
+    body.sidebar-open .sidebar-backdrop { opacity: 1; pointer-events: auto; }
     .main { padding: 18px 20px; min-width: 0; }
     .hero { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
     .hero-copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -5616,7 +5663,7 @@ app.get("/", (req, res) => {
     .alert-item.today .alert-item-meta { color: #7c6030; }
     @media (max-width: 1280px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     .alert-item .btn { padding: 8px 10px; font-size: 12px; box-shadow: none; }
-    @media (max-width: 980px) { .app { grid-template-columns: minmax(0, 1fr); } .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: min(84vw, 320px); height: 100vh; transform: translateX(-100%); transition: transform 0.2s ease; } body.sidebar-open .sidebar { transform: translateX(0); } body.sidebar-open .sidebar-backdrop { display: block; } .sidebar-toggle { display: inline-flex; align-items: center; gap: 8px; } .main { padding: 16px; } .hero { padding: 14px; border-radius: 16px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; justify-content: space-between; flex-wrap: wrap; } .critical-grid, .stats-grid, .attachments-grid, .form-grid, .filters { grid-template-columns: 1fr; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .detail-table th { width: 150px; } }
+    @media (max-width: 980px) { .main { padding: 16px; } .hero { padding: 14px; border-radius: 16px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; justify-content: space-between; flex-wrap: wrap; } .critical-grid, .stats-grid, .attachments-grid, .form-grid, .filters { grid-template-columns: 1fr; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .detail-table th { width: 150px; } }
     @media (max-width: 640px) { .main { padding: 14px; } .hero-title { font-size: 22px; } .panel-title { font-size: 17px; } .card, .critical-card { padding: 14px; } .section-actions { width: 100%; } .section-actions .btn { flex: 1; } .attachment-card { grid-template-columns: 1fr; } .attachment-thumb, .attachment-thumb-doc { width: 100%; height: 180px; } table { min-width: 760px; } .date-card { min-width: 0; width: 100%; } }
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
