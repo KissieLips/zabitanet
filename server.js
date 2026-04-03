@@ -50,6 +50,109 @@ function decodeUploadFilename(value) {
   }
 }
 
+
+function normalizeMatchText(value) {
+  return String(value || '')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function buildLicenseBusinessMatchScore(businessRow, licenseRow) {
+  if (!businessRow || !licenseRow) return 0;
+
+  const businessTrade = normalizeMatchText(businessRow.trade_name || businessRow.tradeName);
+  const businessOwner = normalizeMatchText(businessRow.owner_name || businessRow.ownerName);
+  const businessNeighborhood = normalizeMatchText(getCanonicalBusinessNeighborhood(businessRow.neighborhood || businessRow.neighborhoodName || ''));
+  const businessStreet = normalizeMatchText(businessRow.street || '');
+  const businessDoorNo = normalizeMatchText(businessRow.door_no || businessRow.doorNo || '');
+  const businessAda = normalizeMatchText(businessRow.ada || '');
+  const businessParcel = normalizeMatchText(businessRow.parcel || '');
+
+  const licenseTrade = normalizeMatchText(licenseRow.trade_name || licenseRow.tradeName || '');
+  const licenseOwner = normalizeMatchText(licenseRow.owner_name || licenseRow.ownerName || '');
+  const licenseNeighborhood = normalizeMatchText(getCanonicalBusinessNeighborhood(licenseRow.neighborhood || ''));
+  const licenseStreet = normalizeMatchText(licenseRow.street || '');
+  const licenseDoorNo = normalizeMatchText(licenseRow.door_no || licenseRow.doorNo || '');
+  const licenseAda = normalizeMatchText(licenseRow.ada || '');
+  const licenseParcel = normalizeMatchText(licenseRow.parcel || '');
+
+  const tradeMatch = businessTrade && licenseTrade && businessTrade === licenseTrade;
+  const ownerMatch = businessOwner && licenseOwner && businessOwner === licenseOwner;
+  const neighborhoodMatch = businessNeighborhood && licenseNeighborhood && businessNeighborhood === licenseNeighborhood;
+  const streetMatch = businessStreet && licenseStreet && businessStreet === licenseStreet;
+  const doorMatch = businessDoorNo && licenseDoorNo && businessDoorNo === licenseDoorNo;
+  const adaMatch = businessAda && licenseAda && businessAda === licenseAda;
+  const parcelMatch = businessParcel && licenseParcel && businessParcel === licenseParcel;
+
+  const addressMatchCount = [neighborhoodMatch, streetMatch, doorMatch, adaMatch, parcelMatch].filter(Boolean).length;
+  const isStrongMatch = (tradeMatch && ownerMatch) || (tradeMatch && addressMatchCount >= 1) || (ownerMatch && addressMatchCount >= 2);
+  if (!isStrongMatch) return 0;
+
+  let score = 0;
+  if (tradeMatch) score += 8;
+  if (ownerMatch) score += 7;
+  if (neighborhoodMatch) score += 3;
+  if (streetMatch) score += 3;
+  if (doorMatch) score += 2;
+  if (adaMatch) score += 1;
+  if (parcelMatch) score += 1;
+  return score;
+}
+
+async function resolveBusinessIdForLicensePayload(payload, preferredBusinessId) {
+  const forcedBusinessId = preferredBusinessId !== undefined && preferredBusinessId !== null && String(preferredBusinessId).trim() !== ''
+    ? Number(preferredBusinessId)
+    : null;
+
+  if (forcedBusinessId) {
+    const exists = await pool.query('SELECT id FROM businesses WHERE id = $1 LIMIT 1', [forcedBusinessId]);
+    return exists.rows.length ? forcedBusinessId : null;
+  }
+
+  const businessRows = await pool.query('SELECT * FROM businesses');
+  let bestId = null;
+  let bestScore = 0;
+
+  for (const businessRow of businessRows.rows) {
+    const score = buildLicenseBusinessMatchScore(businessRow, payload || {});
+    if (score > bestScore) {
+      bestScore = score;
+      bestId = businessRow.id;
+    }
+  }
+
+  return bestScore >= 10 ? bestId : null;
+}
+
+async function attachMatchingLicensesToBusiness(businessId) {
+  if (!businessId) return 0;
+
+  const businessResult = await pool.query('SELECT * FROM businesses WHERE id = $1 LIMIT 1', [businessId]);
+  if (!businessResult.rows.length) return 0;
+
+  const businessRow = businessResult.rows[0];
+  const licenseResult = await pool.query('SELECT * FROM licenses WHERE business_id IS NULL');
+  let linkedCount = 0;
+
+  for (const licenseRow of licenseResult.rows) {
+    const score = buildLicenseBusinessMatchScore(businessRow, licenseRow);
+    if (score >= 10) {
+      await pool.query('UPDATE licenses SET business_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [businessId, licenseRow.id]);
+      linkedCount += 1;
+    }
+  }
+
+  await updateBusinessLicenseSnapshot(businessId);
+  return linkedCount;
+}
+
 const storage = multer.diskStorage({
   destination: function(req, file, cb) {
     const complaintFolder = path.join(complaintUploadsRoot, String(req.params.id));
@@ -825,7 +928,7 @@ async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS business_inspections (
       id SERIAL PRIMARY KEY,
-      business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+      business_id INTEGER REFERENCES businesses(id) ON DELETE CASCADE,
       inspection_date DATE NOT NULL,
       inspection_type VARCHAR(120),
       result_status VARCHAR(120),
@@ -845,7 +948,7 @@ async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS business_files (
       id SERIAL PRIMARY KEY,
-      business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+      business_id INTEGER REFERENCES businesses(id) ON DELETE CASCADE,
       file_type VARCHAR(20) NOT NULL,
       category VARCHAR(120) NOT NULL,
       description TEXT,
@@ -880,7 +983,7 @@ async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS licenses (
       id SERIAL PRIMARY KEY,
-      business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+      business_id INTEGER REFERENCES businesses(id) ON DELETE CASCADE,
       issue_date DATE,
       license_serial_no VARCHAR(120),
       owner_name VARCHAR(255),
@@ -916,6 +1019,11 @@ async function initDb() {
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE licenses
+    ALTER COLUMN business_id DROP NOT NULL
   `);
 
   await pool.query(`
@@ -1492,6 +1600,8 @@ app.post("/api/businesses", async (req, res) => {
       ]
     );
 
+    await attachMatchingLicensesToBusiness(result.rows[0].id);
+
     const fullResult = await pool.query(
       `
         SELECT
@@ -1568,6 +1678,8 @@ app.put("/api/businesses/:id", async (req, res) => {
         id,
       ]
     );
+
+    await attachMatchingLicensesToBusiness(id);
 
     const fullResult = await pool.query(
       `
@@ -4829,7 +4941,7 @@ app.get('/api/licenses', async (req, res) => {
         b.trade_name AS business_trade_name,
         bc.name AS category_name
       FROM licenses l
-      INNER JOIN businesses b ON b.id = l.business_id
+      LEFT JOIN businesses b ON b.id = l.business_id
       LEFT JOIN business_categories bc ON bc.id = b.category_id
       ORDER BY COALESCE(l.issue_date, l.application_date, l.updated_at, l.created_at) DESC, l.id DESC
     `);
@@ -4849,7 +4961,7 @@ app.get('/api/businesses/:id/licenses', async (req, res) => {
         b.trade_name AS business_trade_name,
         bc.name AS category_name
       FROM licenses l
-      INNER JOIN businesses b ON b.id = l.business_id
+      LEFT JOIN businesses b ON b.id = l.business_id
       LEFT JOIN business_categories bc ON bc.id = b.category_id
       WHERE l.business_id = $1
       ORDER BY COALESCE(l.issue_date, l.application_date, l.updated_at, l.created_at) DESC, l.id DESC
@@ -4870,7 +4982,7 @@ app.get('/api/licenses/:id', async (req, res) => {
         b.trade_name AS business_trade_name,
         bc.name AS category_name
       FROM licenses l
-      INNER JOIN businesses b ON b.id = l.business_id
+      LEFT JOIN businesses b ON b.id = l.business_id
       LEFT JOIN business_categories bc ON bc.id = b.category_id
       WHERE l.id = $1
       LIMIT 1
@@ -4893,14 +5005,7 @@ app.post('/api/licenses', async (req, res) => {
       businessId, issueDate, licenseSerialNo, ownerName, tradeName, activitySubject, neighborhood, street, doorNo, ada, parcel, usageArea, otherUsageArea, totalMotorPower, workplaceClass, winterOpeningTime, winterClosingTime, summerOpeningTime, summerClosingTime, otherActivityAreas, identityNumber, taxNumber, policeChiefName, mayorName, recordStatus, processStatus, applicationDate, applicationNo, applicationStage, followupDate, cancelDate, cancelReason, notes
     } = req.body;
 
-    if (!businessId) {
-      return res.status(400).json({ error: 'Firma seçimi zorunludur.' });
-    }
-
-    const businessExists = await pool.query('SELECT id FROM businesses WHERE id = $1', [businessId]);
-    if (!businessExists.rows.length) {
-      return res.status(404).json({ error: 'Seçilen firma bulunamadı.' });
-    }
+    const resolvedBusinessId = await resolveBusinessIdForLicensePayload(req.body || {}, businessId);
 
     const insertResult = await pool.query(`
       INSERT INTO licenses (
@@ -4909,7 +5014,7 @@ app.post('/api/licenses', async (req, res) => {
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, CURRENT_TIMESTAMP
       ) RETURNING *
     `, [
-      businessId,
+      resolvedBusinessId,
       issueDate || null,
       licenseSerialNo ? String(licenseSerialNo).trim() : '',
       ownerName ? String(ownerName).trim() : '',
@@ -4944,12 +5049,14 @@ app.post('/api/licenses', async (req, res) => {
       notes ? String(notes).trim() : ''
     ]);
 
-    await updateBusinessLicenseSnapshot(businessId);
+    if (resolvedBusinessId) {
+      await updateBusinessLicenseSnapshot(resolvedBusinessId);
+    }
 
     const rowResult = await pool.query(`
       SELECT l.*, b.trade_name AS business_trade_name, bc.name AS category_name
       FROM licenses l
-      INNER JOIN businesses b ON b.id = l.business_id
+      LEFT JOIN businesses b ON b.id = l.business_id
       LEFT JOIN business_categories bc ON bc.id = b.category_id
       WHERE l.id = $1
     `, [insertResult.rows[0].id]);
@@ -4968,16 +5075,13 @@ app.put('/api/licenses/:id', async (req, res) => {
       businessId, issueDate, licenseSerialNo, ownerName, tradeName, activitySubject, neighborhood, street, doorNo, ada, parcel, usageArea, otherUsageArea, totalMotorPower, workplaceClass, winterOpeningTime, winterClosingTime, summerOpeningTime, summerClosingTime, otherActivityAreas, identityNumber, taxNumber, policeChiefName, mayorName, recordStatus, processStatus, applicationDate, applicationNo, applicationStage, followupDate, cancelDate, cancelReason, notes
     } = req.body;
 
-    if (!businessId) {
-      return res.status(400).json({ error: 'Firma seçimi zorunludur.' });
-    }
-
     const existing = await pool.query('SELECT id, business_id FROM licenses WHERE id = $1', [id]);
     if (!existing.rows.length) {
       return res.status(404).json({ error: 'Ruhsat kaydı bulunamadı.' });
     }
 
     const oldBusinessId = existing.rows[0].business_id;
+    const resolvedBusinessId = await resolveBusinessIdForLicensePayload(req.body || {}, businessId || oldBusinessId);
 
     await pool.query(`
       UPDATE licenses
@@ -5018,7 +5122,7 @@ app.put('/api/licenses/:id', async (req, res) => {
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $34
     `, [
-      businessId,
+      resolvedBusinessId,
       issueDate || null,
       licenseSerialNo ? String(licenseSerialNo).trim() : '',
       ownerName ? String(ownerName).trim() : '',
@@ -5054,15 +5158,17 @@ app.put('/api/licenses/:id', async (req, res) => {
       id
     ]);
 
-    if (String(oldBusinessId) !== String(businessId)) {
+    if (oldBusinessId && String(oldBusinessId) !== String(resolvedBusinessId || '')) {
       await updateBusinessLicenseSnapshot(oldBusinessId);
     }
-    await updateBusinessLicenseSnapshot(businessId);
+    if (resolvedBusinessId) {
+      await updateBusinessLicenseSnapshot(resolvedBusinessId);
+    }
 
     const rowResult = await pool.query(`
       SELECT l.*, b.trade_name AS business_trade_name, bc.name AS category_name
       FROM licenses l
-      INNER JOIN businesses b ON b.id = l.business_id
+      LEFT JOIN businesses b ON b.id = l.business_id
       LEFT JOIN business_categories bc ON bc.id = b.category_id
       WHERE l.id = $1
     `, [id]);
@@ -5084,7 +5190,9 @@ app.delete('/api/licenses/:id', async (req, res) => {
 
     const businessId = existing.rows[0].business_id;
     await pool.query('DELETE FROM licenses WHERE id = $1', [id]);
-    await updateBusinessLicenseSnapshot(businessId);
+    if (businessId) {
+      await updateBusinessLicenseSnapshot(businessId);
+    }
     res.json({ success: true });
   } catch (error) {
     console.error(error);
