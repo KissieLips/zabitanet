@@ -2463,6 +2463,170 @@ function createBusinessWorkbook(rows, filters = {}) {
   return workbook;
 }
 
+
+function normalizeLicenseExportFilters(rawQuery = {}) {
+  return {
+    businessId: rawQuery.businessId ? String(rawQuery.businessId) : 'all',
+    businessName: rawQuery.businessName ? String(rawQuery.businessName) : '',
+    recordStatus: rawQuery.recordStatus ? String(rawQuery.recordStatus) : 'all',
+    processStatus: rawQuery.processStatus ? String(rawQuery.processStatus) : 'all',
+    search: rawQuery.search ? String(rawQuery.search).trim() : '',
+  };
+}
+
+function filterLicenseRows(rows, filters = {}) {
+  const search = String(filters.search || '').toLocaleLowerCase('tr-TR');
+  const businessId = String(filters.businessId || 'all');
+  const recordStatus = String(filters.recordStatus || 'all');
+  const processStatus = String(filters.processStatus || 'all');
+
+  return rows.filter((item) => {
+    const matchesBusiness = businessId === 'all'
+      ? true
+      : (businessId === 'unlinked' ? !item.businessId : String(item.businessId || '') === businessId);
+    const matchesRecord = recordStatus === 'all' || String(item.recordStatus || '') === recordStatus;
+    const matchesProcess = processStatus === 'all' || String(item.processStatus || '') === processStatus;
+    const text = [
+      item.businessName,
+      item.tradeName,
+      item.ownerName,
+      item.licenseSerialNo,
+      item.applicationNo,
+      item.applicationStage,
+      item.activitySubject,
+      item.neighborhood,
+      item.street,
+      item.doorNo,
+      item.notes,
+    ].join(' ').toLocaleLowerCase('tr-TR');
+    const matchesSearch = !search || text.indexOf(search) !== -1;
+    return matchesBusiness && matchesRecord && matchesProcess && matchesSearch;
+  });
+}
+
+async function enrichLicenseExportFilters(filters = {}) {
+  const enriched = { ...filters };
+  if (filters.businessId === 'unlinked') {
+    enriched.businessName = filters.businessName || 'Bağlı Firması Olmayanlar';
+    return enriched;
+  }
+  if (!filters.businessId || filters.businessId === 'all') {
+    enriched.businessName = 'Tüm Firmalar';
+    return enriched;
+  }
+  if (filters.businessName) return enriched;
+
+  const businessResult = await pool.query(
+    'SELECT trade_name FROM businesses WHERE id = $1 LIMIT 1',
+    [Number(filters.businessId)]
+  );
+  enriched.businessName = businessResult.rows.length
+    ? (businessResult.rows[0].trade_name || ('Firma #' + String(filters.businessId)))
+    : ('Firma #' + String(filters.businessId));
+  return enriched;
+}
+
+function buildLicenseExportFileName(filters = {}) {
+  const businessText = filters.businessName && filters.businessName !== 'Tüm Firmalar'
+    ? String(filters.businessName).toLocaleLowerCase('tr-TR').replace(/[^a-z0-9çğıöşü]+/gi, '-').replace(/^-+|-+$/g, '')
+    : 'tum-kayitlar';
+  return 'ruhsat-listesi-' + (businessText || 'tum-kayitlar') + '.xlsx';
+}
+
+function buildLicenseSummaryRows(rows, filters = {}) {
+  let active = 0;
+  let passive = 0;
+  let cancelled = 0;
+  let application = 0;
+  let unlinked = 0;
+
+  rows.forEach((item) => {
+    if (!item.businessId) unlinked += 1;
+    if (item.recordStatus === 'Aktif' && item.processStatus === 'Ruhsat Verildi') active += 1;
+    else if (item.recordStatus === 'İptal') cancelled += 1;
+    else if (item.processStatus !== 'Ruhsat Verildi') application += 1;
+    else passive += 1;
+  });
+
+  return [
+    { 'Alan': 'Firma', 'Değer': filters.businessName || 'Tüm Firmalar' },
+    { 'Alan': 'Kayıt Durumu', 'Değer': filters.recordStatus === 'all' ? 'Tüm kayıt durumları' : (filters.recordStatus || 'Tüm kayıt durumları') },
+    { 'Alan': 'Süreç Durumu', 'Değer': filters.processStatus === 'all' ? 'Tüm süreç durumları' : (filters.processStatus || 'Tüm süreç durumları') },
+    { 'Alan': 'Arama', 'Değer': filters.search || '-' },
+    { 'Alan': 'Toplam Kayıt', 'Değer': rows.length },
+    { 'Alan': 'Aktif Ruhsat', 'Değer': active },
+    { 'Alan': 'Başvuru Sürecindeki', 'Değer': application },
+    { 'Alan': 'Pasif Kayıt', 'Değer': passive },
+    { 'Alan': 'İptal Edilen', 'Değer': cancelled },
+    { 'Alan': 'Bağlı Firması Olmayan', 'Değer': unlinked },
+    { 'Alan': 'Oluşturulma Tarihi', 'Değer': formatDateTime(new Date()) },
+  ];
+}
+
+function createLicenseWorkbook(rows, filters = {}) {
+  const workbook = XLSX.utils.book_new();
+
+  const summaryRows = buildLicenseSummaryRows(rows, filters);
+  const summarySheet = XLSX.utils.json_to_sheet(summaryRows, { header: ['Alan', 'Değer'] });
+  summarySheet['!cols'] = [{ wch: 24 }, { wch: 42 }];
+  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Filtre Özeti');
+
+  const dataRows = rows.map((item, index) => ({
+    'Sıra': index + 1,
+    'Bağlı Firma': item.businessName || '',
+    'Ruhsat Sıra No': item.licenseSerialNo || '',
+    'Veriliş Tarihi': item.issueDateText || '',
+    'Kayıt Durumu': item.recordStatus || '',
+    'Süreç Durumu': item.processStatus || '',
+    'Başvuru Tarihi': item.applicationDateText || '',
+    'Başvuru No': item.applicationNo || '',
+    'Başvuru Aşaması': item.applicationStage || '',
+    'Takip Tarihi': item.followupDateText || '',
+    'İşyeri Ünvanı': item.tradeName || '',
+    'İşyeri Sahibi': item.ownerName || '',
+    'Faaliyet Konusu': item.activitySubject || '',
+    'İşyeri Sınıfı': item.workplaceClass || '',
+    'Mahalle': item.neighborhood || '',
+    'Cadde / Sokak': item.street || '',
+    'Kapı No': item.doorNo || '',
+    'Ada': item.ada || '',
+    'Parsel': item.parcel || '',
+    'Kullanım Alanı': item.usageArea || '',
+    'Diğer Kullanım Alanı': item.otherUsageArea || '',
+    'Toplam Motor Gücü': item.totalMotorPower || '',
+    'Kış Açılış': item.winterOpeningTime || '',
+    'Kış Kapanış': item.winterClosingTime || '',
+    'Yaz Açılış': item.summerOpeningTime || '',
+    'Yaz Kapanış': item.summerClosingTime || '',
+    'Diğer Faaliyet Alanları': item.otherActivityAreas || '',
+    'T.C. Numarası': item.identityNumber || '',
+    'Vergi Numarası': item.taxNumber || '',
+    'Zabıta Müdürü': item.policeChiefName || '',
+    'Belediye Başkanı': item.mayorName || '',
+    'İptal Tarihi': item.cancelDateText || '',
+    'İptal Nedeni': item.cancelReason || '',
+    'Adres': item.addressText || '',
+    'Not': item.notes || '',
+    'Kayıt Zamanı': item.createdAt || '',
+    'Güncelleme Zamanı': item.updatedAt || '',
+  }));
+
+  const dataSheet = XLSX.utils.json_to_sheet(dataRows);
+  dataSheet['!autofilter'] = { ref: dataSheet['!ref'] || 'A1' };
+  dataSheet['!cols'] = [
+    { wch: 8 }, { wch: 26 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 18 },
+    { wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 14 }, { wch: 32 }, { wch: 24 },
+    { wch: 28 }, { wch: 22 }, { wch: 18 }, { wch: 24 }, { wch: 12 }, { wch: 10 },
+    { wch: 10 }, { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 12 },
+    { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 20 },
+    { wch: 20 }, { wch: 14 }, { wch: 24 }, { wch: 40 }, { wch: 28 }, { wch: 22 },
+    { wch: 22 },
+  ];
+  XLSX.utils.book_append_sheet(workbook, dataSheet, 'Ruhsatlar');
+
+  return workbook;
+}
+
 function buildInspectionSummaryRows(rows, filters = {}) {
   const uniqueBusinesses = new Set();
   let deadlineCount = 0;
@@ -4956,6 +5120,36 @@ app.get("/businesses/:id", (req, res) => {
   </script>
 </body>
 </html>`);
+});
+
+
+app.get('/api/licenses/export.xlsx', async (req, res) => {
+  try {
+    const normalizedFilters = normalizeLicenseExportFilters(req.query);
+    const result = await pool.query(`
+      SELECT
+        l.*,
+        b.trade_name AS business_trade_name,
+        bc.name AS category_name
+      FROM licenses l
+      LEFT JOIN businesses b ON b.id = l.business_id
+      LEFT JOIN business_categories bc ON bc.id = b.category_id
+      ORDER BY COALESCE(l.issue_date, l.application_date, l.updated_at, l.created_at) DESC, l.id DESC
+    `);
+
+    const rows = filterLicenseRows(result.rows.map(mapLicense), normalizedFilters);
+    const filters = await enrichLicenseExportFilters(normalizedFilters);
+    const workbook = createLicenseWorkbook(rows, filters);
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const fileName = buildLicenseExportFileName(filters);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + fileName + '"');
+    res.send(buffer);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Ruhsat Excel çıktısı oluşturulamadı.' });
+  }
 });
 
 app.get('/api/licenses', async (req, res) => {
