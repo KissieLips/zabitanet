@@ -4429,6 +4429,15 @@ app.get("/businesses/:id", (req, res) => {
     .license-note-box { border: 1px solid var(--line); background: var(--panel-soft); border-radius: 12px; padding: 12px; height: 100%; }
     .note-title { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
     .note-body { font-size: 13px; line-height: 1.6; white-space: pre-line; }
+    .suggestion-list { display: grid; gap: 10px; }
+    .suggestion-card { border: 1px solid var(--line); border-radius: 14px; background: #ffffff; overflow: hidden; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04); }
+    .suggestion-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 14px 16px; background: linear-gradient(180deg, #fbfcfe 0%, #f7faff 100%); border-bottom: 1px solid #e7eef8; }
+    .suggestion-title { font-size: 15px; font-weight: 700; line-height: 1.35; margin: 0; }
+    .suggestion-sub { color: var(--muted); font-size: 12px; line-height: 1.55; margin-top: 4px; }
+    .suggestion-body { padding: 14px 16px 16px; display: grid; gap: 12px; }
+    .suggestion-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .suggestion-note { border: 1px solid var(--line); background: var(--panel-soft); border-radius: 12px; padding: 12px; }
+    .suggestion-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .mini-btn { border: 1px solid var(--line); background: #ffffff; border-radius: 9px; padding: 7px 10px; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none; color: #111827; display: inline-flex; align-items: center; gap: 6px; }
     .mini-btn.primary { border-color: #cfe0ff; color: #1d4ed8; background: #eef4ff; }
     .mini-btn.danger { border-color: #fecaca; color: #b91c1c; background: #fff1f2; }
@@ -4528,7 +4537,7 @@ app.get("/businesses/:id", (req, res) => {
 
     @media (max-width: 980px) {
       .main { padding: 14px; }
-      .stats-grid, .summary-grid, .license-layout, .form-grid, .inspection-summary-bar, .inspection-grid, .upload-shell, .inspection-file-columns, .inspection-upload-row { grid-template-columns: 1fr; }
+      .stats-grid, .summary-grid, .license-layout, .suggestion-grid, .form-grid, .inspection-summary-bar, .inspection-grid, .upload-shell, .inspection-file-columns, .inspection-upload-row { grid-template-columns: 1fr; }
       .hero-title { font-size: 22px; }
       .drawer { width: 100vw; }
       .inspection-card-head, .inspection-card-footer { flex-direction: column; align-items: stretch; }
@@ -4610,6 +4619,17 @@ app.get("/businesses/:id", (req, res) => {
           <a class="btn btn-ghost" id="openLicenseBtnSection" href="/licenses?businessId=${businessId}">Ruhsat Modülünü Aç</a>
         </div>
         <div id="licenseContainer" class="loading">Ruhsat bilgileri yükleniyor...</div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Olası Ruhsat Eşleşmeleri</div>
+            <div class="panel-subtitle">Bu firmaya önerilen ama henüz bağlanmamış ruhsat kayıtlarını buradan inceleyip onaylayabilirsin.</div>
+          </div>
+          <a class="btn btn-ghost" id="openLicenseBtnSuggestion" href="/licenses?businessId=${businessId}">Ruhsat Listesini Aç</a>
+        </div>
+        <div id="licenseSuggestionContainer" class="loading">Ruhsat eşleşme adayları yükleniyor...</div>
       </section>
 
       <section class="panel">
@@ -4698,6 +4718,7 @@ app.get("/businesses/:id", (req, res) => {
     var currentBusiness = null;
     var inspections = [];
     var inspectionFiles = [];
+    var licenseSuggestions = [];
     var activeEditor = null;
 
     function escapeHtml(value) {
@@ -4714,6 +4735,13 @@ app.get("/businesses/:id", (req, res) => {
       if (status === 'Var') return '<span class="badge success">Ruhsat Var</span>';
       if (status === 'Başvuru Aşamasında') return '<span class="badge warn">Başvuru Aşamasında</span>';
       return '<span class="badge gray">Ruhsat Yok</span>';
+    }
+
+    function badgeForRecordStatus(status) {
+      if (status === 'Aktif') return '<span class="badge success">Aktif</span>';
+      if (status === 'Pasif') return '<span class="badge gray">Pasif</span>';
+      if (status === 'İptal') return '<span class="badge danger">İptal</span>';
+      return '<span class="badge gray">' + escapeHtml(status || 'Belirsiz') + '</span>';
     }
 
     function badgeForInspectionStatus(status) {
@@ -4870,6 +4898,52 @@ app.get("/businesses/:id", (req, res) => {
 
       document.getElementById('licenseContainer').innerHTML = '<div class="license-layout"><div>' + left + '</div><div>' + right + '</div></div>';
       document.getElementById('statLicenseStatus').textContent = currentBusiness.licenseStatus || 'Yok';
+    }
+
+    function renderLicenseSuggestions() {
+      var container = document.getElementById('licenseSuggestionContainer');
+      if (!container) return;
+      if (!licenseSuggestions.length) {
+        container.innerHTML = '<div class="empty-state">Bu firma için bekleyen ruhsat eşleşme adayı bulunmuyor.</div>';
+        return;
+      }
+
+      var cards = '';
+      for (var i = 0; i < licenseSuggestions.length; i++) {
+        var item = licenseSuggestions[i];
+        var titleParts = [];
+        if (item.tradeName) titleParts.push(escapeHtml(item.tradeName));
+        if (item.licenseSerialNo) titleParts.push('Ruhsat No: ' + escapeHtml(item.licenseSerialNo));
+        var noteText = item.matchNote || 'Bu aday sistem tarafından önerildi. Bağlamadan önce adres ve ünvan bilgisini kontrol et.';
+        cards += '' +
+          '<article class="suggestion-card">' +
+            '<div class="suggestion-head">' +
+              '<div>' +
+                '<h3 class="suggestion-title">' + (titleParts.length ? titleParts.join(' · ') : ('Aday Ruhsat #' + escapeHtml(item.id))) + '</h3>' +
+                '<div class="suggestion-sub">Önerilen eşleşme puanı: <strong>' + escapeHtml(item.matchScore || 0) + '</strong></div>' +
+              '</div>' +
+              '<div class="inspection-badges">' + badgeForRecordStatus(item.recordStatus) + badgeForLicense(item.processStatus === 'Ruhsat Verildi' && item.recordStatus === 'Aktif' ? 'Var' : (item.processStatus !== 'Ruhsat Verildi' ? 'Başvuru Aşamasında' : 'Yok')) + '</div>' +
+            '</div>' +
+            '<div class="suggestion-body">' +
+              '<div class="suggestion-grid">' +
+                '<div class="info-item"><div class="info-label">İşyeri Ünvanı</div><div class="info-value">' + escapeHtml(item.tradeName || '-') + '</div></div>' +
+                '<div class="info-item"><div class="info-label">İşyeri Sahibi</div><div class="info-value">' + escapeHtml(item.ownerName || '-') + '</div></div>' +
+                '<div class="info-item"><div class="info-label">Veriliş Tarihi</div><div class="info-value">' + escapeHtml(item.issueDateText || 'Belirtilmedi') + '</div></div>' +
+                '<div class="info-item"><div class="info-label">Adres</div><div class="info-value">' + escapeHtml(item.addressText || 'Adres girilmedi') + '</div></div>' +
+                '<div class="info-item"><div class="info-label">Süreç Durumu</div><div class="info-value">' + escapeHtml(item.processStatus || '-') + '</div></div>' +
+                '<div class="info-item"><div class="info-label">Başvuru / Not</div><div class="info-value">' + escapeHtml(item.applicationStage || item.applicationNo || 'Süreç bilgisi yok') + '</div></div>' +
+              '</div>' +
+              '<div class="suggestion-note"><div class="note-title">Eşleşme Notu</div><div class="note-body">' + escapeHtml(noteText) + '</div></div>' +
+              '<div class="suggestion-actions">' +
+                '<button class="mini-btn primary" type="button" onclick="approveLicenseSuggestion(' + item.id + ')">Ruhsatı Bağla</button>' +
+                '<button class="mini-btn" type="button" onclick="clearLicenseSuggestion(' + item.id + ')">Uygun Değil</button>' +
+                '<a class="mini-btn" href="/licenses?businessId=' + businessId + '">Ruhsat Modülünü Aç</a>' +
+              '</div>' +
+            '</div>' +
+          '</article>';
+      }
+
+      container.innerHTML = '<div class="suggestion-list">' + cards + '</div>';
     }
 
     function renderStats() {
@@ -5083,6 +5157,43 @@ app.get("/businesses/:id", (req, res) => {
       renderLicense();
     }
 
+    async function loadLicenseSuggestions() {
+      var response = await fetch('/api/businesses/' + businessId + '/license-suggestions');
+      var data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Ruhsat eşleşme adayları yüklenemedi.');
+      }
+      licenseSuggestions = Array.isArray(data) ? data : [];
+      renderLicenseSuggestions();
+    }
+
+    async function approveLicenseSuggestion(id) {
+      if (!confirm('Bu ruhsat bu firmaya bağlansın mı?')) return;
+      try {
+        var response = await fetch('/api/licenses/' + id + '/approve-match', { method: 'POST' });
+        var data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Eşleşme onaylanamadı.');
+        await loadBusiness();
+        await loadLicenseSuggestions();
+        showToast('Ruhsat firmaya bağlandı.');
+      } catch (error) {
+        alert(error.message || 'Eşleşme onaylanamadı.');
+      }
+    }
+
+    async function clearLicenseSuggestion(id) {
+      if (!confirm('Bu eşleşme adayı temizlensin mi?')) return;
+      try {
+        var response = await fetch('/api/licenses/' + id + '/clear-match', { method: 'POST' });
+        var data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Eşleşme adayı temizlenemedi.');
+        await loadLicenseSuggestions();
+        showToast('Eşleşme adayı temizlendi.');
+      } catch (error) {
+        alert(error.message || 'Eşleşme adayı temizlenemedi.');
+      }
+    }
+
     async function loadInspections() {
       var response = await fetch('/api/businesses/' + businessId + '/inspections');
       var data = await response.json();
@@ -5188,6 +5299,8 @@ app.get("/businesses/:id", (req, res) => {
       window.uploadInspectionFiles = uploadInspectionFiles;
       window.deleteInspectionFile = deleteInspectionFile;
       window.updateInspectionFileInputState = updateInspectionFileInputState;
+      window.approveLicenseSuggestion = approveLicenseSuggestion;
+      window.clearLicenseSuggestion = clearLicenseSuggestion;
     }
 
     async function initPage() {
@@ -5196,8 +5309,15 @@ app.get("/businesses/:id", (req, res) => {
       } catch (error) {
         document.getElementById('summaryContainer').innerHTML = '<div class="empty-state">' + escapeHtml(error.message || 'Firma bilgileri yüklenemedi.') + '</div>';
         document.getElementById('licenseContainer').innerHTML = '<div class="empty-state">Firma detayı alınamadı.</div>';
+        document.getElementById('licenseSuggestionContainer').innerHTML = '<div class="empty-state">Ruhsat eşleşme adayları alınamadı.</div>';
         document.getElementById('inspectionContainer').innerHTML = '<div class="empty-state">Denetim geçmişi alınamadı.</div>';
         return;
+      }
+
+      try {
+        await loadLicenseSuggestions();
+      } catch (error) {
+        document.getElementById('licenseSuggestionContainer').innerHTML = '<div class="empty-state">' + escapeHtml(error.message || 'Ruhsat eşleşme adayları alınamadı.') + '</div>';
       }
 
       try {
@@ -5302,6 +5422,32 @@ app.get('/api/businesses/:id/licenses', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Firma ruhsat kayıtları alınamadı.' });
+  }
+});
+
+app.get('/api/businesses/:id/license-suggestions', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
+      SELECT
+        l.*,
+        b.trade_name AS business_trade_name,
+        bc.name AS category_name,
+        sb.trade_name AS suggested_business_trade_name,
+        sbc.name AS suggested_category_name
+      FROM licenses l
+      LEFT JOIN businesses b ON b.id = l.business_id
+      LEFT JOIN business_categories bc ON bc.id = b.category_id
+      LEFT JOIN businesses sb ON sb.id = l.suggested_business_id
+      LEFT JOIN business_categories sbc ON sbc.id = sb.category_id
+      WHERE l.business_id IS NULL
+        AND l.suggested_business_id = $1
+      ORDER BY COALESCE(l.issue_date, l.application_date, l.updated_at, l.created_at) DESC, l.id DESC
+    `, [id]);
+    res.json(result.rows.map(mapLicense));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Firma ruhsat eşleşme adayları alınamadı.' });
   }
 });
 
