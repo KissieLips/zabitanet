@@ -263,13 +263,13 @@
               <div class="section-head">
                 <div>
                   <div class="section-title">Bağlantı ve durum</div>
-                  <div class="section-note">Ruhsat kaydı bu modülden bağımsız açılır. Firma seçimi yapılmaz; uygun firma daha sonra sistem tarafından otomatik eşleştirilir.</div>
+                  <div class="section-note">Ruhsat kaydı bu modülden bağımsız açılır. Firma seçimi yapılmaz; sistem uygun firmayı sadece eşleşme adayı olarak önerir, bağlama onayla yapılır.</div>
                 </div>
               </div>
               <div class="form-grid">
                 <div class="form-group double">
                   <label>Firma Bağlantısı</label>
-                  <div class="readonly-box" id="linkedBusinessInfo">Bu ruhsat kaydı firmadan bağımsız tutulur. Uygun firma daha sonra otomatik eşleşir.</div>
+                  <div class="readonly-box" id="linkedBusinessInfo">Bu ruhsat kaydı firmadan bağımsız tutulur. Sistem sadece eşleşme adayı önerir; bağlama onayla yapılır.</div>
                 </div>
                 <div class="form-group">
                   <label for="recordStatus">Kayıt Durumu</label>
@@ -673,6 +673,12 @@
       return '<span class="badge gray">Belirtilmedi</span>';
     }
 
+    function matchBadge(item) {
+      if (item.businessId) return '<span class="badge active">Firma Bağlandı</span>';
+      if (item.matchStatus === 'Onay Bekliyor' && item.suggestedBusinessId) return '<span class="badge application">Eşleşme Onayı Bekliyor</span>';
+      return '<span class="badge gray">Firma Bağlantısı Yok</span>';
+    }
+
     function fillBusinessOptions() {
       var filter = document.getElementById('filterBusiness');
       var filterHtml = '<option value="all">Tüm Firmalar</option>';
@@ -692,11 +698,19 @@
 
     function setLinkedBusinessInfo(item) {
       var box = document.getElementById('linkedBusinessInfo');
-      if (!item || !item.businessId) {
-        box.textContent = 'Bu ruhsat kaydı firmadan bağımsız tutulur. Uygun firma daha sonra otomatik eşleşir.';
+      if (!item) {
+        box.textContent = 'Bu ruhsat kaydı firmadan bağımsız tutulur. Sistem sadece eşleşme adayı önerir; bağlama onayla yapılır.';
         return;
       }
-      box.innerHTML = 'Bağlı firma: <strong>' + escapeHtml(item.businessName || ('Firma #' + item.businessId)) + '</strong>';
+      if (item.businessId) {
+        box.innerHTML = 'Bağlı firma: <strong>' + escapeHtml(item.businessName || ('Firma #' + item.businessId)) + '</strong>';
+        return;
+      }
+      if (item.suggestedBusinessId) {
+        box.innerHTML = 'Eşleşme adayı: <strong>' + escapeHtml(item.suggestedBusinessName || ('Firma #' + item.suggestedBusinessId)) + '</strong> · Puan: <strong>' + escapeHtml(item.matchScore || 0) + '</strong>';
+        return;
+      }
+      box.textContent = 'Bu ruhsat kaydı firmadan bağımsız tutulur. Şu an onay bekleyen bir eşleşme adayı bulunmuyor.';
     }
 
     function detailValue(value, emptyText) {
@@ -709,14 +723,27 @@
         ? '<a class="mini-btn" style="width:auto; display:inline-flex;" href="/businesses/' + item.businessId + '">Firma Detayına Git</a>'
         : '<span class="muted">Bağlı firma kaydı yok</span>' ;
 
+      var matchActionHtml = '<span class="muted">Şu an onay bekleyen eşleşme adayı yok</span>';
+      if (item.businessId) {
+        matchActionHtml = '<span class="muted">Bu ruhsat kaydı firmaya bağlandı.</span>';
+      } else if (item.suggestedBusinessId) {
+        matchActionHtml = '<div class="action-row" style="margin-top:6px;">' +
+          '<button class="mini-btn primary" type="button" onclick="approveMatch(' + item.id + ')">Eşleşmeyi Onayla</button>' +
+          '<button class="mini-btn" type="button" onclick="clearMatch(' + item.id + ')">Adayı Temizle</button>' +
+        '</div>';
+      }
+
       var html = '' +
         '<div class="detail-card">' +
           '<div class="detail-title">Durum ve bağlantı</div>' +
           '<div class="detail-list">' +
             '<div class="detail-item"><div class="detail-label">Kayıt Durumu</div><div class="detail-value">' + recordBadge(item.recordStatus) + '</div></div>' +
             '<div class="detail-item"><div class="detail-label">Süreç Durumu</div><div class="detail-value">' + processBadge(item.processStatus) + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Bağlantı Durumu</div><div class="detail-value">' + matchBadge(item) + '</div></div>' +
             '<div class="detail-item"><div class="detail-label">Bağlı Firma</div><div class="detail-value">' + (item.businessName ? escapeHtml(item.businessName) : '<span class="muted">Bağlı firma yok</span>') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Önerilen Firma</div><div class="detail-value">' + (item.suggestedBusinessName ? (escapeHtml(item.suggestedBusinessName) + ' <span class="muted">(puan: ' + escapeHtml(item.matchScore || 0) + ')</span><br><span class="muted">' + escapeHtml(item.matchNote || '') + '</span>') : '<span class="muted">Öneri yok</span>') + '</div></div>' +
             '<div class="detail-item"><div class="detail-label">Firma Ekranı</div><div class="detail-value">' + businessHtml + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Eşleşme İşlemi</div><div class="detail-value">' + matchActionHtml + '</div></div>' +
           '</div>' +
         '</div>' +
         '<div class="detail-card">' +
@@ -934,7 +961,9 @@
 
         var businessLink = item.businessId
           ? '<div class="cell-sub"><a href="/businesses/' + item.businessId + '">Firma detayına git</a></div>'
-          : '<div class="cell-sub">Firma bağlantısı yok</div>';
+          : (item.suggestedBusinessId
+              ? '<div class="cell-sub">Eşleşme adayı: ' + escapeHtml(item.suggestedBusinessName || ('Firma #' + item.suggestedBusinessId)) + ' · Puan: ' + escapeHtml(item.matchScore || 0) + '</div>'
+              : '<div class="cell-sub">Firma bağlantısı yok</div>');
 
         var applicationBits = [];
         applicationBits.push('<div class="cell-sub">Veriliş: ' + escapeHtml(item.issueDateText || '-') + '</div>');
@@ -942,7 +971,12 @@
         if (item.applicationStage) applicationBits.push('<div class="cell-sub">Aşama: ' + escapeHtml(item.applicationStage) + '</div>');
         if (item.recordStatus === 'İptal' && item.cancelDateText) applicationBits.push('<div class="cell-sub">İptal Tarihi: ' + escapeHtml(item.cancelDateText) + '</div>');
 
-        var actionButtons = '<button class="mini-btn" type="button" onclick="openLicenseDetail(' + item.id + ')">Ruhsat Detay</button>';
+        var actionButtons = '';
+        if (!item.businessId && item.suggestedBusinessId) {
+          actionButtons += '<button class="mini-btn primary" type="button" onclick="approveMatch(' + item.id + ')">Eşleşmeyi Onayla</button>';
+          actionButtons += '<button class="mini-btn" type="button" onclick="clearMatch(' + item.id + ')">Adayı Temizle</button>';
+        }
+        actionButtons += '<button class="mini-btn" type="button" onclick="openLicenseDetail(' + item.id + ')">Ruhsat Detay</button>';
         actionButtons += '<button class="mini-btn primary" type="button" onclick="openLicenseModal(' + item.id + ')">Düzenle</button>';
         if (item.businessId) {
           actionButtons += '<a class="mini-btn" href="/businesses/' + item.businessId + '">Firma Detayı</a>';
@@ -950,7 +984,7 @@
         actionButtons += '<button class="mini-btn danger" type="button" onclick="deleteLicense(' + item.id + ')">Sil</button>';
 
         html += '<tr>' +
-          '<td><div class="stack"><div class="cell-title">' + escapeHtml(item.tradeName || '-') + '</div><div class="cell-sub">' + escapeHtml(item.ownerName || 'Sahip bilgisi yok') + '</div>' + businessLink + '</div></td>' +
+          '<td><div class="stack"><div class="cell-title">' + escapeHtml(item.tradeName || '-') + '</div><div class="cell-sub">' + escapeHtml(item.ownerName || 'Sahip bilgisi yok') + '</div><div class="cell-sub">' + matchBadge(item) + '</div>' + businessLink + '</div></td>' +
           '<td><div class="stack"><div class="cell-title">Ruhsat No: ' + escapeHtml(item.licenseSerialNo || '-') + '</div>' + applicationBits.join('') + '</div></td>' +
           '<td><div class="stack">' + recordBadge(item.recordStatus) + processBadge(item.processStatus) + '</div></td>' +
           '<td><div class="stack"><div class="cell-title">' + escapeHtml(item.activitySubject || 'Faaliyet konusu girilmedi') + '</div><div class="cell-sub">' + escapeHtml(item.workplaceClass || 'Sınıf girilmedi') + '</div></div></td>' +
@@ -1095,6 +1129,36 @@
       } finally {
         saveButton.disabled = false;
         saveButton.textContent = 'Kaydet';
+      }
+    }
+
+    async function approveMatch(id) {
+      if (!confirm('Önerilen firma ile bu ruhsat kaydı bağlansın mı?')) return;
+      try {
+        var response = await fetch('/api/licenses/' + id + '/approve-match', { method: 'POST' });
+        var data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Eşleşme onaylanamadı.');
+        await loadBusinesses();
+        await loadLicenses();
+        closeDetailModal();
+        showToast('Eşleşme onaylandı ve ruhsat firmaya bağlandı.');
+      } catch (error) {
+        alert(error.message || 'Eşleşme onaylanamadı.');
+      }
+    }
+
+    async function clearMatch(id) {
+      if (!confirm('Bu eşleşme adayı temizlensin mi?')) return;
+      try {
+        var response = await fetch('/api/licenses/' + id + '/clear-match', { method: 'POST' });
+        var data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Eşleşme adayı temizlenemedi.');
+        await loadBusinesses();
+        await loadLicenses();
+        closeDetailModal();
+        showToast('Eşleşme adayı temizlendi.');
+      } catch (error) {
+        alert(error.message || 'Eşleşme adayı temizlenemedi.');
       }
     }
 

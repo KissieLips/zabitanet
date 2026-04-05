@@ -64,16 +64,20 @@ function normalizeMatchText(value) {
     .trim();
 }
 
-function buildLicenseBusinessMatchScore(businessRow, licenseRow) {
-  if (!businessRow || !licenseRow) return 0;
+function buildLicenseBusinessMatchAnalysis(businessRow, licenseRow) {
+  if (!businessRow || !licenseRow) {
+    return { eligible: false, score: 0, note: 'Eksik kayıt', matches: {} };
+  }
 
-  const businessTrade = normalizeMatchText(businessRow.trade_name || businessRow.tradeName);
-  const businessOwner = normalizeMatchText(businessRow.owner_name || businessRow.ownerName);
+  const businessTrade = normalizeMatchText(businessRow.trade_name || businessRow.tradeName || '');
+  const businessOwner = normalizeMatchText(businessRow.owner_name || businessRow.ownerName || '');
   const businessNeighborhood = normalizeMatchText(getCanonicalBusinessNeighborhood(businessRow.neighborhood || businessRow.neighborhoodName || ''));
   const businessStreet = normalizeMatchText(businessRow.street || '');
   const businessDoorNo = normalizeMatchText(businessRow.door_no || businessRow.doorNo || '');
   const businessAda = normalizeMatchText(businessRow.ada || '');
   const businessParcel = normalizeMatchText(businessRow.parcel || '');
+  const businessTax = normalizeMatchText(businessRow.tax_number || businessRow.taxNumber || '');
+  const businessIdentity = normalizeMatchText(businessRow.identity_number || businessRow.identityNumber || '');
 
   const licenseTrade = normalizeMatchText(licenseRow.trade_name || licenseRow.tradeName || '');
   const licenseOwner = normalizeMatchText(licenseRow.owner_name || licenseRow.ownerName || '');
@@ -82,28 +86,56 @@ function buildLicenseBusinessMatchScore(businessRow, licenseRow) {
   const licenseDoorNo = normalizeMatchText(licenseRow.door_no || licenseRow.doorNo || '');
   const licenseAda = normalizeMatchText(licenseRow.ada || '');
   const licenseParcel = normalizeMatchText(licenseRow.parcel || '');
+  const licenseTax = normalizeMatchText(licenseRow.tax_number || licenseRow.taxNumber || '');
+  const licenseIdentity = normalizeMatchText(licenseRow.identity_number || licenseRow.identityNumber || '');
 
-  const tradeMatch = businessTrade && licenseTrade && businessTrade === licenseTrade;
-  const ownerMatch = businessOwner && licenseOwner && businessOwner === licenseOwner;
-  const neighborhoodMatch = businessNeighborhood && licenseNeighborhood && businessNeighborhood === licenseNeighborhood;
-  const streetMatch = businessStreet && licenseStreet && businessStreet === licenseStreet;
-  const doorMatch = businessDoorNo && licenseDoorNo && businessDoorNo === licenseDoorNo;
-  const adaMatch = businessAda && licenseAda && businessAda === licenseAda;
-  const parcelMatch = businessParcel && licenseParcel && businessParcel === licenseParcel;
+  const matches = {
+    trade: Boolean(businessTrade && licenseTrade && businessTrade === licenseTrade),
+    owner: Boolean(businessOwner && licenseOwner && businessOwner === licenseOwner),
+    neighborhood: Boolean(businessNeighborhood && licenseNeighborhood && businessNeighborhood === licenseNeighborhood),
+    street: Boolean(businessStreet && licenseStreet && businessStreet === licenseStreet),
+    door: Boolean(businessDoorNo && licenseDoorNo && businessDoorNo === licenseDoorNo),
+    ada: Boolean(businessAda && licenseAda && businessAda === licenseAda),
+    parcel: Boolean(businessParcel && licenseParcel && businessParcel === licenseParcel),
+    tax: Boolean(businessTax && licenseTax && businessTax === licenseTax),
+    identity: Boolean(businessIdentity && licenseIdentity && businessIdentity === licenseIdentity),
+  };
 
-  const addressMatchCount = [neighborhoodMatch, streetMatch, doorMatch, adaMatch, parcelMatch].filter(Boolean).length;
-  const isStrongMatch = (tradeMatch && ownerMatch) || (tradeMatch && addressMatchCount >= 1) || (ownerMatch && addressMatchCount >= 2);
-  if (!isStrongMatch) return 0;
+  const addressCoreMatch = matches.neighborhood && matches.street;
+  const addressStrongMatch = addressCoreMatch && (matches.door || matches.ada || matches.parcel);
+  const identityMatch = matches.tax || matches.identity;
+  const nameAnchorMatch = matches.trade || matches.owner;
+
+  let eligible = false;
+  let note = 'Adres teyidi yetersiz';
+
+  if (identityMatch && nameAnchorMatch) {
+    eligible = true;
+    note = 'Kimlik / vergi ve isim bilgisi uyumlu';
+  } else if (nameAnchorMatch && addressStrongMatch) {
+    eligible = true;
+    note = 'İsim ve açık adres bilgisi uyumlu';
+  } else if (matches.trade && addressCoreMatch && matches.door) {
+    eligible = true;
+    note = 'Ünvan ve açık adres bilgisi uyumlu';
+  }
+
+  if (!eligible) {
+    return { eligible: false, score: 0, note, matches };
+  }
 
   let score = 0;
-  if (tradeMatch) score += 8;
-  if (ownerMatch) score += 7;
-  if (neighborhoodMatch) score += 3;
-  if (streetMatch) score += 3;
-  if (doorMatch) score += 2;
-  if (adaMatch) score += 1;
-  if (parcelMatch) score += 1;
-  return score;
+  if (matches.tax) score += 10;
+  if (matches.identity) score += 10;
+  if (matches.trade) score += 6;
+  if (matches.owner) score += 4;
+  if (matches.neighborhood) score += 3;
+  if (matches.street) score += 4;
+  if (matches.door) score += 5;
+  if (matches.ada) score += 2;
+  if (matches.parcel) score += 2;
+
+  return { eligible: true, score, note, matches };
 }
 
 async function resolveBusinessIdForLicensePayload(payload, preferredBusinessId) {
@@ -111,46 +143,82 @@ async function resolveBusinessIdForLicensePayload(payload, preferredBusinessId) 
     ? Number(preferredBusinessId)
     : null;
 
-  if (forcedBusinessId) {
-    const exists = await pool.query('SELECT id FROM businesses WHERE id = $1 LIMIT 1', [forcedBusinessId]);
-    return exists.rows.length ? forcedBusinessId : null;
-  }
+  if (!forcedBusinessId) return null;
 
-  const businessRows = await pool.query('SELECT * FROM businesses');
-  let bestId = null;
-  let bestScore = 0;
-
-  for (const businessRow of businessRows.rows) {
-    const score = buildLicenseBusinessMatchScore(businessRow, payload || {});
-    if (score > bestScore) {
-      bestScore = score;
-      bestId = businessRow.id;
-    }
-  }
-
-  return bestScore >= 10 ? bestId : null;
+  const exists = await pool.query('SELECT id FROM businesses WHERE id = $1 LIMIT 1', [forcedBusinessId]);
+  return exists.rows.length ? forcedBusinessId : null;
 }
 
-async function attachMatchingLicensesToBusiness(businessId) {
-  if (!businessId) return 0;
+async function findBestLicenseBusinessSuggestion(licenseRow) {
+  if (!licenseRow) return null;
 
-  const businessResult = await pool.query('SELECT * FROM businesses WHERE id = $1 LIMIT 1', [businessId]);
-  if (!businessResult.rows.length) return 0;
+  const businessRows = await pool.query('SELECT * FROM businesses');
+  let best = null;
 
-  const businessRow = businessResult.rows[0];
-  const licenseResult = await pool.query('SELECT * FROM licenses WHERE business_id IS NULL');
-  let linkedCount = 0;
-
-  for (const licenseRow of licenseResult.rows) {
-    const score = buildLicenseBusinessMatchScore(businessRow, licenseRow);
-    if (score >= 10) {
-      await pool.query('UPDATE licenses SET business_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [businessId, licenseRow.id]);
-      linkedCount += 1;
+  for (const businessRow of businessRows.rows) {
+    const analysis = buildLicenseBusinessMatchAnalysis(businessRow, licenseRow);
+    if (!analysis.eligible) continue;
+    if (!best || analysis.score > best.score) {
+      best = {
+        businessId: businessRow.id,
+        score: analysis.score,
+        note: analysis.note,
+      };
     }
   }
 
-  await updateBusinessLicenseSnapshot(businessId);
-  return linkedCount;
+  return best && best.score >= 15 ? best : null;
+}
+
+async function updateLicenseMatchSuggestion(licenseId) {
+  if (!licenseId) return null;
+
+  const licenseResult = await pool.query('SELECT * FROM licenses WHERE id = $1 LIMIT 1', [licenseId]);
+  if (!licenseResult.rows.length) return null;
+
+  const licenseRow = licenseResult.rows[0];
+
+  if (licenseRow.business_id) {
+    await pool.query(`
+      UPDATE licenses
+      SET
+        suggested_business_id = NULL,
+        match_score = 0,
+        match_note = '',
+        match_status = 'Bağlandı',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+    `, [licenseId]);
+    return null;
+  }
+
+  const best = await findBestLicenseBusinessSuggestion(licenseRow);
+
+  await pool.query(`
+    UPDATE licenses
+    SET
+      suggested_business_id = $1,
+      match_score = $2,
+      match_note = $3,
+      match_status = $4,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = $5
+  `, [
+    best ? best.businessId : null,
+    best ? best.score : 0,
+    best ? best.note : '',
+    best ? 'Onay Bekliyor' : 'Bağlantı Yok',
+    licenseId
+  ]);
+
+  return best;
+}
+
+async function refreshAllLicenseSuggestions() {
+  const result = await pool.query('SELECT id FROM licenses WHERE business_id IS NULL');
+  for (const row of result.rows) {
+    await updateLicenseMatchSuggestion(row.id);
+  }
 }
 
 const storage = multer.diskStorage({
@@ -613,8 +681,14 @@ function mapLicense(row) {
   return {
     id: row.id,
     businessId: row.business_id,
-    businessName: row.business_trade_name || row.trade_name || '',
+    businessName: row.business_trade_name || '',
     categoryName: row.category_name || '',
+    suggestedBusinessId: row.suggested_business_id || null,
+    suggestedBusinessName: row.suggested_business_trade_name || '',
+    suggestedCategoryName: row.suggested_category_name || '',
+    matchStatus: row.match_status || (row.business_id ? 'Bağlandı' : 'Bağlantı Yok'),
+    matchScore: Number(row.match_score || 0),
+    matchNote: row.match_note || '',
     issueDate: toInputDate(row.issue_date),
     issueDateText: formatDate(row.issue_date),
     licenseSerialNo: row.license_serial_no || '',
@@ -1027,8 +1101,33 @@ async function initDb() {
   `);
 
   await pool.query(`
+    ALTER TABLE licenses
+    ADD COLUMN IF NOT EXISTS suggested_business_id INTEGER REFERENCES businesses(id) ON DELETE SET NULL
+  `);
+
+  await pool.query(`
+    ALTER TABLE licenses
+    ADD COLUMN IF NOT EXISTS match_status VARCHAR(30) NOT NULL DEFAULT 'Bağlantı Yok'
+  `);
+
+  await pool.query(`
+    ALTER TABLE licenses
+    ADD COLUMN IF NOT EXISTS match_score INTEGER NOT NULL DEFAULT 0
+  `);
+
+  await pool.query(`
+    ALTER TABLE licenses
+    ADD COLUMN IF NOT EXISTS match_note TEXT
+  `);
+
+  await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_licenses_business_id
     ON licenses(business_id)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_licenses_suggested_business_id
+    ON licenses(suggested_business_id)
   `);
 
   await pool.query(`
@@ -1099,6 +1198,8 @@ async function initDb() {
   for (const row of businessIdsForSnapshot.rows) {
     await updateBusinessLicenseSnapshot(row.id);
   }
+
+  await refreshAllLicenseSuggestions();
 
   const defaultCategories = [
     'Market / Bakkal',
@@ -1600,7 +1701,7 @@ app.post("/api/businesses", async (req, res) => {
       ]
     );
 
-    await attachMatchingLicensesToBusiness(result.rows[0].id);
+    await refreshAllLicenseSuggestions();
 
     const fullResult = await pool.query(
       `
@@ -1679,7 +1780,7 @@ app.put("/api/businesses/:id", async (req, res) => {
       ]
     );
 
-    await attachMatchingLicensesToBusiness(id);
+    await refreshAllLicenseSuggestions();
 
     const fullResult = await pool.query(
       `
@@ -5130,10 +5231,14 @@ app.get('/api/licenses/export.xlsx', async (req, res) => {
       SELECT
         l.*,
         b.trade_name AS business_trade_name,
-        bc.name AS category_name
+        bc.name AS category_name,
+        sb.trade_name AS suggested_business_trade_name,
+        sbc.name AS suggested_category_name
       FROM licenses l
       LEFT JOIN businesses b ON b.id = l.business_id
       LEFT JOIN business_categories bc ON bc.id = b.category_id
+      LEFT JOIN businesses sb ON sb.id = l.suggested_business_id
+      LEFT JOIN business_categories sbc ON sbc.id = sb.category_id
       ORDER BY COALESCE(l.issue_date, l.application_date, l.updated_at, l.created_at) DESC, l.id DESC
     `);
 
@@ -5158,10 +5263,14 @@ app.get('/api/licenses', async (req, res) => {
       SELECT
         l.*,
         b.trade_name AS business_trade_name,
-        bc.name AS category_name
+        bc.name AS category_name,
+        sb.trade_name AS suggested_business_trade_name,
+        sbc.name AS suggested_category_name
       FROM licenses l
       LEFT JOIN businesses b ON b.id = l.business_id
       LEFT JOIN business_categories bc ON bc.id = b.category_id
+      LEFT JOIN businesses sb ON sb.id = l.suggested_business_id
+      LEFT JOIN business_categories sbc ON sbc.id = sb.category_id
       ORDER BY COALESCE(l.issue_date, l.application_date, l.updated_at, l.created_at) DESC, l.id DESC
     `);
     res.json(result.rows.map(mapLicense));
@@ -5178,10 +5287,14 @@ app.get('/api/businesses/:id/licenses', async (req, res) => {
       SELECT
         l.*,
         b.trade_name AS business_trade_name,
-        bc.name AS category_name
+        bc.name AS category_name,
+        sb.trade_name AS suggested_business_trade_name,
+        sbc.name AS suggested_category_name
       FROM licenses l
       LEFT JOIN businesses b ON b.id = l.business_id
       LEFT JOIN business_categories bc ON bc.id = b.category_id
+      LEFT JOIN businesses sb ON sb.id = l.suggested_business_id
+      LEFT JOIN business_categories sbc ON sbc.id = sb.category_id
       WHERE l.business_id = $1
       ORDER BY COALESCE(l.issue_date, l.application_date, l.updated_at, l.created_at) DESC, l.id DESC
     `, [id]);
@@ -5199,10 +5312,14 @@ app.get('/api/licenses/:id', async (req, res) => {
       SELECT
         l.*,
         b.trade_name AS business_trade_name,
-        bc.name AS category_name
+        bc.name AS category_name,
+        sb.trade_name AS suggested_business_trade_name,
+        sbc.name AS suggested_category_name
       FROM licenses l
       LEFT JOIN businesses b ON b.id = l.business_id
       LEFT JOIN business_categories bc ON bc.id = b.category_id
+      LEFT JOIN businesses sb ON sb.id = l.suggested_business_id
+      LEFT JOIN business_categories sbc ON sbc.id = sb.category_id
       WHERE l.id = $1
       LIMIT 1
     `, [id]);
@@ -5228,9 +5345,9 @@ app.post('/api/licenses', async (req, res) => {
 
     const insertResult = await pool.query(`
       INSERT INTO licenses (
-        business_id, issue_date, license_serial_no, owner_name, trade_name, activity_subject, neighborhood, street, door_no, ada, parcel, usage_area, other_usage_area, total_motor_power, workplace_class, winter_opening_time, winter_closing_time, summer_opening_time, summer_closing_time, other_activity_areas, identity_number, tax_number, police_chief_name, mayor_name, record_status, process_status, application_date, application_no, application_stage, followup_date, cancel_date, cancel_reason, notes, updated_at
+        business_id, issue_date, license_serial_no, owner_name, trade_name, activity_subject, neighborhood, street, door_no, ada, parcel, usage_area, other_usage_area, total_motor_power, workplace_class, winter_opening_time, winter_closing_time, summer_opening_time, summer_closing_time, other_activity_areas, identity_number, tax_number, police_chief_name, mayor_name, record_status, process_status, application_date, application_no, application_stage, followup_date, cancel_date, cancel_reason, notes, match_status, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, CURRENT_TIMESTAMP
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, CURRENT_TIMESTAMP
       ) RETURNING *
     `, [
       resolvedBusinessId,
@@ -5265,18 +5382,25 @@ app.post('/api/licenses', async (req, res) => {
       followupDate || null,
       cancelDate || null,
       cancelReason ? String(cancelReason).trim() : '',
-      notes ? String(notes).trim() : ''
+      notes ? String(notes).trim() : '',
+      resolvedBusinessId ? 'Bağlandı' : 'Bağlantı Yok'
     ]);
 
     if (resolvedBusinessId) {
       await updateBusinessLicenseSnapshot(resolvedBusinessId);
+    } else {
+      await updateLicenseMatchSuggestion(insertResult.rows[0].id);
     }
 
     const rowResult = await pool.query(`
-      SELECT l.*, b.trade_name AS business_trade_name, bc.name AS category_name
+      SELECT
+        l.*, b.trade_name AS business_trade_name, bc.name AS category_name,
+        sb.trade_name AS suggested_business_trade_name, sbc.name AS suggested_category_name
       FROM licenses l
       LEFT JOIN businesses b ON b.id = l.business_id
       LEFT JOIN business_categories bc ON bc.id = b.category_id
+      LEFT JOIN businesses sb ON sb.id = l.suggested_business_id
+      LEFT JOIN business_categories sbc ON sbc.id = sb.category_id
       WHERE l.id = $1
     `, [insertResult.rows[0].id]);
 
@@ -5300,7 +5424,8 @@ app.put('/api/licenses/:id', async (req, res) => {
     }
 
     const oldBusinessId = existing.rows[0].business_id;
-    const resolvedBusinessId = await resolveBusinessIdForLicensePayload(req.body || {}, businessId || oldBusinessId);
+    const explicitBusinessId = Object.prototype.hasOwnProperty.call(req.body || {}, 'businessId') ? businessId : oldBusinessId;
+    const resolvedBusinessId = await resolveBusinessIdForLicensePayload(req.body || {}, explicitBusinessId);
 
     await pool.query(`
       UPDATE licenses
@@ -5338,8 +5463,9 @@ app.put('/api/licenses/:id', async (req, res) => {
         cancel_date = $31,
         cancel_reason = $32,
         notes = $33,
+        match_status = $34,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $34
+      WHERE id = $35
     `, [
       resolvedBusinessId,
       issueDate || null,
@@ -5374,6 +5500,7 @@ app.put('/api/licenses/:id', async (req, res) => {
       cancelDate || null,
       cancelReason ? String(cancelReason).trim() : '',
       notes ? String(notes).trim() : '',
+      resolvedBusinessId ? 'Bağlandı' : 'Bağlantı Yok',
       id
     ]);
 
@@ -5382,13 +5509,19 @@ app.put('/api/licenses/:id', async (req, res) => {
     }
     if (resolvedBusinessId) {
       await updateBusinessLicenseSnapshot(resolvedBusinessId);
+    } else {
+      await updateLicenseMatchSuggestion(id);
     }
 
     const rowResult = await pool.query(`
-      SELECT l.*, b.trade_name AS business_trade_name, bc.name AS category_name
+      SELECT
+        l.*, b.trade_name AS business_trade_name, bc.name AS category_name,
+        sb.trade_name AS suggested_business_trade_name, sbc.name AS suggested_category_name
       FROM licenses l
       LEFT JOIN businesses b ON b.id = l.business_id
       LEFT JOIN business_categories bc ON bc.id = b.category_id
+      LEFT JOIN businesses sb ON sb.id = l.suggested_business_id
+      LEFT JOIN business_categories sbc ON sbc.id = sb.category_id
       WHERE l.id = $1
     `, [id]);
 
@@ -5396,6 +5529,97 @@ app.put('/api/licenses/:id', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Ruhsat kaydı güncellenemedi.' });
+  }
+});
+
+
+app.post('/api/licenses/:id/approve-match', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const licenseResult = await pool.query('SELECT id, business_id, suggested_business_id FROM licenses WHERE id = $1 LIMIT 1', [id]);
+    if (!licenseResult.rows.length) {
+      return res.status(404).json({ error: 'Ruhsat kaydı bulunamadı.' });
+    }
+
+    const row = licenseResult.rows[0];
+    if (!row.suggested_business_id) {
+      return res.status(400).json({ error: 'Onaylanacak bir eşleşme adayı bulunamadı.' });
+    }
+
+    if (row.business_id && String(row.business_id) !== String(row.suggested_business_id)) {
+      await updateBusinessLicenseSnapshot(row.business_id);
+    }
+
+    await pool.query(`
+      UPDATE licenses
+      SET
+        business_id = suggested_business_id,
+        suggested_business_id = NULL,
+        match_score = 0,
+        match_note = '',
+        match_status = 'Bağlandı',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+    `, [id]);
+
+    await updateBusinessLicenseSnapshot(row.suggested_business_id);
+
+    const result = await pool.query(`
+      SELECT
+        l.*, b.trade_name AS business_trade_name, bc.name AS category_name,
+        sb.trade_name AS suggested_business_trade_name, sbc.name AS suggested_category_name
+      FROM licenses l
+      LEFT JOIN businesses b ON b.id = l.business_id
+      LEFT JOIN business_categories bc ON bc.id = b.category_id
+      LEFT JOIN businesses sb ON sb.id = l.suggested_business_id
+      LEFT JOIN business_categories sbc ON sbc.id = sb.category_id
+      WHERE l.id = $1
+      LIMIT 1
+    `, [id]);
+
+    res.json(mapLicense(result.rows[0]));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Eşleşme onaylanamadı.' });
+  }
+});
+
+app.post('/api/licenses/:id/clear-match', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const licenseResult = await pool.query('SELECT id, business_id FROM licenses WHERE id = $1 LIMIT 1', [id]);
+    if (!licenseResult.rows.length) {
+      return res.status(404).json({ error: 'Ruhsat kaydı bulunamadı.' });
+    }
+
+    await pool.query(`
+      UPDATE licenses
+      SET
+        suggested_business_id = NULL,
+        match_score = 0,
+        match_note = '',
+        match_status = CASE WHEN business_id IS NULL THEN 'Bağlantı Yok' ELSE 'Bağlandı' END,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+    `, [id]);
+
+    const result = await pool.query(`
+      SELECT
+        l.*, b.trade_name AS business_trade_name, bc.name AS category_name,
+        sb.trade_name AS suggested_business_trade_name, sbc.name AS suggested_category_name
+      FROM licenses l
+      LEFT JOIN businesses b ON b.id = l.business_id
+      LEFT JOIN business_categories bc ON bc.id = b.category_id
+      LEFT JOIN businesses sb ON sb.id = l.suggested_business_id
+      LEFT JOIN business_categories sbc ON sbc.id = sb.category_id
+      WHERE l.id = $1
+      LIMIT 1
+    `, [id]);
+
+    res.json(mapLicense(result.rows[0]));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Eşleşme temizlenemedi.' });
   }
 });
 
