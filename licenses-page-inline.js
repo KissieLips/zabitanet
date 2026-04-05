@@ -1,5 +1,4 @@
-
-    var licenses = [];
+var licenses = [];
     var businesses = [];
     var businessMap = {};
     var queryParams = new URLSearchParams(window.location.search);
@@ -94,65 +93,15 @@
       return uniqueSorted(values);
     }
 
-    function collectLicenseStreets(neighborhood) {
-      var canonical = getCanonicalNeighborhoodName(neighborhood);
-      var values = [];
-      if (canonical && ADDRESS_CATALOG[canonical] && ADDRESS_CATALOG[canonical].streets) {
-        values = values.concat(Object.keys(ADDRESS_CATALOG[canonical].streets));
-      }
-      for (var i = 0; i < businesses.length; i++) {
-        if (getCanonicalNeighborhoodName(businesses[i].neighborhood) === canonical && businesses[i].street) values.push(businesses[i].street);
-      }
-      for (var j = 0; j < licenses.length; j++) {
-        if (getCanonicalNeighborhoodName(licenses[j].neighborhood) === canonical && licenses[j].street) values.push(licenses[j].street);
-      }
-      return uniqueSorted(values);
-    }
-
-    function collectLicenseDoorNumbers(neighborhood, street) {
-      var canonical = getCanonicalNeighborhoodName(neighborhood);
-      var streetKey = String(street || '').trim();
-      if (!streetKey) return [];
-      var values = [];
-      if (canonical && ADDRESS_CATALOG[canonical] && ADDRESS_CATALOG[canonical].streets && ADDRESS_CATALOG[canonical].streets[streetKey]) {
-        values = values.concat(ADDRESS_CATALOG[canonical].streets[streetKey]);
-      }
-      for (var i = 0; i < businesses.length; i++) {
-        if (getCanonicalNeighborhoodName(businesses[i].neighborhood) === canonical && String(businesses[i].street || '').trim() === streetKey && businesses[i].doorNo) values.push(businesses[i].doorNo);
-      }
-      for (var j = 0; j < licenses.length; j++) {
-        if (getCanonicalNeighborhoodName(licenses[j].neighborhood) === canonical && String(licenses[j].street || '').trim() === streetKey && licenses[j].doorNo) values.push(licenses[j].doorNo);
-      }
-      return uniqueSorted(values);
-    }
-
     function initLicenseAddressSelectors() {
       setSelectOptions('neighborhood', 'Mahalle seçiniz', collectLicenseNeighborhoods(), '');
-      setSelectOptions('street', 'Önce mahalle seçiniz', [], '');
-      setSelectOptions('doorNo', 'Önce cadde / sokak seçiniz', [], '');
-    }
-
-    function handleLicenseNeighborhoodChange(selectedStreet, selectedDoorNo) {
-      var neighborhoodSelect = document.getElementById('neighborhood');
-      var canonical = getCanonicalNeighborhoodName(neighborhoodSelect.value);
-      if (canonical && neighborhoodSelect.value !== canonical) neighborhoodSelect.value = canonical;
-      var streetValue = selectedStreet !== undefined ? selectedStreet : document.getElementById('street').value;
-      setSelectOptions('street', canonical ? 'Cadde / sokak seçiniz' : 'Önce mahalle seçiniz', collectLicenseStreets(canonical), streetValue || '');
-      handleLicenseStreetChange(selectedDoorNo);
-    }
-
-    function handleLicenseStreetChange(selectedDoorNo) {
-      var neighborhood = document.getElementById('neighborhood').value;
-      var street = document.getElementById('street').value;
-      var doorValue = selectedDoorNo !== undefined ? selectedDoorNo : document.getElementById('doorNo').value;
-      setSelectOptions('doorNo', street ? 'Kapı no seçiniz' : 'Önce cadde / sokak seçiniz', collectLicenseDoorNumbers(neighborhood, street), doorValue || '');
     }
 
     function setLicenseAddressSelection(neighborhood, street, doorNo) {
-      initLicenseAddressSelectors();
       var canonical = getCanonicalNeighborhoodName(neighborhood || '');
       setSelectOptions('neighborhood', 'Mahalle seçiniz', collectLicenseNeighborhoods(), canonical || neighborhood || '');
-      handleLicenseNeighborhoodChange(street || '', doorNo || '');
+      document.getElementById('street').value = street || '';
+      document.getElementById('doorNo').value = doorNo || '';
     }
 
 
@@ -206,16 +155,13 @@
 
     function fillBusinessOptions() {
       var filter = document.getElementById('filterBusiness');
-      var select = document.getElementById('businessId');
       var filterHtml = '<option value="all">Tüm Firmalar</option>';
-      var formHtml = '<option value="">Firma seçin</option>';
+      filterHtml += '<option value="unlinked">Bağlı Firması Olmayanlar</option>';
       for (var i = 0; i < businesses.length; i++) {
         var item = businesses[i];
         filterHtml += '<option value="' + item.id + '">' + escapeHtml(item.tradeName || ('Firma #' + item.id)) + '</option>';
-        formHtml += '<option value="' + item.id + '">' + escapeHtml(item.tradeName || ('Firma #' + item.id)) + '</option>';
       }
       filter.innerHTML = filterHtml;
-      select.innerHTML = formHtml;
 
       var preselectedBusinessId = queryParams.get('businessId');
       if (preselectedBusinessId) {
@@ -224,19 +170,99 @@
       initLicenseAddressSelectors();
     }
 
-    function prefillFromBusiness(forceAddress) {
-      var businessId = document.getElementById('businessId').value;
-      var business = businessMap[businessId];
-      if (!business) return;
-      if (!document.getElementById('ownerName').value.trim()) document.getElementById('ownerName').value = business.ownerName || '';
-      if (!document.getElementById('tradeName').value.trim()) document.getElementById('tradeName').value = business.tradeName || '';
-      if (!document.getElementById('activitySubject').value.trim()) document.getElementById('activitySubject').value = business.activitySubject || '';
-      var hasAddressSelection = document.getElementById('neighborhood').value || document.getElementById('street').value || document.getElementById('doorNo').value;
-      if (forceAddress || !hasAddressSelection) {
-        setLicenseAddressSelection(business.neighborhood || '', business.street || '', business.doorNo || '');
+    function setLinkedBusinessInfo(item) {
+      var box = document.getElementById('linkedBusinessInfo');
+      if (!item || !item.businessId) {
+        box.textContent = 'Bu ruhsat kaydı firmadan bağımsız tutulur. Uygun firma daha sonra otomatik eşleşir.';
+        return;
       }
-      if (!document.getElementById('ada').value.trim()) document.getElementById('ada').value = business.ada || '';
-      if (!document.getElementById('parcel').value.trim()) document.getElementById('parcel').value = business.parcel || '';
+      box.innerHTML = 'Bağlı firma: <strong>' + escapeHtml(item.businessName || ('Firma #' + item.businessId)) + '</strong>';
+    }
+
+    function detailValue(value, emptyText) {
+      var normalized = value === undefined || value === null ? '' : String(value).trim();
+      return normalized ? escapeHtml(normalized) : '<span class="muted">' + escapeHtml(emptyText || 'Belirtilmedi') + '</span>' ;
+    }
+
+    function renderLicenseDetail(item) {
+      var businessHtml = item.businessId
+        ? '<a class="mini-btn" style="width:auto; display:inline-flex;" href="/businesses/' + item.businessId + '">Firma Detayına Git</a>'
+        : '<span class="muted">Bağlı firma kaydı yok</span>' ;
+
+      var html = '' +
+        '<div class="detail-card">' +
+          '<div class="detail-title">Durum ve bağlantı</div>' +
+          '<div class="detail-list">' +
+            '<div class="detail-item"><div class="detail-label">Kayıt Durumu</div><div class="detail-value">' + recordBadge(item.recordStatus) + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Süreç Durumu</div><div class="detail-value">' + processBadge(item.processStatus) + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Bağlı Firma</div><div class="detail-value">' + (item.businessName ? escapeHtml(item.businessName) : '<span class="muted">Bağlı firma yok</span>') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Firma Ekranı</div><div class="detail-value">' + businessHtml + '</div></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="detail-card">' +
+          '<div class="detail-title">Ruhsat ana bilgileri</div>' +
+          '<div class="detail-list">' +
+            '<div class="detail-item"><div class="detail-label">Ruhsat Sıra No</div><div class="detail-value">' + detailValue(item.licenseSerialNo, 'Ruhsat numarası girilmedi') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Veriliş Tarihi</div><div class="detail-value">' + detailValue(item.issueDateText, 'Veriliş tarihi girilmedi') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">İşyeri Ünvanı</div><div class="detail-value">' + detailValue(item.tradeName, 'İşyeri ünvanı girilmedi') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">İşyeri Sahibi</div><div class="detail-value">' + detailValue(item.ownerName, 'Sahip bilgisi girilmedi') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Faaliyet Konusu</div><div class="detail-value">' + detailValue(item.activitySubject, 'Faaliyet konusu girilmedi') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">İşyeri Sınıfı</div><div class="detail-value">' + detailValue(item.workplaceClass, 'Sınıf girilmedi') + '</div></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="detail-card">' +
+          '<div class="detail-title">Adres ve fiziksel bilgiler</div>' +
+          '<div class="detail-list">' +
+            '<div class="detail-item"><div class="detail-label">Mahalle</div><div class="detail-value">' + detailValue(item.neighborhood, 'Mahalle girilmedi') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Cadde / Sokak</div><div class="detail-value">' + detailValue(item.street, 'Cadde / sokak girilmedi') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Kapı No</div><div class="detail-value">' + detailValue(item.doorNo, 'Kapı no girilmedi') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Ada / Parsel</div><div class="detail-value">' + detailValue(((item.ada || '-') + ' / ' + (item.parcel || '-')).replace('- / -', ''), 'Ada / parsel girilmedi') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Kullanım Alanı</div><div class="detail-value">' + detailValue(item.usageArea, 'Kullanım alanı girilmedi') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Toplam Motor Gücü</div><div class="detail-value">' + detailValue(item.totalMotorPower, 'Motor gücü girilmedi') + '</div></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="detail-card">' +
+          '<div class="detail-title">Başvuru ve iptal bilgileri</div>' +
+          '<div class="detail-list">' +
+            '<div class="detail-item"><div class="detail-label">Başvuru Tarihi</div><div class="detail-value">' + detailValue(item.applicationDateText, 'Başvuru tarihi yok') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Başvuru No</div><div class="detail-value">' + detailValue(item.applicationNo, 'Başvuru numarası yok') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Başvuru Aşaması</div><div class="detail-value">' + detailValue(item.applicationStage, 'Başvuru aşaması yok') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">Takip Tarihi</div><div class="detail-value">' + detailValue(item.followupDateText, 'Takip tarihi yok') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">İptal Tarihi</div><div class="detail-value">' + detailValue(item.cancelDateText, 'İptal tarihi yok') + '</div></div>' +
+            '<div class="detail-item"><div class="detail-label">İptal Nedeni</div><div class="detail-value">' + detailValue(item.cancelReason, 'İptal nedeni yok') + '</div></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="detail-card full">' +
+          '<div class="detail-title">Saat, kimlik ve notlar</div>' +
+          '<div class="detail-grid">' +
+            '<div class="detail-list">' +
+              '<div class="detail-item"><div class="detail-label">Kış Saatleri</div><div class="detail-value">' + detailValue((item.winterOpeningTime || item.winterClosingTime) ? ((item.winterOpeningTime || '-') + ' / ' + (item.winterClosingTime || '-')) : '', 'Kış saatleri girilmedi') + '</div></div>' +
+              '<div class="detail-item"><div class="detail-label">Yaz Saatleri</div><div class="detail-value">' + detailValue((item.summerOpeningTime || item.summerClosingTime) ? ((item.summerOpeningTime || '-') + ' / ' + (item.summerClosingTime || '-')) : '', 'Yaz saatleri girilmedi') + '</div></div>' +
+              '<div class="detail-item"><div class="detail-label">T.C. / Vergi No</div><div class="detail-value">' + detailValue((item.identityNumber || item.taxNumber) ? ((item.identityNumber || '-') + ' / ' + (item.taxNumber || '-')) : '', 'Kimlik / vergi bilgisi girilmedi') + '</div></div>' +
+            '</div>' +
+            '<div class="detail-list">' +
+              '<div class="detail-item"><div class="detail-label">Zabıta Müdürü</div><div class="detail-value">' + detailValue(item.policeChiefName, 'Zabıta müdürü girilmedi') + '</div></div>' +
+              '<div class="detail-item"><div class="detail-label">Belediye Başkanı</div><div class="detail-value">' + detailValue(item.mayorName, 'Belediye başkanı girilmedi') + '</div></div>' +
+              '<div class="detail-item"><div class="detail-label">Diğer Faaliyet / Not</div><div class="detail-value">' + detailValue(item.otherActivityAreas || item.notes, 'Ek not girilmedi') + '</div></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+
+      document.getElementById('licenseDetailContent').innerHTML = html;
+      document.getElementById('licenseDetailModal').classList.add('show');
+    }
+
+    function openLicenseDetail(id) {
+      var item = null;
+      for (var i = 0; i < licenses.length; i++) {
+        if (String(licenses[i].id) === String(id)) { item = licenses[i]; break; }
+      }
+      if (!item) return;
+      renderLicenseDetail(item);
+    }
+
+    function closeDetailModal() {
+      document.getElementById('licenseDetailModal').classList.remove('show');
     }
 
     function resetForm() {
@@ -246,10 +272,8 @@
       document.getElementById('recordStatus').value = 'Aktif';
       document.getElementById('processStatus').value = 'Ruhsat Verildi';
       setMessage('', '');
-      var preselectedBusinessId = queryParams.get('businessId');
       initLicenseAddressSelectors();
-      document.getElementById('businessId').value = preselectedBusinessId || '';
-      prefillFromBusiness(true);
+      setLinkedBusinessInfo(null);
       toggleConditionalFields();
     }
 
@@ -263,7 +287,7 @@
         if (!item) return;
         document.getElementById('editingLicenseId').value = item.id;
         document.getElementById('licenseModalTitle').textContent = 'Ruhsat Kaydını Düzenle';
-        document.getElementById('businessId').value = item.businessId || '';
+        setLinkedBusinessInfo(item);
         document.getElementById('recordStatus').value = item.recordStatus || 'Aktif';
         document.getElementById('processStatus').value = item.processStatus || 'Ruhsat Verildi';
         document.getElementById('applicationDate').value = item.applicationDate || '';
@@ -334,7 +358,7 @@
     function filteredLicenses() {
       var filters = currentFilters();
       return licenses.filter(function(item) {
-        var matchesBusiness = filters.businessId === 'all' || String(item.businessId) === String(filters.businessId);
+        var matchesBusiness = filters.businessId === 'all' || (filters.businessId === 'unlinked' ? !item.businessId : String(item.businessId) === String(filters.businessId));
         var matchesRecord = filters.recordStatus === 'all' || item.recordStatus === filters.recordStatus;
         var matchesProcess = filters.processStatus === 'all' || item.processStatus === filters.processStatus;
         var haystack = [
@@ -373,6 +397,7 @@
     function renderLicenseTable() {
       var rows = filteredLicenses();
       renderStats();
+      updatePrintMeta(rows);
       var body = document.getElementById('licenseTableBody');
       if (!rows.length) {
         body.innerHTML = '<tr><td colspan="6"><div class="empty-state">Bu filtreye uygun ruhsat kaydı bulunmuyor.</div></td></tr>';
@@ -397,7 +422,8 @@
         if (item.applicationStage) applicationBits.push('<div class="cell-sub">Aşama: ' + escapeHtml(item.applicationStage) + '</div>');
         if (item.recordStatus === 'İptal' && item.cancelDateText) applicationBits.push('<div class="cell-sub">İptal Tarihi: ' + escapeHtml(item.cancelDateText) + '</div>');
 
-        var actionButtons = '<button class="mini-btn primary" type="button" onclick="openLicenseModal(' + item.id + ')">Düzenle</button>';
+        var actionButtons = '<button class="mini-btn" type="button" onclick="openLicenseDetail(' + item.id + ')">Ruhsat Detay</button>';
+        actionButtons += '<button class="mini-btn primary" type="button" onclick="openLicenseModal(' + item.id + ')">Düzenle</button>';
         if (item.businessId) {
           actionButtons += '<a class="mini-btn" href="/businesses/' + item.businessId + '">Firma Detayı</a>';
         }
@@ -414,6 +440,55 @@
       }
 
       body.innerHTML = html;
+    }
+
+    function buildFilterQueryString() {
+      var params = new URLSearchParams();
+      var filters = currentFilters();
+      var businessSelect = document.getElementById('filterBusiness');
+      var businessText = businessSelect && businessSelect.selectedOptions[0] ? businessSelect.selectedOptions[0].textContent : 'Tüm Firmalar';
+      if (filters.businessId && filters.businessId !== 'all') {
+        params.set('businessId', filters.businessId);
+        params.set('businessName', businessText);
+      }
+      if (filters.recordStatus && filters.recordStatus !== 'all') params.set('recordStatus', filters.recordStatus);
+      if (filters.processStatus && filters.processStatus !== 'all') params.set('processStatus', filters.processStatus);
+      if (filters.search) params.set('search', document.getElementById('searchInput').value.trim());
+      return params.toString();
+    }
+
+    function updatePrintMeta(rows) {
+      var businessText = document.getElementById('filterBusiness').selectedOptions[0] ? document.getElementById('filterBusiness').selectedOptions[0].textContent : 'Tüm Firmalar';
+      var recordText = document.getElementById('filterRecordStatus').selectedOptions[0].textContent;
+      var processText = document.getElementById('filterProcessStatus').selectedOptions[0].textContent;
+      var search = document.getElementById('searchInput').value.trim();
+      var parts = [];
+      parts.push('Firma: ' + businessText);
+      parts.push('Kayıt Durumu: ' + recordText);
+      parts.push('Süreç Durumu: ' + processText);
+      if (search) parts.push('Arama: ' + search);
+      parts.push('Toplam kayıt: ' + rows.length);
+      document.getElementById('printMeta').innerHTML = '<strong>Ruhsat Listesi Çıktısı</strong><br>' + escapeHtml(parts.join(' • '));
+    }
+
+    function exportExcel() {
+      var rows = filteredLicenses();
+      if (!rows.length) {
+        alert('Bu filtreye uygun Excel çıktısı oluşturulacak ruhsat kaydı bulunmuyor.');
+        return;
+      }
+      var query = buildFilterQueryString();
+      window.location.href = '/api/licenses/export.xlsx' + (query ? ('?' + query) : '');
+    }
+
+    function printFilteredView() {
+      var rows = filteredLicenses();
+      if (!rows.length) {
+        alert('Bu filtreye uygun yazdırılacak ruhsat kaydı bulunmuyor.');
+        return;
+      }
+      updatePrintMeta(rows);
+      window.print();
     }
 
     function clearFilters() {
@@ -449,10 +524,7 @@
       saveButton.disabled = true;
       saveButton.textContent = 'Kaydediliyor...';
       try {
-        var businessId = document.getElementById('businessId').value;
-        if (!businessId) throw new Error('Lütfen firma seçin.');
         var payload = {
-          businessId: businessId,
           recordStatus: document.getElementById('recordStatus').value,
           processStatus: document.getElementById('processStatus').value,
           applicationDate: document.getElementById('applicationDate').value,
@@ -520,12 +592,25 @@
       }
     }
 
+    function toggleSidebar(forceOpen) {
+      var shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !document.body.classList.contains('sidebar-open');
+      document.body.classList.toggle('sidebar-open', shouldOpen);
+    }
+
     document.getElementById('licenseForm').addEventListener('submit', saveLicense);
     document.getElementById('licenseModal').addEventListener('click', function(event) {
       if (event.target === this) closeModal();
     });
+    document.getElementById('licenseDetailModal').addEventListener('click', function(event) {
+      if (event.target === this) closeDetailModal();
+    });
     document.addEventListener('keydown', function(event) {
-      if (event.key === 'Escape') closeModal();
+      if (event.key !== 'Escape') return;
+      var detailModal = document.getElementById('licenseDetailModal');
+      if (detailModal && detailModal.classList.contains('show')) { closeDetailModal(); return; }
+      var modal = document.getElementById('licenseModal');
+      if (modal && modal.classList.contains('show')) { closeModal(); return; }
+      if (document.body.classList.contains('sidebar-open')) toggleSidebar(false);
     });
 
     async function init() {
@@ -539,4 +624,3 @@
     }
 
     init();
-  
