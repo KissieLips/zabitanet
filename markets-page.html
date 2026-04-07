@@ -101,6 +101,8 @@
     .doc-chip.missing { background: #fff1f2; color: #b91c1c; border-color: #fecdd3; }
     .status-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
     .status-btn { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .status-btn:disabled { cursor: not-allowed; opacity: 0.55; background: #f8fafc; }
+    .status-btn.locked { border-style: dashed; }
     .status-btn.active.var { background: #dcfce7; border-color: #bbf7d0; color: #166534; }
     .status-btn.active.yok { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }
     .status-btn.active.izinli { background: #dbeafe; border-color: #bfdbfe; color: #1d4ed8; }
@@ -287,7 +289,7 @@
         <div class="panel-header">
           <div>
             <div class="panel-title">Yoklama Paneli</div>
-            <div class="panel-subtitle">Seçilen pazara ve tarihe göre satıcı listesi gelir. İzinli / raporlu kayıtlar otomatik önerilir.</div>
+            <div class="panel-subtitle">Seçilen pazara ve tarihe göre tüm aktif satıcı listesi gelir. İzinli / raporlu kayıtlar otomatik gelir ve kilitli kalır.</div>
           </div>
           <div class="toolbar">
             <button class="btn btn-success" type="button" onclick="markAllAttendance('Var')">Hepsini Var Yap</button>
@@ -325,7 +327,7 @@
         <div class="panel-header">
           <div>
             <div class="panel-title">Yoklama Geçmişi</div>
-            <div class="panel-subtitle">Kaydedilen yoklamalar geçmişe dönük izlenir.</div>
+            <div class="panel-subtitle">Geçmiş yoklamalar tarih bazlı listelenir. Bir tarihe tıklayınca o günün yoklama listesi üst panelde açılır.</div>
           </div>
         </div>
         <div class="table-wrap">
@@ -333,15 +335,14 @@
             <thead>
               <tr>
                 <th>Tarih</th>
-                <th>Satıcı</th>
                 <th>Pazar</th>
-                <th>Bölüm / Yer</th>
-                <th>Durum</th>
-                <th>Not</th>
+                <th>Kayıt Özeti</th>
+                <th>Son Güncelleme</th>
+                <th>İşlem</th>
               </tr>
             </thead>
             <tbody id="historyTableBody">
-              <tr><td colspan="6"><div class="empty-state">Yoklama geçmişi yükleniyor...</div></td></tr>
+              <tr><td colspan="5"><div class="empty-state">Yoklama geçmişi yükleniyor...</div></td></tr>
             </tbody>
           </table>
         </div>
@@ -678,17 +679,17 @@
         var item = attendanceSheet[i];
         var status = item.selectedStatus || '';
         var autoInfo = item.leaveType
-          ? '<span class="badge ' + (item.leaveType === 'Raporlu' ? 'warn' : 'info') + '">' + escapeHtml(item.leaveType) + '</span><div class="cell-sub">' + escapeHtml(item.leavePeriodText) + '</div><div class="cell-sub">' + escapeHtml(item.leaveNote || 'Açıklama yok') + '</div>'
+          ? '<span class="badge ' + (item.leaveType === 'Raporlu' ? 'warn' : 'info') + '">' + escapeHtml(item.leaveType) + '</span><span class="badge" style="margin-left:6px;">Kilitli</span><div class="cell-sub">' + escapeHtml(item.leavePeriodText) + '</div><div class="cell-sub">' + escapeHtml(item.leaveNote || 'Açıklama yok') + '</div>'
           : (item.attendanceStatus ? '<span class="badge success">Kayıtlı Yoklama</span><div class="cell-sub">Durum: ' + escapeHtml(item.attendanceStatus) + '</div>' : '<span class="muted">Otomatik öneri yok</span>');
         html += '<tr>' +
           '<td><div class="cell-title">' + escapeHtml(item.vendorName) + '</div><div class="cell-sub">' + escapeHtml(item.marketName) + '</div></td>' +
           '<td><div class="cell-title">' + escapeHtml(item.sectionType) + '</div><div class="cell-sub">Yer: ' + escapeHtml(item.stallLabel || 'Atanmadı') + '</div></td>' +
           '<td>' + autoInfo + '</td>' +
           '<td><div class="status-buttons">' +
-            buildStatusButton(item.vendorId, 'Var', status) +
-            buildStatusButton(item.vendorId, 'Yok', status) +
-            buildStatusButton(item.vendorId, 'İzinli', status) +
-            buildStatusButton(item.vendorId, 'Raporlu', status) +
+            buildStatusButton(item.vendorId, 'Var', status, item.isLocked) +
+            buildStatusButton(item.vendorId, 'Yok', status, item.isLocked) +
+            buildStatusButton(item.vendorId, 'İzinli', status, item.isLocked) +
+            buildStatusButton(item.vendorId, 'Raporlu', status, item.isLocked) +
           '</div></td>' +
           '<td><input class="attendance-note" type="text" value="' + escapeHtml(item.note || '') + '" oninput="updateAttendanceNote(' + item.vendorId + ', this.value)" placeholder="Kısa not" /></td>' +
         '</tr>';
@@ -697,27 +698,33 @@
       renderStats();
     }
 
-    function buildStatusButton(vendorId, label, activeLabel) {
+    function buildStatusButton(vendorId, label, activeLabel, isLocked) {
       var cls = label.toLocaleLowerCase('tr-TR');
-      return '<button class="status-btn ' + (label === activeLabel ? ('active ' + cls) : '') + '" type="button" onclick="pickAttendanceStatus(' + vendorId + ', \'' + label + '\')">' + escapeHtml(label) + '</button>';
+      var disabled = isLocked ? 'disabled' : '';
+      var lockedClass = isLocked ? ' locked' : '';
+      return "<button class=\"status-btn" + lockedClass + " " + (label === activeLabel ? ('active ' + cls) : '') + "\" " + disabled + " type=\"button\" onclick=\"pickAttendanceStatus(" + vendorId + ", '" + label + "')\">" + escapeHtml(label) + "</button>";
     }
 
     function renderAttendanceHistory() {
       var body = document.getElementById('historyTableBody');
       if (!attendanceHistory.length) {
-        body.innerHTML = '<tr><td colspan="6"><div class="empty-state">Henüz yoklama geçmişi bulunmuyor.</div></td></tr>';
+        body.innerHTML = '<tr><td colspan="5"><div class="empty-state">Henüz yoklama geçmişi bulunmuyor.</div></td></tr>';
         return;
       }
       var html = '';
       for (var i = 0; i < attendanceHistory.length; i++) {
         var item = attendanceHistory[i];
         html += '<tr>' +
-          '<td><div class="cell-title">' + escapeHtml(item.attendanceDateText) + '</div><div class="cell-sub">' + escapeHtml(item.updatedAt) + '</div></td>' +
-          '<td>' + escapeHtml(item.vendorName) + '</td>' +
-          '<td>' + escapeHtml(item.marketName) + '</td>' +
-          '<td><div class="cell-title">' + escapeHtml(item.sectionType) + '</div><div class="cell-sub">Yer: ' + escapeHtml(item.stallLabel || 'Atanmadı') + '</div></td>' +
-          '<td>' + (item.status === 'Var' ? '<span class="badge success">Var</span>' : item.status === 'Yok' ? '<span class="badge danger">Yok</span>' : item.status === 'Raporlu' ? '<span class="badge warn">Raporlu</span>' : '<span class="badge info">İzinli</span>') + '</td>' +
-          '<td>' + escapeHtml(item.note || 'Not yok') + '</td>' +
+          '<td><div class="cell-title">' + escapeHtml(item.attendanceDateText) + '</div><div class="cell-sub">Kayıt sayısı: ' + escapeHtml(item.recordCount) + '</div></td>' +
+          '<td><div class="cell-title">' + escapeHtml(item.marketName) + '</div></td>' +
+          '<td><div class="doc-list">' +
+            '<span class="doc-chip ok">Var: ' + escapeHtml(item.presentCount) + '</span>' +
+            '<span class="doc-chip missing">Yok: ' + escapeHtml(item.absentCount) + '</span>' +
+            '<span class="doc-chip">İzinli: ' + escapeHtml(item.leaveCount) + '</span>' +
+            '<span class="doc-chip">Raporlu: ' + escapeHtml(item.reportCount) + '</span>' +
+          '</div></td>' +
+          '<td>' + escapeHtml(item.updatedAt || '-') + '</td>' +
+          "<td><button class=\"mini-btn primary\" type=\"button\" onclick=\"openAttendanceHistoryDate(" + item.marketId + ", '" + item.attendanceDate + "')\">Yoklamayı Aç</button></td>" +
         '</tr>';
       }
       body.innerHTML = html;
@@ -788,7 +795,10 @@
 
     function pickAttendanceStatus(vendorId, status) {
       for (var i = 0; i < attendanceSheet.length; i++) {
-        if (String(attendanceSheet[i].vendorId) === String(vendorId)) attendanceSheet[i].selectedStatus = status;
+        if (String(attendanceSheet[i].vendorId) === String(vendorId)) {
+          if (attendanceSheet[i].isLocked) return;
+          attendanceSheet[i].selectedStatus = status;
+        }
       }
       renderAttendanceSheet();
     }
@@ -801,7 +811,8 @@
 
     function markAllAttendance(status) {
       for (var i = 0; i < attendanceSheet.length; i++) {
-        if (!attendanceSheet[i].recommendedStatus) attendanceSheet[i].selectedStatus = status;
+        if (attendanceSheet[i].isLocked) attendanceSheet[i].selectedStatus = attendanceSheet[i].lockedStatus || attendanceSheet[i].recommendedStatus;
+        else if (!attendanceSheet[i].recommendedStatus) attendanceSheet[i].selectedStatus = status;
         else attendanceSheet[i].selectedStatus = attendanceSheet[i].recommendedStatus;
       }
       renderAttendanceSheet();
@@ -1088,7 +1099,7 @@
       var data = await response.json().catch(function() { return []; });
       if (!response.ok) throw new Error(data.error || 'Yoklama listesi yüklenemedi.');
       attendanceSheet = data.map(function(item) {
-        item.selectedStatus = item.attendanceStatus || item.recommendedStatus || '';
+        item.selectedStatus = item.isLocked ? (item.lockedStatus || item.leaveType || '') : (item.attendanceStatus || item.recommendedStatus || '');
         return item;
       });
       renderAttendanceSheet();
@@ -1096,11 +1107,20 @@
 
     async function loadAttendanceHistory() {
       var marketId = document.getElementById('attendanceMarketFilter').value || 'all';
-      var response = await fetch('/api/markets/attendance-history?marketId=' + encodeURIComponent(marketId));
+      var response = await fetch('/api/markets/attendance-history-summary?marketId=' + encodeURIComponent(marketId));
       var data = await response.json().catch(function() { return []; });
       if (!response.ok) throw new Error(data.error || 'Yoklama geçmişi yüklenemedi.');
       attendanceHistory = data;
       renderAttendanceHistory();
+    }
+
+    async function openAttendanceHistoryDate(marketId, date) {
+      document.getElementById('attendanceMarketFilter').value = String(marketId);
+      document.getElementById('attendanceDate').value = date;
+      await loadAttendanceSheet();
+      await loadAttendanceHistory();
+      scrollToAttendance();
+      showBanner('Seçilen tarihin yoklama listesi açıldı.', 'info');
     }
 
     async function saveAttendanceSheet() {

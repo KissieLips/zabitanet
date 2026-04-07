@@ -157,6 +157,7 @@ function mapLeave(row) {
 
 function mapAttendanceRow(row, fallbackDate) {
   const recommendedStatus = row.attendance_status || row.leave_type || '';
+  const isLocked = Boolean(row.leave_type);
   return {
     vendorId: row.vendor_id,
     marketId: row.market_id,
@@ -174,6 +175,8 @@ function mapAttendanceRow(row, fallbackDate) {
     leaveType: row.leave_type || '',
     leaveNote: row.leave_note || '',
     leavePeriodText: row.leave_type ? `${formatDate(row.leave_start_date)} - ${formatDate(row.leave_end_date)}` : '',
+    isLocked,
+    lockedStatus: isLocked ? row.leave_type : '',
   };
 }
 
@@ -789,7 +792,7 @@ function registerMarketModule({ app, pool }) {
             LIMIT 1
           ) lr ON TRUE
           WHERE v.market_id = $1
-            AND v.is_active = TRUE
+            AND (v.is_active = TRUE OR a.id IS NOT NULL)
           ORDER BY v.section_type ASC, NULLIF(v.stall_no, '') ASC, v.full_name ASC
         `,
         [marketId, attendanceDate]
@@ -811,16 +814,38 @@ function registerMarketModule({ app, pool }) {
     if (!entries.length) return res.status(400).json({ error: 'Kaydedilecek yoklama satırı bulunamadı.' });
 
     const allowedStatuses = new Set(['Var', 'Yok', 'İzinli', 'Raporlu']);
+    const vendorIds = Array.from(new Set(entries.map((item) => Number(item.vendorId)).filter(Boolean)));
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
+      const lockedStatusMap = new Map();
+      if (vendorIds.length) {
+        const leaveResult = await client.query(
+          `
+            SELECT vendor_id, leave_type
+            FROM market_leave_records
+            WHERE vendor_id = ANY($1::int[])
+              AND $2 BETWEEN start_date AND end_date
+            ORDER BY end_date DESC, id DESC
+          `,
+          [vendorIds, attendanceDate]
+        );
+
+        for (const row of leaveResult.rows) {
+          if (!lockedStatusMap.has(row.vendor_id)) lockedStatusMap.set(row.vendor_id, row.leave_type);
+        }
+      }
+
       for (const item of entries) {
         const vendorId = Number(item.vendorId);
-        const status = String(item.status || '').trim();
+        const requestedStatus = String(item.status || '').trim();
         const note = String(item.note || '').trim();
-        if (!vendorId || !allowedStatuses.has(status)) continue;
+        if (!vendorId) continue;
+
+        const finalStatus = lockedStatusMap.get(vendorId) || requestedStatus;
+        if (!allowedStatuses.has(finalStatus)) continue;
 
         await client.query(
           `
@@ -832,7 +857,7 @@ function registerMarketModule({ app, pool }) {
               note = EXCLUDED.note,
               updated_at = CURRENT_TIMESTAMP
           `,
-          [vendorId, attendanceDate, status, note || null]
+          [vendorId, attendanceDate, finalStatus, note || null]
         );
       }
 
@@ -844,6 +869,57 @@ function registerMarketModule({ app, pool }) {
       res.status(500).json({ error: 'Yoklama kaydedilemedi.' });
     } finally {
       client.release();
+    }
+  });
+
+  app.get('/api/markets/attendance-history-summary', async (req, res) => {
+    const marketId = String(req.query.marketId || 'all');
+    const limit = Math.min(120, Math.max(10, Number(req.query.limit || 40)));
+
+    try {
+      const values = [];
+      const conditions = [];
+      if (marketId !== 'all') {
+        values.push(Number(marketId));
+        conditions.push(`v.market_id = $${values.length}`);
+      }
+      values.push(limit);
+      const sql = `
+        SELECT
+          a.attendance_date,
+          v.market_id,
+          m.name AS market_name,
+          COUNT(a.id)::int AS record_count,
+          COUNT(a.id) FILTER (WHERE a.status = 'Var')::int AS present_count,
+          COUNT(a.id) FILTER (WHERE a.status = 'Yok')::int AS absent_count,
+          COUNT(a.id) FILTER (WHERE a.status = 'İzinli')::int AS leave_count,
+          COUNT(a.id) FILTER (WHERE a.status = 'Raporlu')::int AS report_count,
+          MAX(a.updated_at) AS updated_at
+        FROM market_attendance a
+        INNER JOIN market_vendors v ON v.id = a.vendor_id
+        INNER JOIN market_places m ON m.id = v.market_id
+        ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
+        GROUP BY a.attendance_date, v.market_id, m.name, m.display_order
+        ORDER BY a.attendance_date DESC, m.display_order ASC, m.name ASC
+        LIMIT $${values.length}
+      `;
+
+      const result = await pool.query(sql, values);
+      res.json(result.rows.map((row) => ({
+        attendanceDate: toInputDate(row.attendance_date),
+        attendanceDateText: formatDate(row.attendance_date),
+        marketId: row.market_id,
+        marketName: row.market_name,
+        recordCount: Number(row.record_count || 0),
+        presentCount: Number(row.present_count || 0),
+        absentCount: Number(row.absent_count || 0),
+        leaveCount: Number(row.leave_count || 0),
+        reportCount: Number(row.report_count || 0),
+        updatedAt: formatDateTime(row.updated_at),
+      })));
+    } catch (error) {
+      console.error('Yoklama tarih özeti alınamadı:', error);
+      res.status(500).json({ error: 'Yoklama tarih özeti alınamadı.' });
     }
   });
 
