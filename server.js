@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const https = require("https");
 const XLSX = require("xlsx");
+const { initMarketModuleDb, registerMarketModule } = require("./market-module");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,6 +16,8 @@ app.use(express.json());
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
+
+registerMarketModule({ app, pool });
 
 const uploadsRoot = path.join(__dirname, "uploads");
 const complaintUploadsRoot = path.join(uploadsRoot, "complaints");
@@ -1180,6 +1183,8 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_licenses_process_status
     ON licenses(process_status)
   `);
+
+  await initMarketModuleDb(pool);
 
   const legacyLicenses = await pool.query(`
     SELECT *
@@ -3090,6 +3095,7 @@ app.get("/businesses", (req, res) => {
         <a href="/businesses" class="menu-item active"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
         <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
         <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
+        <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
       </nav>
     </aside>
 
@@ -4603,6 +4609,7 @@ app.get("/businesses/:id", (req, res) => {
         <a href="/businesses" class="menu-item active"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
         <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
         <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
+        <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
       </nav>
     </aside>
 
@@ -6019,6 +6026,7 @@ app.get("/inspections", (req, res) => {
         <a href="/businesses" class="menu-item"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
         <a href="/inspections" class="menu-item active"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
         <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
+        <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
       </nav>
     </aside>
     <main class="main">
@@ -6392,6 +6400,7 @@ app.get("/", (req, res) => {
         <a href="/businesses" class="menu-item"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
         <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
         <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
+        <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
       </nav>
     </aside>
     <main class="main">
