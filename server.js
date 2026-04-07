@@ -677,7 +677,46 @@ function buildLicenseAddress(row) {
   return parts.join(', ');
 }
 
+function buildLicenseBusinessCreationSuggestion(row) {
+  const recordStatus = String(row && row.record_status || '');
+  const processStatus = String(row && row.process_status || '');
+  const businessId = row && row.business_id;
+  const suggestedBusinessId = row && row.suggested_business_id;
+
+  if (businessId) {
+    return { eligible: false, note: 'Bu ruhsat zaten bir firmaya bağlı.' };
+  }
+
+  if (suggestedBusinessId) {
+    return { eligible: false, note: 'Önce önerilen mevcut firma eşleşmesini değerlendir.' };
+  }
+
+  if (recordStatus !== 'Aktif') {
+    return { eligible: false, note: 'Sadece aktif kayıtlar için firma önerisi hazırlanır.' };
+  }
+
+  if (processStatus !== 'Ruhsat Verildi') {
+    return { eligible: false, note: 'Sadece ruhsat verildi durumundaki kayıtlar firmaya dönüştürülebilir.' };
+  }
+
+  const tradeName = normalizeMatchText(row && (row.trade_name || row.tradeName) || '');
+  const ownerName = normalizeMatchText(row && (row.owner_name || row.ownerName) || '');
+  const neighborhood = normalizeMatchText(getCanonicalBusinessNeighborhood(row && row.neighborhood || ''));
+  const street = normalizeMatchText(row && row.street || '');
+
+  if (!tradeName || !ownerName) {
+    return { eligible: false, note: 'Ünvan ve sahip bilgisi eksik olduğu için firma önerisi oluşturulmadı.' };
+  }
+
+  if (!neighborhood || !street) {
+    return { eligible: false, note: 'Mahalle ve cadde/sokak bilgisi olmadan firma önerisi çıkarılmaz.' };
+  }
+
+  return { eligible: true, note: 'Bu aktif ruhsattan yeni firma kaydı önerilebilir.' };
+}
+
 function mapLicense(row) {
+  const creationSuggestion = buildLicenseBusinessCreationSuggestion(row);
   return {
     id: row.id,
     businessId: row.business_id,
@@ -728,6 +767,8 @@ function mapLicense(row) {
     addressText: buildLicenseAddress(row),
     createdAt: formatDateTime(row.created_at),
     updatedAt: formatDateTime(row.updated_at),
+    canCreateBusinessSuggestion: creationSuggestion.eligible,
+    createBusinessSuggestionNote: creationSuggestion.note,
   };
 }
 
@@ -5678,6 +5719,106 @@ app.put('/api/licenses/:id', async (req, res) => {
   }
 });
 
+
+app.post('/api/licenses/:id/create-business', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    await client.query('BEGIN');
+
+    const licenseResult = await client.query('SELECT * FROM licenses WHERE id = $1 LIMIT 1 FOR UPDATE', [id]);
+    if (!licenseResult.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Ruhsat kaydı bulunamadı.' });
+    }
+
+    const licenseRow = licenseResult.rows[0];
+    const creationSuggestion = buildLicenseBusinessCreationSuggestion(licenseRow);
+
+    if (licenseRow.business_id) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Bu ruhsat zaten bir firmaya bağlı.' });
+    }
+
+    if (licenseRow.suggested_business_id) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Bu ruhsat için mevcut firma eşleşme adayı var. Önce onu değerlendir.' });
+    }
+
+    if (!creationSuggestion.eligible) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: creationSuggestion.note || 'Bu ruhsattan firma önerisi oluşturulamıyor.' });
+    }
+
+    const businessInsert = await client.query(`
+      INSERT INTO businesses (
+        category_id,
+        trade_name,
+        owner_name,
+        phone,
+        neighborhood,
+        street,
+        door_no,
+        ada,
+        parcel,
+        location_lat,
+        location_lng
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING *
+    `, [
+      null,
+      licenseRow.trade_name ? String(licenseRow.trade_name).trim() : '',
+      licenseRow.owner_name ? String(licenseRow.owner_name).trim() : '',
+      '',
+      licenseRow.neighborhood ? String(licenseRow.neighborhood).trim() : '',
+      licenseRow.street ? String(licenseRow.street).trim() : '',
+      licenseRow.door_no ? String(licenseRow.door_no).trim() : '',
+      licenseRow.ada ? String(licenseRow.ada).trim() : '',
+      licenseRow.parcel ? String(licenseRow.parcel).trim() : '',
+      null,
+      null
+    ]);
+
+    const newBusinessId = businessInsert.rows[0].id;
+
+    await client.query(`
+      UPDATE licenses
+      SET
+        business_id = $1,
+        suggested_business_id = NULL,
+        match_score = 0,
+        match_note = 'Ruhsattan manuel onayla firma kaydı oluşturuldu.',
+        match_status = 'Bağlandı',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+    `, [newBusinessId, id]);
+
+    await client.query('COMMIT');
+
+    await updateBusinessLicenseSnapshot(newBusinessId);
+    await refreshAllLicenseSuggestions();
+
+    const businessResult = await pool.query(`
+      SELECT
+        b.*, bc.name AS category_name
+      FROM businesses b
+      LEFT JOIN business_categories bc ON bc.id = b.category_id
+      WHERE b.id = $1
+      LIMIT 1
+    `, [newBusinessId]);
+
+    res.json({
+      business: mapBusiness(businessResult.rows[0]),
+      licenseId: Number(id)
+    });
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch (rollbackError) {}
+    console.error(error);
+    res.status(500).json({ error: 'Ruhsattan firma kaydı oluşturulamadı.' });
+  } finally {
+    client.release();
+  }
+});
 
 app.post('/api/licenses/:id/approve-match', async (req, res) => {
   try {
