@@ -414,7 +414,7 @@
         if (item.doorNo) addressParts.push('No: ' + escapeHtml(item.doorNo));
 
         var businessLink = item.businessId
-          ? '<div class="cell-sub"><a href="/businesses/' + item.businessId + '">Firma detayına git</a></div>'
+          ? ''
           : '<div class="cell-sub">Firma bağlantısı yok</div>';
 
         var applicationBits = [];

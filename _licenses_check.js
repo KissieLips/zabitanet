@@ -458,7 +458,7 @@
         if (item.doorNo) addressParts.push('No: ' + escapeHtml(item.doorNo));
 
         var businessLink = item.businessId
-          ? '<div class="cell-sub"><a href="/businesses/' + item.businessId + '">Firma detayına git</a></div>'
+          ? ''
           : (item.suggestedBusinessId
               ? '<div class="cell-sub">Eşleşme adayı: ' + escapeHtml(item.suggestedBusinessName || ('Firma #' + item.suggestedBusinessId)) + ' · Puan: ' + escapeHtml(item.matchScore || 0) + '</div>'
               : (item.canCreateBusinessSuggestion
