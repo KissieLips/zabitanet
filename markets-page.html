@@ -63,6 +63,12 @@
     .filters.vendor { grid-template-columns: 170px 150px 150px 150px minmax(220px, 1fr) auto; }
     .filters.leave { grid-template-columns: 170px 150px 170px auto; }
     .filters.attendance { grid-template-columns: 200px 170px auto auto auto; }
+    .filters.attendance-quick { grid-template-columns: 170px 170px minmax(220px, 1fr) auto; margin-top: 10px; }
+    .attendance-shell { display: grid; gap: 12px; }
+    .attendance-shell.hidden, .hidden { display: none; }
+    .attendance-list-summary { font-size: 12.5px; color: var(--muted); }
+    .attendance-table-wrap { max-height: 68vh; overflow: auto; }
+    .attendance-closed-box { padding: 18px; }
     input[type="text"], input[type="date"], select, textarea {
       width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; background: #fff; color: var(--text);
     }
@@ -140,7 +146,7 @@
     }
     @media (max-width: 860px) {
       .main { padding: 14px; }
-      .stats-grid, .filters.vendor, .filters.leave, .filters.attendance, .form-grid, .form-grid.three, .checkbox-grid { grid-template-columns: 1fr; }
+      .stats-grid, .filters.vendor, .filters.leave, .filters.attendance, .filters.attendance-quick, .form-grid, .form-grid.three, .checkbox-grid { grid-template-columns: 1fr; }
       .hero-title { font-size: 22px; }
       .modal { width: 100%; }
     }
@@ -289,37 +295,64 @@
         <div class="panel-header">
           <div>
             <div class="panel-title">Yoklama Paneli</div>
-            <div class="panel-subtitle">Seçilen pazara ve tarihe göre tüm aktif satıcı listesi gelir. İzinli / raporlu kayıtlar otomatik gelir ve kilitli kalır.</div>
+            <div class="panel-subtitle" id="attendancePanelSubtitle">Panel kapalı. Yeni yoklama başlatabilir veya geçmişten bir yoklamayı düzenleyebilirsin.</div>
           </div>
           <div class="toolbar">
-            <button class="btn btn-success" type="button" onclick="markAllAttendance('Var')">Hepsini Var Yap</button>
+            <span class="badge gray" id="attendancePanelState">Kapalı</span>
+            <button class="btn btn-success" type="button" onclick="openAttendancePanelForNewSession()">Yeni Yoklama Aç</button>
             <button class="btn btn-secondary" type="button" onclick="loadAttendanceSheet()">Listeyi Yenile</button>
-            <button class="btn btn-primary" type="button" onclick="saveAttendanceSheet()">Yoklamayı Kaydet</button>
+            <button class="btn btn-primary" type="button" onclick="saveAttendanceSheet()">Kaydet ve Kapat</button>
+            <button class="btn btn-ghost" type="button" onclick="closeAttendancePanel()">Paneli Kapat</button>
           </div>
         </div>
-        <div class="filters attendance">
-          <select id="attendanceMarketFilter" onchange="handleAttendanceMarketChange()"></select>
-          <input type="date" id="attendanceDate" onchange="loadAttendanceSheet()" />
-          <button class="btn btn-secondary" type="button" onclick="setSuggestedDateForSelectedMarket(true)">Pazar Gününe Getir</button>
-          <button class="btn btn-ghost" type="button" onclick="copySelectedDateInfo()">Tarih Bilgisi</button>
-          <div class="muted" id="attendanceDayInfo"></div>
-        </div>
-        <div class="banner warn" id="attendanceWarning"></div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Satıcı</th>
-                <th>Bölüm / Yer</th>
-                <th>Otomatik Bilgi</th>
-                <th>Yoklama</th>
-                <th>Not</th>
-              </tr>
-            </thead>
-            <tbody id="attendanceTableBody">
-              <tr><td colspan="5"><div class="empty-state">Yoklama listesi yükleniyor...</div></td></tr>
-            </tbody>
-          </table>
+        <div id="attendanceClosedState" class="empty-state attendance-closed-box">Yoklama paneli şu an kapalı. Yeni yoklama açabilir veya aşağıdaki geçmiş listesinden bir tarihi düzenlemek için seçebilirsin.</div>
+        <div id="attendancePanelBody" class="attendance-shell hidden">
+          <div class="toolbar">
+            <button class="btn btn-success" type="button" onclick="markAllAttendance('Var')">Hepsini Var Yap</button>
+          </div>
+          <div class="filters attendance">
+            <select id="attendanceMarketFilter" onchange="handleAttendanceMarketChange()"></select>
+            <input type="date" id="attendanceDate" onchange="handleAttendanceDateChange()" />
+            <button class="btn btn-secondary" type="button" onclick="setSuggestedDateForSelectedMarket(true)">Pazar Gününe Getir</button>
+            <button class="btn btn-ghost" type="button" onclick="copySelectedDateInfo()">Tarih Bilgisi</button>
+            <div class="muted" id="attendanceDayInfo"></div>
+          </div>
+          <div class="filters attendance-quick">
+            <select id="attendanceSectionFilter" onchange="renderAttendanceSheet()">
+              <option value="all">Tüm Bölümler</option>
+              <option value="Esnaf">Esnaf</option>
+              <option value="Üretici">Üretici</option>
+              <option value="Tuhafiye">Tuhafiye</option>
+            </select>
+            <select id="attendanceStatusFilter" onchange="renderAttendanceSheet()">
+              <option value="all">Tüm Durumlar</option>
+              <option value="Var">Var</option>
+              <option value="Yok">Yok</option>
+              <option value="İzinli">İzinli</option>
+              <option value="Raporlu">Raporlu</option>
+              <option value="empty">Henüz seçilmedi</option>
+            </select>
+            <input type="text" id="attendanceSearchInput" oninput="renderAttendanceSheet()" placeholder="Satıcı adı veya yer no ara" />
+            <button class="btn btn-secondary" type="button" onclick="clearAttendanceFilters()">Filtreleri Temizle</button>
+          </div>
+          <div class="banner warn" id="attendanceWarning"></div>
+          <div class="attendance-list-summary" id="attendanceListInfo"></div>
+          <div class="table-wrap attendance-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Satıcı</th>
+                  <th>Bölüm / Yer</th>
+                  <th>Otomatik Bilgi</th>
+                  <th>Yoklama</th>
+                  <th>Not</th>
+                </tr>
+              </thead>
+              <tbody id="attendanceTableBody">
+                <tr><td colspan="5"><div class="empty-state">Yoklama listesi yükleniyor...</div></td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -327,7 +360,7 @@
         <div class="panel-header">
           <div>
             <div class="panel-title">Yoklama Geçmişi</div>
-            <div class="panel-subtitle">Geçmiş yoklamalar tarih bazlı listelenir. Bir tarihe tıklayınca o günün yoklama listesi üst panelde açılır.</div>
+            <div class="panel-subtitle">Geçmiş yoklamalar tarih bazlı listelenir. Buradan düzenleme için açabilir veya seçilen tarihin tüm yoklamasını tek işlemde silebilirsin.</div>
           </div>
         </div>
         <div class="table-wrap">
@@ -463,6 +496,8 @@
     var leaveRecords = [];
     var attendanceSheet = [];
     var attendanceHistory = [];
+    var attendancePanelOpen = false;
+    var attendancePanelMode = 'new';
     var editingVendorId = null;
     var editingLeaveId = null;
     var editingMarketId = null;
@@ -499,6 +534,67 @@
     function getMarketById(id) { return markets.find(function(item) { return String(item.id) === String(id); }) || null; }
     function getVendorById(id) { return vendors.find(function(item) { return String(item.id) === String(id); }) || null; }
     function formatBadge(active) { return active ? '<span class="badge success">Aktif</span>' : '<span class="badge gray">Pasif</span>'; }
+
+    function setAttendancePanelState(isOpen, mode) {
+      attendancePanelOpen = !!isOpen;
+      if (mode) attendancePanelMode = mode;
+      var body = document.getElementById('attendancePanelBody');
+      var closed = document.getElementById('attendanceClosedState');
+      var state = document.getElementById('attendancePanelState');
+      var subtitle = document.getElementById('attendancePanelSubtitle');
+      if (!body || !closed || !state || !subtitle) return;
+      body.classList.toggle('hidden', !attendancePanelOpen);
+      closed.classList.toggle('hidden', attendancePanelOpen);
+      if (attendancePanelOpen) {
+        if (attendancePanelMode === 'history') {
+          state.className = 'badge info';
+          state.textContent = 'Düzenleme Açık';
+          subtitle.textContent = 'Geçmişten seçilen yoklama açıldı. Değişiklik yapıp kaydedebilirsin.';
+        } else {
+          state.className = 'badge success';
+          state.textContent = 'Yeni Yoklama Açık';
+          subtitle.textContent = 'Seçilen pazara ve tarihe göre tüm aktif satıcı listesi gelir. İzinli / raporlu kayıtlar otomatik gelir ve kilitli kalır.';
+        }
+      } else {
+        state.className = 'badge gray';
+        state.textContent = 'Kapalı';
+        subtitle.textContent = 'Panel kapalı. Yeni yoklama başlatabilir veya geçmişten bir yoklamayı düzenleyebilirsin.';
+      }
+    }
+
+    function openAttendancePanelForNewSession() {
+      if (document.getElementById('attendanceMarketFilter').value && !document.getElementById('attendanceDate').value) {
+        setSuggestedDateForSelectedMarket(false);
+      }
+      setAttendancePanelState(true, 'new');
+      loadAttendanceSheet();
+      scrollToAttendance();
+    }
+
+    function closeAttendancePanel() {
+      setAttendancePanelState(false);
+    }
+
+    function clearAttendanceFilters() {
+      document.getElementById('attendanceSectionFilter').value = 'all';
+      document.getElementById('attendanceStatusFilter').value = 'all';
+      document.getElementById('attendanceSearchInput').value = '';
+      renderAttendanceSheet();
+    }
+
+    function getFilteredAttendanceRows() {
+      var section = document.getElementById('attendanceSectionFilter').value;
+      var statusFilter = document.getElementById('attendanceStatusFilter').value;
+      var search = document.getElementById('attendanceSearchInput').value.trim().toLocaleLowerCase('tr-TR');
+      return attendanceSheet.filter(function(item) {
+        var selected = item.selectedStatus || '';
+        var matchesSection = section === 'all' || item.sectionType === section;
+        var matchesStatus = statusFilter === 'all' || (statusFilter === 'empty' ? !selected : selected === statusFilter);
+        var searchText = [item.vendorName, item.marketName, item.sectionType, item.stallLabel, item.stallNo, item.note].join(' ').toLocaleLowerCase('tr-TR');
+        var matchesSearch = !search || searchText.indexOf(search) !== -1;
+        return matchesSection && matchesStatus && matchesSearch;
+      });
+    }
 
     function renderStats() {
       var activeMarkets = markets.filter(function(item) { return item.isActive; }).length;
@@ -668,15 +764,24 @@
 
     function renderAttendanceSheet() {
       var body = document.getElementById('attendanceTableBody');
+      var infoBox = document.getElementById('attendanceListInfo');
       updateAttendanceWarning();
       if (!attendanceSheet.length) {
         body.innerHTML = '<tr><td colspan="5"><div class="empty-state">Seçilen pazar ve tarihte gösterilecek aktif satıcı bulunmuyor.</div></td></tr>';
+        if (infoBox) infoBox.textContent = attendancePanelOpen ? 'Gösterilecek satıcı yok.' : '';
+        renderStats();
+        return;
+      }
+      var rows = getFilteredAttendanceRows();
+      if (infoBox) infoBox.textContent = 'Toplam ' + attendanceSheet.length + ' satıcı var. Filtreye göre ' + rows.length + ' satır gösteriliyor. Liste kendi alanında kayar; sayfa gereksiz uzamaz.';
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="5"><div class="empty-state">Bu filtreye uygun yoklama satırı bulunmuyor.</div></td></tr>';
         renderStats();
         return;
       }
       var html = '';
-      for (var i = 0; i < attendanceSheet.length; i++) {
-        var item = attendanceSheet[i];
+      for (var i = 0; i < rows.length; i++) {
+        var item = rows[i];
         var status = item.selectedStatus || '';
         var autoInfo = item.leaveType
           ? '<span class="badge ' + (item.leaveType === 'Raporlu' ? 'warn' : 'info') + '">' + escapeHtml(item.leaveType) + '</span><span class="badge" style="margin-left:6px;">Kilitli</span><div class="cell-sub">' + escapeHtml(item.leavePeriodText) + '</div><div class="cell-sub">' + escapeHtml(item.leaveNote || 'Açıklama yok') + '</div>'
@@ -724,7 +829,10 @@
             '<span class="doc-chip">Raporlu: ' + escapeHtml(item.reportCount) + '</span>' +
           '</div></td>' +
           '<td>' + escapeHtml(item.updatedAt || '-') + '</td>' +
-          "<td><button class=\"mini-btn primary\" type=\"button\" onclick=\"openAttendanceHistoryDate(" + item.marketId + ", '" + item.attendanceDate + "')\">Yoklamayı Aç</button></td>" +
+          '<td><div class="toolbar">' +
+            '<button class="mini-btn primary" type="button" onclick="openAttendanceHistoryDate(' + item.marketId + ', \'" + item.attendanceDate + "\')">Düzenle</button>' +
+            '<button class="mini-btn" type="button" onclick="deleteAttendanceHistoryDate(' + item.marketId + ', \'" + item.attendanceDate + "\')">Sil</button>' +
+          '</div></td>' +
         '</tr>';
       }
       body.innerHTML = html;
@@ -789,8 +897,13 @@
     }
 
     function handleAttendanceMarketChange() {
-      setSuggestedDateForSelectedMarket(true);
+      setSuggestedDateForSelectedMarket(attendancePanelOpen);
       loadAttendanceHistory();
+    }
+
+    function handleAttendanceDateChange() {
+      if (attendancePanelOpen) loadAttendanceSheet();
+      else updateAttendanceWarning();
     }
 
     function pickAttendanceStatus(vendorId, status) {
@@ -1038,16 +1151,16 @@
 
     function useMarketInAttendance(marketId) {
       document.getElementById('attendanceMarketFilter').value = String(marketId);
-      setSuggestedDateForSelectedMarket(true);
-      scrollToAttendance();
+      setSuggestedDateForSelectedMarket(false);
+      openAttendancePanelForNewSession();
     }
 
     function prepareAttendanceForVendor(vendorId) {
       var item = getVendorById(vendorId);
       if (!item) return;
       document.getElementById('attendanceMarketFilter').value = String(item.marketId);
-      setSuggestedDateForSelectedMarket(true);
-      scrollToAttendance();
+      setSuggestedDateForSelectedMarket(false);
+      openAttendancePanelForNewSession();
     }
 
     function scrollToAttendance() {
@@ -1117,10 +1230,31 @@
     async function openAttendanceHistoryDate(marketId, date) {
       document.getElementById('attendanceMarketFilter').value = String(marketId);
       document.getElementById('attendanceDate').value = date;
+      setAttendancePanelState(true, 'history');
       await loadAttendanceSheet();
       await loadAttendanceHistory();
       scrollToAttendance();
-      showBanner('Seçilen tarihin yoklama listesi açıldı.', 'info');
+      showBanner('Seçilen tarihin yoklama listesi düzenleme için açıldı.', 'info');
+    }
+
+    async function deleteAttendanceHistoryDate(marketId, date) {
+      if (!window.confirm('Bu pazara ait ' + date + ' tarihli tüm yoklama kayıtları silinsin mi?')) return;
+      try {
+        var response = await fetch('/api/markets/attendance-session?marketId=' + encodeURIComponent(marketId) + '&date=' + encodeURIComponent(date), { method: 'DELETE' });
+        var data = await response.json().catch(function() { return {}; });
+        if (!response.ok) throw new Error(data.error || 'Yoklama geçmişi silinemedi.');
+        var currentMarketId = document.getElementById('attendanceMarketFilter').value;
+        var currentDate = document.getElementById('attendanceDate').value;
+        if (String(currentMarketId) === String(marketId) && currentDate === date) {
+          attendanceSheet = [];
+          renderAttendanceSheet();
+          closeAttendancePanel();
+        }
+        await loadAttendanceHistory();
+        showBanner('Seçilen tarihin yoklama kayıtları silindi.', 'warn');
+      } catch (error) {
+        alert(error.message || 'Yoklama geçmişi silinemedi.');
+      }
     }
 
     async function saveAttendanceSheet() {
@@ -1138,9 +1272,9 @@
         });
         var data = await response.json().catch(function() { return {}; });
         if (!response.ok) throw new Error(data.error || 'Yoklama kaydedilemedi.');
-        showBanner('Yoklama başarıyla kaydedildi.', 'info');
-        await loadAttendanceSheet();
         await loadAttendanceHistory();
+        closeAttendancePanel();
+        showBanner('Yoklama başarıyla kaydedildi ve panel kapatıldı.', 'info');
       } catch (error) {
         alert(error.message || 'Yoklama kaydedilemedi.');
       }
@@ -1172,6 +1306,7 @@
         }
       });
       updateVendorDocumentHint();
+      setAttendancePanelState(false, 'new');
       try {
         await loadMarkets();
         if (document.getElementById('attendanceMarketFilter').value) setSuggestedDateForSelectedMarket(false);

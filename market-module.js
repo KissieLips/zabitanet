@@ -872,6 +872,34 @@ function registerMarketModule({ app, pool }) {
     }
   });
 
+  app.delete('/api/markets/attendance-session', async (req, res) => {
+    const marketId = Number(req.query.marketId);
+    const attendanceDate = toInputDate(req.query.date);
+
+    if (!marketId) return res.status(400).json({ error: 'Pazar seçilmelidir.' });
+    if (!attendanceDate) return res.status(400).json({ error: 'Yoklama tarihi zorunludur.' });
+
+    try {
+      const result = await pool.query(
+        `
+          DELETE FROM market_attendance a
+          USING market_vendors v
+          WHERE a.vendor_id = v.id
+            AND v.market_id = $1
+            AND a.attendance_date = $2
+          RETURNING a.id
+        `,
+        [marketId, attendanceDate]
+      );
+
+      if (!result.rows.length) return res.status(404).json({ error: 'Silinecek yoklama kaydı bulunamadı.' });
+      res.json({ success: true, deletedCount: result.rows.length });
+    } catch (error) {
+      console.error('Yoklama oturumu silinemedi:', error);
+      res.status(500).json({ error: 'Yoklama oturumu silinemedi.' });
+    }
+  });
+
   app.get('/api/markets/attendance-history-summary', async (req, res) => {
     const marketId = String(req.query.marketId || 'all');
     const limit = Math.min(120, Math.max(10, Number(req.query.limit || 40)));
