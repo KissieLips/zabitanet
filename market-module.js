@@ -38,6 +38,15 @@ function sanitizeCellValue(value) {
   return String(value).trim();
 }
 
+function normalizeMarketNameForMatch(value) {
+  const normalized = normalizeTextForMatch(value);
+  return normalized
+    .replace(/pazari/g, '')
+    .replace(/pazar/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function normalizeHeaderText(value) {
   return String(value || '')
     .toLocaleLowerCase('tr-TR')
@@ -138,7 +147,6 @@ function extractVendorImportSheetData(workbook) {
       rowMap[key] = sanitizeCellValue(row[columnIndex]);
     });
 
-    const getValue = buildRowAccessor(rowMap);
     const hasAnyCoreData = [
       rowMap.marketName,
       rowMap.sectionType,
@@ -150,24 +158,26 @@ function extractVendorImportSheetData(workbook) {
       rowMap.address,
       rowMap.note,
       rowMap.documentFolderUrl,
+      rowMap.documentSummary,
+      rowMap.statusText,
     ].some((value) => sanitizeCellValue(value));
     if (!hasAnyCoreData) continue;
 
     dataRows.push({
       rowNumber: index + 1,
       rawRow: {
-        'Pazar Adı': getValue(fieldAliases.marketName),
-        'Bölüm': getValue(fieldAliases.sectionType),
-        'Yer Rengi': getValue(fieldAliases.stallColor),
-        'Yer No': getValue(fieldAliases.stallNo),
-        'Ad Soyad': getValue(fieldAliases.fullName),
-        'T.C. Kimlik No': getValue(fieldAliases.identityNumber),
-        'Telefon': getValue(fieldAliases.phone),
-        'Adres': getValue(fieldAliases.address),
-        'Not': getValue(fieldAliases.note),
-        'Drive Klasörü': getValue(fieldAliases.documentFolderUrl),
-        'Belge Özeti': getValue(fieldAliases.documentSummary),
-        'Kayıt Durumu': getValue(fieldAliases.statusText),
+        'Pazar Adı': sanitizeCellValue(rowMap.marketName),
+        'Bölüm': sanitizeCellValue(rowMap.sectionType),
+        'Yer Rengi': sanitizeCellValue(rowMap.stallColor),
+        'Yer No': sanitizeCellValue(rowMap.stallNo),
+        'Ad Soyad': sanitizeCellValue(rowMap.fullName),
+        'T.C. Kimlik No': sanitizeCellValue(rowMap.identityNumber),
+        'Telefon': sanitizeCellValue(rowMap.phone),
+        'Adres': sanitizeCellValue(rowMap.address),
+        'Not': sanitizeCellValue(rowMap.note),
+        'Drive Klasörü': sanitizeCellValue(rowMap.documentFolderUrl),
+        'Belge Özeti': sanitizeCellValue(rowMap.documentSummary),
+        'Kayıt Durumu': sanitizeCellValue(rowMap.statusText),
       },
     });
   }
@@ -215,7 +225,13 @@ async function buildVendorImportPreview(pool, fileBuffer) {
   const rawRows = extractVendorImportSheetData(workbook);
 
   const marketRows = await pool.query('SELECT id, name FROM market_places');
-  const marketMap = new Map(marketRows.rows.map((row) => [normalizeTextForMatch(row.name), row]));
+  const marketMap = new Map();
+  marketRows.rows.forEach((row) => {
+    const exactKey = normalizeTextForMatch(row.name);
+    const shortKey = normalizeMarketNameForMatch(row.name);
+    if (exactKey && !marketMap.has(exactKey)) marketMap.set(exactKey, row);
+    if (shortKey && !marketMap.has(shortKey)) marketMap.set(shortKey, row);
+  });
   const existingVendorRows = await pool.query(`
     SELECT market_id, section_type, COALESCE(stall_color, '') AS stall_color, COALESCE(stall_no, '') AS stall_no
     FROM market_vendors
@@ -250,7 +266,8 @@ async function buildVendorImportPreview(pool, fileBuffer) {
     const statusText = normalizeTextForMatch(pickRowValue(rawRow, ['Kayıt Durumu', 'Durum', 'Aktiflik']));
     const isActive = !statusText || ['aktif', 'active', '1', 'evet', 'var'].includes(statusText);
 
-    const market = marketMap.get(normalizeTextForMatch(marketName));
+    const normalizedMarketName = normalizeTextForMatch(marketName);
+    const market = marketMap.get(normalizedMarketName) || marketMap.get(normalizeMarketNameForMatch(marketName));
     const normalizedSection = normalizeSectionText(sectionType);
     const sectionTypeResolved = MARKET_SECTION_ORDER.find((item) => normalizeSectionText(item) === normalizedSection) || sectionType;
     const documentFlags = getDocumentFlagsFromImportRow(sectionTypeResolved, rawRow);
