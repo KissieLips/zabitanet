@@ -68,6 +68,10 @@ function buildAttendanceDetailFilename(marketName, attendanceDate) {
   return `yoklama-detay-${safeFilePart(marketName || 'pazar')}-${safeFilePart(attendanceDate || 'tarih')}.xlsx`;
 }
 
+function buildVendorExportFilename(marketText, sectionText) {
+  return `satici-listesi-${safeFilePart(marketText || 'tum-pazarlar')}-${safeFilePart(sectionText || 'tum-bolumler')}.xlsx`;
+}
+
 function normalizeSectionText(value) {
   return String(value || '')
     .toLocaleLowerCase('tr-TR')
@@ -197,6 +201,63 @@ function mapAttendanceRow(row, fallbackDate) {
     isLocked,
     lockedStatus: isLocked ? row.leave_type : '',
   };
+}
+
+async function getMarketVendorRows(pool, filters = {}) {
+  const marketId = String(filters.marketId || 'all');
+  const section = String(filters.section || 'all');
+  const status = String(filters.status || 'all');
+  const docStatus = String(filters.docStatus || 'all');
+  const search = String(filters.search || '').trim();
+
+  const conditions = [];
+  const values = [];
+
+  if (marketId !== 'all') {
+    values.push(Number(marketId));
+    conditions.push(`v.market_id = $${values.length}`);
+  }
+  if (section !== 'all') {
+    values.push(section);
+    conditions.push(`v.section_type = $${values.length}`);
+  }
+  if (status === 'active') conditions.push('v.is_active = TRUE');
+  if (status === 'passive') conditions.push('v.is_active = FALSE');
+  if (search) {
+    values.push(`%${search}%`);
+    conditions.push(`(
+      v.full_name ILIKE $${values.length}
+      OR COALESCE(v.identity_number, '') ILIKE $${values.length}
+      OR COALESCE(v.phone, '') ILIKE $${values.length}
+      OR COALESCE(v.address, '') ILIKE $${values.length}
+      OR COALESCE(v.stall_no, '') ILIKE $${values.length}
+    )`);
+  }
+
+  const sql = `
+    SELECT
+      v.*,
+      m.name AS market_name,
+      m.scheduled_day
+    FROM market_vendors v
+    INNER JOIN market_places m ON m.id = v.market_id
+    ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
+    ORDER BY m.display_order ASC, v.section_type ASC, NULLIF(v.stall_no, '') ASC, v.full_name ASC
+  `;
+
+  const result = await pool.query(sql, values);
+  let rows = result.rows.map(mapVendor);
+
+  if (docStatus === 'complete') rows = rows.filter((item) => item.documents.isComplete);
+  if (docStatus === 'missing') rows = rows.filter((item) => !item.documents.isComplete);
+
+  return rows;
+}
+
+async function getMarketNameById(pool, marketId) {
+  if (!marketId || String(marketId) === 'all') return 'Tüm Pazarlar';
+  const result = await pool.query('SELECT name FROM market_places WHERE id = $1 LIMIT 1', [Number(marketId)]);
+  return result.rows[0] ? result.rows[0].name : 'Seçili Pazar';
 }
 
 async function initMarketModuleDb(pool) {
@@ -449,58 +510,64 @@ function registerMarketModule({ app, pool }) {
   });
 
   app.get('/api/markets/vendors', async (req, res) => {
-    const marketId = String(req.query.marketId || 'all');
-    const section = String(req.query.section || 'all');
-    const status = String(req.query.status || 'all');
-    const docStatus = String(req.query.docStatus || 'all');
-    const search = String(req.query.search || '').trim();
-
     try {
-      const conditions = [];
-      const values = [];
-
-      if (marketId !== 'all') {
-        values.push(Number(marketId));
-        conditions.push(`v.market_id = $${values.length}`);
-      }
-      if (section !== 'all') {
-        values.push(section);
-        conditions.push(`v.section_type = $${values.length}`);
-      }
-      if (status === 'active') conditions.push('v.is_active = TRUE');
-      if (status === 'passive') conditions.push('v.is_active = FALSE');
-      if (search) {
-        values.push(`%${search}%`);
-        conditions.push(`(
-          v.full_name ILIKE $${values.length}
-          OR COALESCE(v.identity_number, '') ILIKE $${values.length}
-          OR COALESCE(v.phone, '') ILIKE $${values.length}
-          OR COALESCE(v.address, '') ILIKE $${values.length}
-          OR COALESCE(v.stall_no, '') ILIKE $${values.length}
-        )`);
-      }
-
-      const sql = `
-        SELECT
-          v.*,
-          m.name AS market_name,
-          m.scheduled_day
-        FROM market_vendors v
-        INNER JOIN market_places m ON m.id = v.market_id
-        ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
-        ORDER BY m.display_order ASC, v.section_type ASC, NULLIF(v.stall_no, '') ASC, v.full_name ASC
-      `;
-
-      const result = await pool.query(sql, values);
-      let rows = result.rows.map(mapVendor);
-
-      if (docStatus === 'complete') rows = rows.filter((item) => item.documents.isComplete);
-      if (docStatus === 'missing') rows = rows.filter((item) => !item.documents.isComplete);
-
+      const rows = await getMarketVendorRows(pool, req.query || {});
       res.json(rows);
     } catch (error) {
       console.error('Pazar satıcıları alınamadı:', error);
       res.status(500).json({ error: 'Pazar satıcıları alınamadı.' });
+    }
+  });
+
+  app.get('/api/markets/vendors/export.xlsx', async (req, res) => {
+    try {
+      const filters = req.query || {};
+      const rows = await getMarketVendorRows(pool, filters);
+      const marketText = await getMarketNameById(pool, filters.marketId);
+      const sectionText = String(filters.section || 'all') === 'all' ? 'Tüm Bölümler' : String(filters.section || 'Tüm Bölümler');
+      const statusText = String(filters.status || 'all') === 'active' ? 'Aktif Satıcı' : (String(filters.status || 'all') === 'passive' ? 'Pasif Satıcı' : 'Tüm Durumlar');
+      const docStatusText = String(filters.docStatus || 'all') === 'complete' ? 'Belgeleri Tam' : (String(filters.docStatus || 'all') === 'missing' ? 'Belgesi Eksik' : 'Belge Durumu');
+      const searchText = String(filters.search || '').trim() || 'Yok';
+
+      const workbook = XLSX.utils.book_new();
+      const summaryRows = [
+        ['Pazar', marketText],
+        ['Bölüm', sectionText],
+        ['Durum', statusText],
+        ['Belge Durumu', docStatusText],
+        ['Arama', searchText],
+        ['Toplam Satıcı', rows.length],
+        ['Aktif', rows.filter((item) => item.isActive).length],
+        ['Pasif', rows.filter((item) => !item.isActive).length],
+        ['Belgeleri Tam', rows.filter((item) => item.documents && item.documents.isComplete).length],
+        ['Belgesi Eksik', rows.filter((item) => item.documents && !item.documents.isComplete).length],
+      ];
+      const dataRows = rows.map((item) => ({
+        'Satıcı': item.fullName || '',
+        'TC Kimlik No': item.identityNumber || '',
+        'Telefon': item.phone || '',
+        'Pazar': item.marketName || '',
+        'Pazar Günü': item.scheduledDayLabel || '',
+        'Bölüm': item.sectionType || '',
+        'Yer No': item.stallLabel || '',
+        'Durum': item.isActive ? 'Aktif' : 'Pasif',
+        'Belge Tamamlanma': `${item.documents.completedCount || 0} / ${item.documents.totalRequired || 0}`,
+        'Eksik Belgeler': (item.documents && item.documents.missingDocs || []).join(', '),
+        'Drive Klasörü': item.documentFolderUrl || '',
+        'Adres': item.address || '',
+        'Not': item.note || '',
+        'Oluşturma': item.createdAt || '',
+        'Güncelleme': item.updatedAt || '',
+      }));
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(summaryRows), 'Filtre Özeti');
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(dataRows), 'Satıcı Listesi');
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      res.setHeader('Content-Disposition', `attachment; filename="${buildVendorExportFilename(marketText, sectionText)}"`);
+      res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.send(buffer);
+    } catch (error) {
+      console.error('Satıcı Excel çıktısı oluşturulamadı:', error);
+      res.status(500).json({ error: 'Satıcı Excel çıktısı oluşturulamadı.' });
     }
   });
 
