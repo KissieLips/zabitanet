@@ -50,6 +50,24 @@ function formatDateTime(value) {
   }).format(d);
 }
 
+
+function safeFilePart(value) {
+  return String(value || 'kayit')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'kayit';
+}
+
+function buildAttendanceDetailFilename(marketName, attendanceDate) {
+  return `yoklama-detay-${safeFilePart(marketName || 'pazar')}-${safeFilePart(attendanceDate || 'tarih')}.xlsx`;
+}
+
 function normalizeSectionText(value) {
   return String(value || '')
     .toLocaleLowerCase('tr-TR')
@@ -179,191 +197,6 @@ function mapAttendanceRow(row, fallbackDate) {
     isLocked,
     lockedStatus: isLocked ? row.leave_type : '',
   };
-}
-
-
-function buildWorkbook(sheets) {
-  const workbook = XLSX.utils.book_new();
-  sheets.forEach((sheet) => {
-    const ws = XLSX.utils.aoa_to_sheet(sheet.rows);
-    if (sheet.cols) ws['!cols'] = sheet.cols;
-    XLSX.utils.book_append_sheet(workbook, ws, sheet.name);
-  });
-  return workbook;
-}
-
-function buildVendorExportFilters(query) {
-  return {
-    marketId: String(query.marketId || 'all'),
-    section: String(query.section || 'all'),
-    status: String(query.status || 'all'),
-    docStatus: String(query.docStatus || 'all'),
-    search: String(query.search || '').trim(),
-  };
-}
-
-function applyVendorFilters(rows, filters) {
-  const search = String(filters.search || '').trim().toLocaleLowerCase('tr-TR');
-  return rows.filter((item) => {
-    const text = [item.fullName, item.identityNumber, item.phone, item.address, item.stallLabel, item.marketName]
-      .join(' ')
-      .toLocaleLowerCase('tr-TR');
-    const matchesMarket = filters.marketId === 'all' || String(item.marketId) === String(filters.marketId);
-    const matchesSection = filters.section === 'all' || item.sectionType === filters.section;
-    const matchesStatus = filters.status === 'all' || (filters.status === 'active' ? item.isActive : !item.isActive);
-    const matchesDocs = filters.docStatus === 'all' || (filters.docStatus === 'complete' ? item.documents.isComplete : !item.documents.isComplete);
-    const matchesSearch = !search || text.includes(search);
-    return matchesMarket && matchesSection && matchesStatus && matchesDocs && matchesSearch;
-  });
-}
-
-function getAttendanceSelectedStatus(item) {
-  return item.isLocked ? (item.lockedStatus || item.leaveType || '') : (item.attendanceStatus || item.recommendedStatus || '');
-}
-
-function buildAttendanceExportFilters(query) {
-  return {
-    marketId: String(query.marketId || ''),
-    date: toInputDate(query.date),
-    section: String(query.section || 'all'),
-    status: String(query.status || 'all'),
-    search: String(query.search || '').trim(),
-  };
-}
-
-function applyAttendanceFilters(rows, filters) {
-  const search = String(filters.search || '').trim().toLocaleLowerCase('tr-TR');
-  return rows.filter((item) => {
-    const selected = getAttendanceSelectedStatus(item);
-    const searchText = [item.vendorName, item.marketName, item.sectionType, item.stallLabel, item.stallNo, item.note]
-      .join(' ')
-      .toLocaleLowerCase('tr-TR');
-    const matchesSection = filters.section === 'all' || item.sectionType === filters.section;
-    const matchesStatus = filters.status === 'all' || (filters.status === 'empty' ? !selected : selected === filters.status);
-    const matchesSearch = !search || searchText.includes(search);
-    return matchesSection && matchesStatus && matchesSearch;
-  });
-}
-
-async function getMarketNameById(pool, marketId) {
-  const id = Number(marketId);
-  if (!id) return '';
-  try {
-    const result = await pool.query('SELECT name FROM market_places WHERE id = $1 LIMIT 1', [id]);
-    return result.rows[0] ? String(result.rows[0].name || '') : '';
-  } catch (error) {
-    return '';
-  }
-}
-
-function buildVendorExportFileName(filters, marketName) {
-  const marketText = (marketName || (filters.marketId === 'all' ? 'tum-pazarlar' : 'pazar-' + filters.marketId || 'tum-pazarlar'))
-    .toLocaleLowerCase('tr-TR')
-    .replace(/[^a-z0-9çğıöşü]+/gi, '-')
-    .replace(/^-+|-+$/g, '') || 'tum-pazarlar';
-  return `satici-listesi-${marketText}.xlsx`;
-}
-
-function createVendorWorkbook(rows, filters, marketName) {
-  const filterRows = [
-    ['Alan', 'Değer'],
-    ['Pazar', marketName || (filters.marketId === 'all' ? 'Tüm Pazarlar' : String(filters.marketId))],
-    ['Bölüm', filters.section === 'all' ? 'Tüm Bölümler' : filters.section],
-    ['Durum', filters.status === 'all' ? 'Tüm Durumlar' : (filters.status === 'active' ? 'Aktif Satıcı' : 'Pasif Satıcı')],
-    ['Belge Durumu', filters.docStatus === 'all' ? 'Tümü' : (filters.docStatus === 'complete' ? 'Belgeleri Tam' : 'Belgesi Eksik')],
-    ['Arama', filters.search || '-'],
-    ['Kayıt Sayısı', rows.length],
-    ['Oluşturma Tarihi', formatDateTime(new Date())],
-  ];
-
-  const dataRows = [
-    ['Ad Soyad', 'TC Kimlik', 'Telefon', 'Pazar', 'Kurulum Günü', 'Bölüm', 'Yer', 'Durum', 'Belge Durumu', 'Eksik Belgeler', 'Tam Belgeler', 'Drive Klasörü', 'Adres', 'Not', 'Oluşturma', 'Güncelleme'],
-    ...rows.map((item) => [
-      item.fullName || '',
-      item.identityNumber || '',
-      item.phone || '',
-      item.marketName || '',
-      item.scheduledDayLabel || '',
-      item.sectionType || '',
-      item.stallLabel || '',
-      item.isActive ? 'Aktif' : 'Pasif',
-      item.documents.isComplete ? 'Belgeleri Tam' : 'Belgesi Eksik',
-      (item.documents.missingDocs || []).join(', '),
-      (item.documents.availableDocs || []).join(', '),
-      item.documentFolderUrl || '',
-      item.address || '',
-      item.note || '',
-      item.createdAt || '',
-      item.updatedAt || '',
-    ]),
-  ];
-
-  return buildWorkbook([
-    { name: 'Filtre Özeti', rows: filterRows, cols: [{ wch: 22 }, { wch: 48 }] },
-    {
-      name: 'Satıcı Listesi',
-      rows: dataRows,
-      cols: [
-        { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
-        { wch: 10 }, { wch: 16 }, { wch: 28 }, { wch: 28 }, { wch: 28 }, { wch: 28 }, { wch: 24 }, { wch: 18 }, { wch: 18 },
-      ],
-    },
-  ]);
-}
-
-function buildAttendanceExportFileName(filters, marketName) {
-  const marketText = (marketName || (filters.marketId ? 'pazar-' + filters.marketId : 'pazar'))
-    .toLocaleLowerCase('tr-TR')
-    .replace(/[^a-z0-9çğıöşü]+/gi, '-')
-    .replace(/^-+|-+$/g, '') || 'pazar';
-  const dateText = (filters.date || 'tarih-secimi').replace(/[^0-9]+/g, '-');
-  return `yoklama-${marketText}-${dateText}.xlsx`;
-}
-
-function createAttendanceWorkbook(rows, filters, marketName) {
-  const filterRows = [
-    ['Alan', 'Değer'],
-    ['Pazar', marketName || '-'],
-    ['Yoklama Tarihi', filters.date ? formatDate(filters.date) : '-'],
-    ['Bölüm', filters.section === 'all' ? 'Tüm Bölümler' : filters.section],
-    ['Durum', filters.status === 'all' ? 'Tüm Durumlar' : (filters.status === 'empty' ? 'Henüz Seçilmedi' : filters.status)],
-    ['Arama', filters.search || '-'],
-    ['Kayıt Sayısı', rows.length],
-    ['Oluşturma Tarihi', formatDateTime(new Date())],
-  ];
-
-  const dataRows = [
-    ['Tarih', 'Pazar', 'Satıcı', 'Bölüm', 'Yer', 'Seçili Durum', 'Kayıtlı Durum', 'Otomatik Bilgi', 'Not', 'Kilitli mi'],
-    ...rows.map((item) => {
-      const selectedStatus = getAttendanceSelectedStatus(item);
-      const autoInfo = item.leaveType
-        ? `${item.leaveType}${item.leavePeriodText ? ' · ' + item.leavePeriodText : ''}${item.leaveNote ? ' · ' + item.leaveNote : ''}`
-        : (item.attendanceStatus ? `Kayıtlı: ${item.attendanceStatus}` : 'Otomatik öneri yok');
-      return [
-        formatDate(item.attendanceDate || filters.date || ''),
-        item.marketName || marketName || '',
-        item.vendorName || '',
-        item.sectionType || '',
-        item.stallLabel || '',
-        selectedStatus || '',
-        item.attendanceStatus || '',
-        autoInfo,
-        item.note || '',
-        item.isLocked ? 'Evet' : 'Hayır',
-      ];
-    }),
-  ];
-
-  return buildWorkbook([
-    { name: 'Filtre Özeti', rows: filterRows, cols: [{ wch: 22 }, { wch: 48 }] },
-    {
-      name: 'Yoklama',
-      rows: dataRows,
-      cols: [
-        { wch: 14 }, { wch: 18 }, { wch: 28 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 34 }, { wch: 22 }, { wch: 10 },
-      ],
-    },
-  ]);
 }
 
 async function initMarketModuleDb(pool) {
@@ -668,39 +501,6 @@ function registerMarketModule({ app, pool }) {
     } catch (error) {
       console.error('Pazar satıcıları alınamadı:', error);
       res.status(500).json({ error: 'Pazar satıcıları alınamadı.' });
-    }
-  });
-
-
-  app.get('/api/markets/vendors/export.xlsx', async (req, res) => {
-    const filters = buildVendorExportFilters(req.query || {});
-
-    try {
-      const result = await pool.query(
-        `
-          SELECT
-            v.*,
-            m.name AS market_name,
-            m.scheduled_day
-          FROM market_vendors v
-          INNER JOIN market_places m ON m.id = v.market_id
-          ORDER BY m.display_order ASC, v.section_type ASC, NULLIF(v.stall_no, '') ASC, v.full_name ASC
-        `
-      );
-
-      const mappedRows = result.rows.map(mapVendor);
-      const rows = applyVendorFilters(mappedRows, filters);
-      const marketName = filters.marketId === 'all' ? 'Tüm Pazarlar' : (await getMarketNameById(pool, filters.marketId) || `Pazar ${filters.marketId}`);
-      const workbook = createVendorWorkbook(rows, filters, marketName);
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-      const fileName = buildVendorExportFileName(filters, marketName);
-
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', 'attachment; filename="' + fileName + '"');
-      res.send(buffer);
-    } catch (error) {
-      console.error('Satıcı Excel çıktısı oluşturulamadı:', error);
-      res.status(500).json({ error: 'Satıcı Excel çıktısı oluşturulamadı.' });
     }
   });
 
@@ -1024,68 +824,6 @@ function registerMarketModule({ app, pool }) {
     }
   });
 
-
-  app.get('/api/markets/attendance-sheet/export.xlsx', async (req, res) => {
-    const filters = buildAttendanceExportFilters(req.query || {});
-    const marketId = Number(filters.marketId);
-    if (!marketId) return res.status(400).json({ error: 'Pazar seçilmelidir.' });
-    if (!filters.date) return res.status(400).json({ error: 'Yoklama tarihi zorunludur.' });
-
-    try {
-      const result = await pool.query(
-        `
-          SELECT
-            v.id AS vendor_id,
-            v.market_id,
-            m.name AS market_name,
-            v.full_name AS vendor_name,
-            v.section_type,
-            v.stall_no,
-            v.stall_color,
-            a.id AS attendance_id,
-            a.attendance_date,
-            a.status AS attendance_status,
-            a.note AS attendance_note,
-            lr.leave_type,
-            lr.note AS leave_note,
-            lr.start_date AS leave_start_date,
-            lr.end_date AS leave_end_date
-          FROM market_vendors v
-          INNER JOIN market_places m ON m.id = v.market_id
-          LEFT JOIN market_attendance a
-            ON a.vendor_id = v.id
-           AND a.attendance_date = $2
-          LEFT JOIN LATERAL (
-            SELECT *
-            FROM market_leave_records lr2
-            WHERE lr2.vendor_id = v.id
-              AND $2 BETWEEN lr2.start_date AND lr2.end_date
-            ORDER BY lr2.end_date DESC, lr2.id DESC
-            LIMIT 1
-          ) lr ON TRUE
-          WHERE v.market_id = $1
-            AND (v.is_active = TRUE OR a.id IS NOT NULL)
-          ORDER BY v.section_type ASC, NULLIF(v.stall_no, '') ASC, v.full_name ASC
-        `,
-        [marketId, filters.date]
-      );
-
-      const mappedRows = result.rows.map((row) => mapAttendanceRow(row, filters.date));
-      const rows = applyAttendanceFilters(mappedRows, filters);
-      const marketName = await getMarketNameById(pool, filters.marketId) || `Pazar ${filters.marketId}`;
-      const workbook = createAttendanceWorkbook(rows, filters, marketName);
-      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-      const fileName = buildAttendanceExportFileName(filters, marketName);
-
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', 'attachment; filename="' + fileName + '"');
-      res.send(buffer);
-    } catch (error) {
-      console.error('Yoklama Excel çıktısı oluşturulamadı:', error);
-      res.status(500).json({ error: 'Yoklama Excel çıktısı oluşturulamadı.' });
-    }
-  });
-
   app.post('/api/markets/attendance/bulk', async (req, res) => {
     const payload = req.body || {};
     const attendanceDate = toInputDate(payload.date);
@@ -1258,6 +996,100 @@ function registerMarketModule({ app, pool }) {
     } catch (error) {
       console.error('Yoklama oturum detayı alınamadı:', error);
       res.status(500).json({ error: 'Yoklama oturum detayı alınamadı.' });
+    }
+  });
+
+
+  app.get('/api/markets/attendance-session-detail/export.xlsx', async (req, res) => {
+    const marketId = Number(req.query.marketId);
+    const attendanceDate = toInputDate(req.query.date);
+
+    if (!marketId) return res.status(400).json({ error: 'Pazar seçilmelidir.' });
+    if (!attendanceDate) return res.status(400).json({ error: 'Yoklama tarihi zorunludur.' });
+
+    try {
+      const result = await pool.query(
+        `
+          SELECT
+            a.id,
+            a.attendance_date,
+            a.status,
+            a.note,
+            a.updated_at,
+            v.id AS vendor_id,
+            v.full_name AS vendor_name,
+            v.market_id,
+            m.name AS market_name,
+            v.section_type,
+            v.stall_no,
+            v.stall_color
+          FROM market_attendance a
+          INNER JOIN market_vendors v ON v.id = a.vendor_id
+          INNER JOIN market_places m ON m.id = v.market_id
+          WHERE v.market_id = $1
+            AND a.attendance_date = $2
+          ORDER BY v.section_type ASC, NULLIF(v.stall_no, '') ASC, v.full_name ASC
+        `,
+        [marketId, attendanceDate]
+      );
+
+      const rows = result.rows.map((row) => ({
+        id: row.id,
+        attendanceDate: toInputDate(row.attendance_date),
+        attendanceDateText: formatDate(row.attendance_date),
+        status: row.status || '',
+        note: row.note || '',
+        updatedAt: formatDateTime(row.updated_at),
+        vendorId: row.vendor_id,
+        vendorName: row.vendor_name || '',
+        marketId: row.market_id,
+        marketName: row.market_name || '',
+        sectionType: row.section_type || '',
+        stallLabel: buildStallLabel(row),
+      }));
+
+      const marketName = rows.length ? rows[0].marketName : 'Pazar';
+      let presentCount = 0;
+      let absentCount = 0;
+      let leaveCount = 0;
+      let reportCount = 0;
+      for (const row of rows) {
+        if (row.status === 'Var') presentCount += 1;
+        else if (row.status === 'Yok') absentCount += 1;
+        else if (row.status === 'İzinli') leaveCount += 1;
+        else if (row.status === 'Raporlu') reportCount += 1;
+      }
+
+      const workbook = XLSX.utils.book_new();
+      const summaryRows = [
+        { Alan: 'Pazar', Değer: marketName },
+        { Alan: 'Yoklama Tarihi', Değer: formatDate(attendanceDate) },
+        { Alan: 'Toplam Kayıt', Değer: rows.length },
+        { Alan: 'Var', Değer: presentCount },
+        { Alan: 'Yok', Değer: absentCount },
+        { Alan: 'İzinli', Değer: leaveCount },
+        { Alan: 'Raporlu', Değer: reportCount },
+      ];
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryRows), 'Özet');
+
+      const detailRows = rows.map((row, index) => ({
+        Sıra: index + 1,
+        'Satıcı Adı Soyadı': row.vendorName,
+        'Bölüm': row.sectionType,
+        'Yer / Tezgâh': row.stallLabel || '',
+        'Durum': row.status || '',
+        'Not': row.note || '',
+        'Son Güncelleme': row.updatedAt || '',
+      }));
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(detailRows.length ? detailRows : [{ Bilgi: 'Bu tarihe ait yoklama kaydı bulunamadı.' }]), 'Yoklama Listesi');
+
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${buildAttendanceDetailFilename(marketName, attendanceDate)}"`);
+      res.send(buffer);
+    } catch (error) {
+      console.error('Yoklama detay Excel çıktısı oluşturulamadı:', error);
+      res.status(500).json({ error: 'Yoklama detay Excel çıktısı oluşturulamadı.' });
     }
   });
 

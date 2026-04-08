@@ -114,6 +114,15 @@
     .status-btn.active.izinli { background: #dbeafe; border-color: #bfdbfe; color: #1d4ed8; }
     .status-btn.active.raporlu { background: #fef3c7; border-color: #fde68a; color: #92400e; }
     .attendance-note { min-width: 180px; }
+    .attendance-detail-modal { width: min(1120px, 96vw); }
+    .attendance-detail-modal .table-wrap { overflow-x: hidden; }
+    .attendance-detail-modal table { min-width: 0; table-layout: fixed; }
+    .attendance-detail-modal th, .attendance-detail-modal td { word-break: break-word; }
+    .attendance-detail-modal th:nth-child(1), .attendance-detail-modal td:nth-child(1) { width: 27%; }
+    .attendance-detail-modal th:nth-child(2), .attendance-detail-modal td:nth-child(2) { width: 23%; }
+    .attendance-detail-modal th:nth-child(3), .attendance-detail-modal td:nth-child(3) { width: 12%; }
+    .attendance-detail-modal th:nth-child(4), .attendance-detail-modal td:nth-child(4) { width: 18%; }
+    .attendance-detail-modal th:nth-child(5), .attendance-detail-modal td:nth-child(5) { width: 20%; }
     .banner { padding: 12px 14px; border-radius: 12px; margin-bottom: 12px; font-size: 13px; display: none; }
     .banner.show { display: block; }
     .banner.info { background: #eef4ff; color: #1d4ed8; border: 1px solid #dbeafe; }
@@ -206,7 +215,6 @@
             <div class="panel-subtitle">Satıcı bilgileri, tezgâh / yer numarası ve Drive belge klasörü bağlantısı burada tutulur.</div>
           </div>
           <div class="toolbar">
-            <button class="btn btn-secondary" type="button" onclick="exportVendorsExcel()">Excel İndir</button>
             <button class="btn btn-primary" type="button" onclick="openVendorModal()">+ Yeni Satıcı</button>
           </div>
         </div>
@@ -302,8 +310,6 @@
             <span class="badge gray" id="attendancePanelState">Kapalı</span>
             <button class="btn btn-success" type="button" onclick="openAttendancePanelForNewSession()">Yeni Yoklama Aç</button>
             <button class="btn btn-secondary" type="button" onclick="loadAttendanceSheet()">Listeyi Yenile</button>
-            <button class="btn btn-secondary" type="button" onclick="exportAttendanceExcel()">Excel İndir</button>
-            <button class="btn btn-secondary" type="button" onclick="printAttendancePdf()">PDF / Yazdır</button>
             <button class="btn btn-primary" type="button" onclick="saveAttendanceSheet()">Kaydet ve Kapat</button>
             <button class="btn btn-ghost" type="button" onclick="closeAttendancePanel()">Paneli Kapat</button>
           </div>
@@ -494,7 +500,7 @@
   </div>
 
   <div class="modal-overlay" id="attendanceDetailModal" onclick="closeModalOnOverlay(event, 'attendanceDetailModal')">
-    <div class="modal">
+    <div class="modal attendance-detail-modal">
       <div class="modal-header">
         <div>
           <div class="modal-title" id="attendanceDetailTitle">Yoklama Detayı</div>
@@ -511,7 +517,7 @@
         </div>
         <div class="modal-section">
           <div class="modal-section-title">Yoklama Listesi</div>
-          <div class="table-wrap">
+          <div class="table-wrap attendance-detail-table-wrap">
             <table>
               <thead>
                 <tr>
@@ -530,6 +536,8 @@
         </div>
       </div>
       <div class="modal-footer">
+        <button class="btn btn-ghost" type="button" onclick="downloadAttendanceDetailExcel()">Excel İndir</button>
+        <button class="btn btn-primary" type="button" onclick="printAttendanceDetailReport()">PDF / Yazdır</button>
         <button class="btn btn-secondary" type="button" onclick="closeModal('attendanceDetailModal')">Kapat</button>
       </div>
     </div>
@@ -1221,146 +1229,6 @@
       alert(market.name + ' için seçili yoklama tarihi: ' + date + '\nNormal kurulum günü: ' + market.scheduledDayLabel);
     }
 
-
-    function getSelectedOptionText(selectId, fallback) {
-      var select = document.getElementById(selectId);
-      if (!select || !select.options || select.selectedIndex < 0) return fallback || '';
-      var option = select.options[select.selectedIndex];
-      return option ? option.text : (fallback || '');
-    }
-
-    function exportVendorsExcel() {
-      var query = new URLSearchParams({
-        marketId: document.getElementById('vendorMarketFilter').value || 'all',
-        section: document.getElementById('vendorSectionFilter').value || 'all',
-        status: document.getElementById('vendorStatusFilter').value || 'all',
-        docStatus: document.getElementById('vendorDocFilter').value || 'all',
-        search: document.getElementById('vendorSearchInput').value.trim(),
-      });
-      window.location.href = '/api/markets/vendors/export.xlsx?' + query.toString();
-    }
-
-    function exportAttendanceExcel() {
-      var marketId = document.getElementById('attendanceMarketFilter').value;
-      var date = document.getElementById('attendanceDate').value;
-      if (!marketId || !date) {
-        alert('Önce pazar ve yoklama tarihini seçmelisin.');
-        return;
-      }
-      var query = new URLSearchParams({
-        marketId: marketId,
-        date: date,
-        section: document.getElementById('attendanceSectionFilter').value || 'all',
-        status: document.getElementById('attendanceStatusFilter').value || 'all',
-        search: document.getElementById('attendanceSearchInput').value.trim(),
-      });
-      window.location.href = '/api/markets/attendance-sheet/export.xlsx?' + query.toString();
-    }
-
-    function buildAttendanceSummaryCounts(rows) {
-      var summary = { total: rows.length, present: 0, absent: 0, leave: 0, report: 0, empty: 0 };
-      rows.forEach(function(item) {
-        var status = item.selectedStatus || '';
-        if (status === 'Var') summary.present += 1;
-        else if (status === 'Yok') summary.absent += 1;
-        else if (status === 'İzinli') summary.leave += 1;
-        else if (status === 'Raporlu') summary.report += 1;
-        else summary.empty += 1;
-      });
-      return summary;
-    }
-
-    function printAttendancePdf() {
-      var marketId = document.getElementById('attendanceMarketFilter').value;
-      var date = document.getElementById('attendanceDate').value;
-      if (!marketId || !date) {
-        alert('Önce pazar ve yoklama tarihini seçmelisin.');
-        return;
-      }
-
-      var rows = getFilteredAttendanceRows();
-      if (!rows.length) {
-        alert('PDF oluşturmak için filtreye uyan yoklama satırı bulunmuyor.');
-        return;
-      }
-
-      var market = getMarketById(marketId);
-      var marketLabel = market ? market.name : getSelectedOptionText('attendanceMarketFilter', 'Seçili Pazar');
-      var filterParts = [];
-      var sectionText = getSelectedOptionText('attendanceSectionFilter', 'Tüm Bölümler');
-      var statusText = getSelectedOptionText('attendanceStatusFilter', 'Tüm Durumlar');
-      var searchText = document.getElementById('attendanceSearchInput').value.trim();
-      if (document.getElementById('attendanceSectionFilter').value !== 'all') filterParts.push('Bölüm: ' + sectionText);
-      if (document.getElementById('attendanceStatusFilter').value !== 'all') filterParts.push('Durum: ' + statusText);
-      if (searchText) filterParts.push('Arama: ' + searchText);
-      if (!filterParts.length) filterParts.push('Ek filtre yok');
-
-      var counts = buildAttendanceSummaryCounts(rows);
-      var tableRows = rows.map(function(item) {
-        var autoInfo = item.leaveType
-          ? item.leaveType + (item.leavePeriodText ? ' · ' + item.leavePeriodText : '') + (item.leaveNote ? ' · ' + item.leaveNote : '')
-          : (item.attendanceStatus ? 'Kayıtlı Yoklama · ' + item.attendanceStatus : 'Otomatik öneri yok');
-        return '<tr>' +
-          '<td>' + escapeHtml(item.vendorName || '') + '</td>' +
-          '<td>' + escapeHtml(item.sectionType || '-') + '</td>' +
-          '<td>' + escapeHtml(item.stallLabel || '-') + '</td>' +
-          '<td>' + escapeHtml(item.selectedStatus || '-') + '</td>' +
-          '<td>' + escapeHtml(autoInfo || '-') + '</td>' +
-          '<td>' + escapeHtml(item.note || '-') + '</td>' +
-        '</tr>';
-      }).join('');
-
-      var html = '<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Yoklama Çıktısı</title>' +
-        '<style>' +
-        '@page { size: A4 landscape; margin: 12mm; }' +
-        'body{font-family:Arial,Helvetica,sans-serif;color:#1f2937;margin:0;background:#f3f4f6;}' +
-        '.page{padding:24px;}' +
-        '.sheet{background:#fff;border:1px solid #d9e1ec;border-radius:18px;padding:24px;}' +
-        '.head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px;}' +
-        '.title{font-size:28px;font-weight:800;margin:0 0 6px;}' +
-        '.subtitle{font-size:14px;color:#64748b;margin:0;}' +
-        '.meta{font-size:13px;color:#475569;line-height:1.6;text-align:right;}' +
-        '.cards{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:16px 0 18px;}' +
-        '.card{border:1px solid #d9e1ec;border-radius:14px;padding:12px;background:#f8fafc;}' +
-        '.card-label{font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.02em;}' +
-        '.card-value{font-size:24px;font-weight:800;margin-top:6px;color:#0f172a;}' +
-        '.filter-box{border:1px solid #d9e1ec;border-radius:14px;padding:12px 14px;background:#fcfdff;margin-bottom:16px;}' +
-        '.filter-title{font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px;}' +
-        '.filter-text{font-size:14px;color:#0f172a;}' +
-        'table{width:100%;border-collapse:collapse;font-size:12px;}' +
-        'th,td{border:1px solid #d9e1ec;padding:8px 9px;vertical-align:top;text-align:left;}' +
-        'th{background:#eff6ff;color:#1e3a8a;font-size:12px;}' +
-        'tbody tr:nth-child(even){background:#f8fafc;}' +
-        '.footer{margin-top:12px;font-size:12px;color:#64748b;}' +
-        '@media print{body{background:#fff;}.page{padding:0;}.sheet{border:none;border-radius:0;padding:0;box-shadow:none;}}' +
-        '</style></head><body><div class="page"><div class="sheet">' +
-        '<div class="head"><div><h1 class="title">Yoklama Listesi</h1><p class="subtitle">Filtrelenmiş ve yazdırmaya uygun görünüm</p></div>' +
-        '<div class="meta"><strong>Pazar:</strong> ' + escapeHtml(marketLabel) + '<br><strong>Tarih:</strong> ' + escapeHtml(date) + '<br><strong>Çıktı:</strong> ' + escapeHtml(new Date().toLocaleString('tr-TR')) + '</div></div>' +
-        '<div class="cards">' +
-        '<div class="card"><div class="card-label">Toplam</div><div class="card-value">' + escapeHtml(counts.total) + '</div></div>' +
-        '<div class="card"><div class="card-label">Var</div><div class="card-value">' + escapeHtml(counts.present) + '</div></div>' +
-        '<div class="card"><div class="card-label">Yok</div><div class="card-value">' + escapeHtml(counts.absent) + '</div></div>' +
-        '<div class="card"><div class="card-label">İzinli</div><div class="card-value">' + escapeHtml(counts.leave) + '</div></div>' +
-        '<div class="card"><div class="card-label">Raporlu</div><div class="card-value">' + escapeHtml(counts.report) + '</div></div>' +
-        '<div class="card"><div class="card-label">Boş</div><div class="card-value">' + escapeHtml(counts.empty) + '</div></div>' +
-        '</div>' +
-        '<div class="filter-box"><div class="filter-title">Uygulanan Filtreler</div><div class="filter-text">' + escapeHtml(filterParts.join(' • ')) + '</div></div>' +
-        '<table><thead><tr><th>Satıcı</th><th>Bölüm</th><th>Yer</th><th>Durum</th><th>Otomatik Bilgi</th><th>Not</th></tr></thead><tbody>' + tableRows + '</tbody></table>' +
-        '<div class="footer">Bu çıktı, seçili yoklama tarihindeki filtrelenmiş satırları gösterecek şekilde özel olarak hazırlanmıştır.</div>' +
-        '</div></div>' +
-        '<script>window.onload=function(){setTimeout(function(){window.print();},300);};<' + '/script>' +
-        '</body></html>';
-
-      var printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1200,height=900');
-      if (!printWindow) {
-        alert('PDF görünümü açılamadı. Tarayıcı açılır pencereyi engelliyor olabilir.');
-        return;
-      }
-      printWindow.document.open();
-      printWindow.document.write(html);
-      printWindow.document.close();
-    }
-
     async function loadMarkets() {
       var response = await fetch('/api/markets');
       var data = await response.json().catch(function() { return []; });
@@ -1414,6 +1282,81 @@
       renderAttendanceHistory();
     }
 
+
+    function getAttendanceStatusChip(status) {
+      var label = escapeHtml(status || '-');
+      if (status === 'Var') return '<span class="doc-chip ok">' + label + '</span>';
+      if (status === 'Yok') return '<span class="doc-chip missing">' + label + '</span>';
+      if (status === 'İzinli') return '<span class="doc-chip" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;">' + label + '</span>';
+      if (status === 'Raporlu') return '<span class="doc-chip" style="background:#fffbeb;color:#92400e;border-color:#fde68a;">' + label + '</span>';
+      return '<span class="doc-chip">' + label + '</span>';
+    }
+
+    function downloadAttendanceDetailExcel() {
+      if (!attendanceDetailSession || !attendanceDetailSession.marketId || !attendanceDetailSession.attendanceDate) {
+        alert('Önce bir yoklama detayı açılmalıdır.');
+        return;
+      }
+      window.location.href = '/api/markets/attendance-session-detail/export.xlsx?marketId=' + encodeURIComponent(attendanceDetailSession.marketId) + '&date=' + encodeURIComponent(attendanceDetailSession.attendanceDate);
+    }
+
+    function printAttendanceDetailReport() {
+      if (!attendanceDetailSession) {
+        alert('Önce bir yoklama detayı açılmalıdır.');
+        return;
+      }
+      var rows = attendanceDetailSession.rows || [];
+      var summaryHtml = '' +
+        '<div class="summary-grid">' +
+          '<div class="summary-card"><div class="summary-label">Toplam</div><div class="summary-value">' + escapeHtml(attendanceDetailSession.recordCount || 0) + '</div></div>' +
+          '<div class="summary-card ok"><div class="summary-label">Var</div><div class="summary-value">' + escapeHtml(attendanceDetailSession.presentCount || 0) + '</div></div>' +
+          '<div class="summary-card missing"><div class="summary-label">Yok</div><div class="summary-value">' + escapeHtml(attendanceDetailSession.absentCount || 0) + '</div></div>' +
+          '<div class="summary-card info"><div class="summary-label">İzinli</div><div class="summary-value">' + escapeHtml(attendanceDetailSession.leaveCount || 0) + '</div></div>' +
+          '<div class="summary-card warn"><div class="summary-label">Raporlu</div><div class="summary-value">' + escapeHtml(attendanceDetailSession.reportCount || 0) + '</div></div>' +
+        '</div>';
+      var tableRows = rows.map(function(item, index) {
+        return '<tr>' +
+          '<td>' + (index + 1) + '</td>' +
+          '<td><strong>' + escapeHtml(item.vendorName || '-') + '</strong></td>' +
+          '<td>' + escapeHtml(item.sectionType || '-') + '</td>' +
+          '<td>' + escapeHtml(item.stallLabel || '-') + '</td>' +
+          '<td>' + escapeHtml(item.status || '-') + '</td>' +
+          '<td>' + escapeHtml(item.note || '-') + '</td>' +
+          '<td>' + escapeHtml(item.updatedAt || '-') + '</td>' +
+        '</tr>';
+      }).join('');
+      if (!tableRows) {
+        tableRows = '<tr><td colspan="7">Bu tarihe ait kaydedilmiş yoklama satırı bulunmuyor.</td></tr>';
+      }
+      var reportHtml = '<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>Yoklama Detayı</title><style>' +
+        'body{font-family:Inter,Segoe UI,Arial,sans-serif;margin:0;padding:28px;color:#17202f;background:#fff;} ' +
+        '.report{max-width:1100px;margin:0 auto;} .top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:2px solid #e5e7eb;padding-bottom:14px;margin-bottom:18px;} ' +
+        '.title{font-size:28px;font-weight:800;letter-spacing:-0.03em;margin:0;} .subtitle{margin-top:6px;color:#667085;font-size:13px;line-height:1.6;} ' +
+        '.meta{display:grid;gap:6px;font-size:13px;color:#334155;text-align:right;} .summary-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:18px 0 22px;} ' +
+        '.summary-card{border:1px solid #dbe3ee;border-radius:14px;padding:14px;background:#f8fafc;} .summary-card.ok{background:#effcf3;border-color:#bbf7d0;color:#166534;} .summary-card.missing{background:#fff1f2;border-color:#fecdd3;color:#b91c1c;} .summary-card.info{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;} .summary-card.warn{background:#fffbeb;border-color:#fde68a;color:#92400e;} ' +
+        '.summary-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;opacity:.8;} .summary-value{font-size:28px;font-weight:800;margin-top:8px;} ' +
+        'table{width:100%;border-collapse:collapse;table-layout:fixed;} th,td{border:1px solid #dbe3ee;padding:10px 12px;font-size:12px;vertical-align:top;word-break:break-word;} th{background:#f8fafc;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#667085;} ' +
+        '.section-title{font-size:17px;font-weight:800;margin:0 0 10px;} @page{size:A4 landscape;margin:12mm;} @media print{body{padding:0;} .report{max-width:none;}}' +
+        '</style></head><body><div class="report">' +
+        '<div class="top"><div><h1 class="title">Yoklama Detay Raporu</h1><div class="subtitle">Yoklama geçmişindeki seçili tarih için kaydedilmiş satıcı listesi ve durum özeti.</div></div><div class="meta"><div><strong>Pazar:</strong> ' + escapeHtml(attendanceDetailSession.marketName || '-') + '</div><div><strong>Tarih:</strong> ' + escapeHtml(attendanceDetailSession.attendanceDateText || '-') + '</div><div><strong>Son Güncelleme:</strong> ' + escapeHtml(attendanceDetailSession.updatedAt || '-') + '</div></div></div>' +
+        summaryHtml +
+        '<h2 class="section-title">Yoklama Listesi</h2>' +
+        '<table><thead><tr><th style="width:6%">#</th><th style="width:25%">Satıcı</th><th style="width:12%">Bölüm</th><th style="width:13%">Yer</th><th style="width:12%">Durum</th><th style="width:17%">Not</th><th style="width:15%">Son Güncelleme</th></tr></thead><tbody>' + tableRows + '</tbody></table>' +
+        '</div></body></html>';
+      var printWindow = window.open('', '_blank', 'width=1200,height=820');
+      if (!printWindow) {
+        alert('Yazdırma penceresi açılamadı. Tarayıcı açılır pencere engelini kontrol edin.');
+        return;
+      }
+      printWindow.document.open();
+      printWindow.document.write(reportHtml);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.onload = function() {
+        printWindow.print();
+      };
+    }
+
     function renderAttendanceDetailModal() {
       var title = document.getElementById('attendanceDetailTitle');
       var subtitle = document.getElementById('attendanceDetailSubtitle');
@@ -1444,7 +1387,7 @@
         html += '<tr>' +
           '<td><div class="cell-title">' + escapeHtml(item.vendorName) + '</div><div class="cell-sub">Pazar: ' + escapeHtml(item.marketName) + '</div></td>' +
           '<td><div class="cell-title">' + escapeHtml(item.sectionType || '-') + '</div><div class="cell-sub">Yer: ' + escapeHtml(item.stallLabel || '-') + '</div></td>' +
-          '<td><span class="doc-chip">' + escapeHtml(item.status || '-') + '</span></td>' +
+          '<td>' + getAttendanceStatusChip(item.status) + '</td>' +
           '<td>' + escapeHtml(item.note || '-') + '</td>' +
           '<td>' + escapeHtml(item.updatedAt || '-') + '</td>' +
         '</tr>';
