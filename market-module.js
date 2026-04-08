@@ -394,6 +394,10 @@ function registerMarketModule({ app, pool }) {
     res.sendFile(path.join(__dirname, 'markets-page.html'));
   });
 
+  app.get('/markets/mobile-attendance', (req, res) => {
+    res.sendFile(path.join(__dirname, 'markets-mobile-attendance.html'));
+  });
+
   app.get('/api/markets', async (req, res) => {
     try {
       const marketResult = await pool.query(`

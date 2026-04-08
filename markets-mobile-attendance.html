@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1d4ed8" />
+  <title>Zabıta Yönetim Sistemi - Mobil Yoklama</title>
+  <style>
+    :root {
+      --bg: #eef3f8;
+      --panel: #ffffff;
+      --border: #d7e0ea;
+      --text: #17202f;
+      --muted: #667085;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --success-bg: #effcf3;
+      --success-border: #bbf7d0;
+      --success-text: #166534;
+      --danger-bg: #fff1f2;
+      --danger-border: #fecdd3;
+      --danger-text: #b91c1c;
+      --info-bg: #eff6ff;
+      --info-border: #bfdbfe;
+      --info-text: #1d4ed8;
+      --warn-bg: #fffbeb;
+      --warn-border: #fde68a;
+      --warn-text: #92400e;
+      --shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+      --radius: 20px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; font-family: Inter, Segoe UI, Arial, sans-serif; background: var(--bg); color: var(--text); }
+    body { min-height: 100vh; }
+    .page { max-width: 860px; margin: 0 auto; padding: env(safe-area-inset-top, 0) 12px calc(118px + env(safe-area-inset-bottom, 0)) 12px; }
+    .hero {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      margin: 0 -12px 12px;
+      padding: calc(10px + env(safe-area-inset-top, 0)) 12px 12px;
+      background: linear-gradient(135deg, #0f2748 0%, #1e3a5f 55%, #274c7a 100%);
+      color: #fff;
+      box-shadow: 0 18px 34px rgba(15, 23, 42, 0.18);
+    }
+    .hero-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .hero-title { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; margin: 0; }
+    .hero-sub { margin-top: 6px; font-size: 13px; line-height: 1.5; color: rgba(255,255,255,0.82); }
+    .hero-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .chip-btn, .mini-link {
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.14);
+      color: #fff;
+      text-decoration: none;
+      padding: 10px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+    }
+    .chip-btn.primary { background: #fff; color: var(--primary-dark); border-color: #fff; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .panel-title { font-size: 18px; font-weight: 800; margin: 0; }
+    .panel-sub { color: var(--muted); font-size: 13px; margin-top: 4px; line-height: 1.5; }
+    .grid { display: grid; gap: 10px; }
+    .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .field { display: grid; gap: 6px; }
+    label { font-size: 12px; font-weight: 800; color: #475467; text-transform: uppercase; letter-spacing: .05em; }
+    select, input[type="date"], input[type="text"] {
+      width: 100%;
+      min-height: 50px;
+      border-radius: 14px;
+      border: 1px solid #cfd8e3;
+      padding: 0 14px;
+      font-size: 16px;
+      background: #fff;
+      color: var(--text);
+    }
+    .helper-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .banner {
+      display: none;
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      border: 1px solid var(--info-border);
+      background: var(--info-bg);
+      color: #1e3a8a;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .banner.show { display: block; }
+    .banner.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); }
+    .banner.success { background: var(--success-bg); border-color: var(--success-border); color: var(--success-text); }
+    .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .summary-card {
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      border-radius: 16px;
+      padding: 12px;
+      min-height: 88px;
+    }
+    .summary-card.ok { background: var(--success-bg); border-color: var(--success-border); color: var(--success-text); }
+    .summary-card.missing { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
+    .summary-card.info { background: var(--info-bg); border-color: var(--info-border); color: var(--info-text); }
+    .summary-card.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); }
+    .summary-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; opacity: .82; }
+    .summary-value { font-size: 30px; font-weight: 900; margin-top: 10px; letter-spacing: -0.03em; }
+    .card-list { display: grid; gap: 12px; }
+    .vendor-card {
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+    }
+    .vendor-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+    .vendor-name { font-size: 19px; font-weight: 800; letter-spacing: -0.03em; margin: 0; }
+    .vendor-sub { color: var(--muted); font-size: 14px; line-height: 1.5; margin-top: 4px; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      font-size: 13px;
+      font-weight: 700;
+      color: #334155;
+    }
+    .badge.ok { background: var(--success-bg); border-color: var(--success-border); color: var(--success-text); }
+    .badge.missing { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
+    .badge.info { background: var(--info-bg); border-color: var(--info-border); color: var(--info-text); }
+    .badge.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); }
+    .status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+    .status-btn {
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      border-radius: 16px;
+      min-height: 56px;
+      padding: 0 10px;
+      font-size: 16px;
+      font-weight: 800;
+      color: #334155;
+      cursor: pointer;
+      transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+    }
+    .status-btn:active { transform: scale(.98); }
+    .status-btn.var.active { background: var(--success-bg); border-color: var(--success-border); color: var(--success-text); box-shadow: 0 0 0 3px rgba(34,197,94,.12); }
+    .status-btn.yok.active { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); box-shadow: 0 0 0 3px rgba(244,63,94,.12); }
+    .status-btn.izinli.active { background: var(--info-bg); border-color: var(--info-border); color: var(--info-text); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+    .status-btn.raporlu.active { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); box-shadow: 0 0 0 3px rgba(245,158,11,.12); }
+    .status-btn:disabled { opacity: .58; cursor: not-allowed; }
+    .note-input { margin-top: 12px; min-height: 50px; }
+    .empty-state {
+      border: 1px dashed #cbd5e1;
+      background: #f8fafc;
+      border-radius: 18px;
+      padding: 22px 16px;
+      text-align: center;
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 14px;
+    }
+    .bottom-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 30;
+      padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0));
+      background: rgba(238,243,248,0.92);
+      backdrop-filter: blur(18px);
+      border-top: 1px solid rgba(148,163,184,.18);
+    }
+    .bottom-actions {
+      max-width: 860px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .action-btn {
+      min-height: 54px;
+      border-radius: 16px;
+      border: 1px solid transparent;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 12px 30px rgba(15,23,42,.10);
+    }
+    .action-btn.primary { background: var(--primary); color: #fff; }
+    .action-btn.secondary { background: #fff; border-color: #cfd8e3; color: #243b53; }
+    .action-btn.dark { background: #0f2748; color: #fff; }
+    .action-btn.ghost { background: #e8eef7; color: #243b53; border-color: #d4dce7; }
+    .loading-cover {
+      position: fixed;
+      inset: 0;
+      background: rgba(15,23,42,.18);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 40;
+      padding: 20px;
+    }
+    .loading-cover.show { display: flex; }
+    .loading-box {
+      background: #fff;
+      border-radius: 20px;
+      padding: 18px 20px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      font-weight: 800;
+      color: #243b53;
+    }
+    @media (min-width: 780px) {
+      .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .summary-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+      .bottom-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <div class="hero-top">
+        <div>
+          <h1 class="hero-title">Mobil Yoklama</h1>
+          <div class="hero-sub">Pazarda telefondan hızlı yoklama almak, kaydetmek ve seçili günün PDF / Excel çıktısını almak için hazırlanmış sade ekran.</div>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <a class="mini-link" href="/markets">Masaüstü Pazar Modülü</a>
+        <button class="chip-btn" type="button" onclick="reloadAllMobile()">Yenile</button>
+        <button class="chip-btn primary" type="button" onclick="markAllAttendance('Var')">Hepsini Var Yap</button>
+      </div>
+    </header>
+
+    <div class="banner" id="topBanner"></div>
+
+    <section class="panel">
+      <div class="panel-title">Seçim ve filtre</div>
+      <div class="panel-sub">Önce pazarı ve tarihi seç. İstersen bölüm veya arama ile listeyi daralt.</div>
+      <div class="grid two" style="margin-top:12px;">
+        <div class="field">
+          <label for="attendanceMarketFilter">Pazar</label>
+          <select id="attendanceMarketFilter" onchange="handleMarketChange()"></select>
+        </div>
+        <div class="field">
+          <label for="attendanceDate">Yoklama Tarihi</label>
+          <input type="date" id="attendanceDate" onchange="loadAttendanceSheet()" />
+        </div>
+        <div class="field">
+          <label for="attendanceSectionFilter">Bölüm</label>
+          <select id="attendanceSectionFilter" onchange="renderAttendanceCards()">
+            <option value="all">Tüm Bölümler</option>
+            <option value="Esnaf">Esnaf</option>
+            <option value="Üretici">Üretici</option>
+            <option value="Tuhafiye">Tuhafiye</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="attendanceSearchInput">Arama</label>
+          <input type="text" id="attendanceSearchInput" oninput="renderAttendanceCards()" placeholder="Satıcı adı veya yer no ara" />
+        </div>
+      </div>
+      <div class="helper-row">
+        <button class="chip-btn" type="button" onclick="setSuggestedDateForSelectedMarket(true)">Pazar Gününe Getir</button>
+        <button class="chip-btn" type="button" onclick="clearMobileFilters()">Filtreleri Temizle</button>
+        <span class="muted" id="attendanceDayInfo"></span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">Gün Özeti</div>
+      <div class="panel-sub" id="attendanceListInfo">Seçili pazar ve tarihteki satıcılar burada görünür.</div>
+      <div class="summary-grid" id="summaryGrid" style="margin-top:12px;"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">Satıcı Listesi</div>
+      <div class="panel-sub">Durumu dokunarak seç. Not gerekiyorsa alttaki kutuya yaz. İzin / rapor kaydı olan satırlar kilitli görünür.</div>
+      <div class="card-list" id="attendanceCardList" style="margin-top:12px;"></div>
+    </section>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="bottom-actions">
+      <button class="action-btn ghost" type="button" onclick="markAllAttendance('Var')">Hepsini Var</button>
+      <button class="action-btn primary" type="button" onclick="saveMobileAttendanceSheet(false)">Kaydet</button>
+      <button class="action-btn secondary" type="button" onclick="downloadCurrentAttendanceExcel()">Excel</button>
+      <button class="action-btn dark" type="button" onclick="printCurrentAttendanceReport()">PDF / Yazdır</button>
+    </div>
+  </div>
+
+  <div class="loading-cover" id="loadingCover">
+    <div class="loading-box" id="loadingText">İşlem yapılıyor...</div>
+  </div>
+
+  <script>
+    var markets = [];
+    var attendanceSheet = [];
+    var hasUnsavedChanges = false;
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function showLoading(text) {
+      document.getElementById('loadingText').textContent = text || 'İşlem yapılıyor...';
+      document.getElementById('loadingCover').classList.add('show');
+    }
+
+    function hideLoading() {
+      document.getElementById('loadingCover').classList.remove('show');
+    }
+
+    function showBanner(message, type) {
+      var box = document.getElementById('topBanner');
+      if (!message) {
+        box.textContent = '';
+        box.className = 'banner';
+        return;
+      }
+      box.textContent = message;
+      box.className = 'banner show' + (type ? ' ' + type : '');
+    }
+
+    function toInputDate(value) {
+      if (!value) return '';
+      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+      var d = new Date(value);
+      if (Number.isNaN(d.getTime())) return '';
+      var yyyy = d.getFullYear();
+      var mm = String(d.getMonth() + 1).padStart(2, '0');
+      var dd = String(d.getDate()).padStart(2, '0');
+      return yyyy + '-' + mm + '-' + dd;
+    }
+
+    function formatDate(value) {
+      if (!value) return '';
+      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        var parts = value.split('-');
+        return parts[2] + '.' + parts[1] + '.' + parts[0];
+      }
+      var d = new Date(value);
+      if (Number.isNaN(d.getTime())) return String(value);
+      return new Intl.DateTimeFormat('tr-TR', { timeZone: 'Europe/Istanbul' }).format(d);
+    }
+
+    function getMarketById(marketId) {
+      return markets.find(function(item) { return String(item.id) === String(marketId); }) || null;
+    }
+
+    function getSuggestedDateForMarket(market) {
+      var now = new Date();
+      var currentDay = now.getDay();
+      var targetDay = Number(market && market.scheduledDay);
+      if (Number.isNaN(targetDay)) return toInputDate(now);
+      var diff = targetDay - currentDay;
+      if (diff < 0) diff += 7;
+      var suggested = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff);
+      return toInputDate(suggested);
+    }
+
+    function updateDayInfo() {
+      var market = getMarketById(document.getElementById('attendanceMarketFilter').value);
+      var date = document.getElementById('attendanceDate').value;
+      var info = document.getElementById('attendanceDayInfo');
+      if (!market) {
+        info.textContent = '';
+        return;
+      }
+      var text = market.name + ' · Kurulum günü: ' + (market.scheduledDayLabel || '-');
+      if (date) text += ' · Seçili tarih: ' + formatDate(date);
+      info.textContent = text;
+    }
+
+    function setSuggestedDateForSelectedMarket(showMessage) {
+      var market = getMarketById(document.getElementById('attendanceMarketFilter').value);
+      if (!market) return;
+      var suggested = getSuggestedDateForMarket(market);
+      document.getElementById('attendanceDate').value = suggested;
+      updateDayInfo();
+      loadAttendanceSheet();
+      if (showMessage) showBanner('Seçili pazar için önerilen tarih getirildi: ' + formatDate(suggested), 'success');
+    }
+
+    function populateMarketSelect() {
+      var select = document.getElementById('attendanceMarketFilter');
+      var activeMarkets = markets.filter(function(item) { return item.isActive; });
+      var list = activeMarkets.length ? activeMarkets : markets;
+      select.innerHTML = list.map(function(item) {
+        return '<option value="' + item.id + '">' + escapeHtml(item.name) + '</option>';
+      }).join('');
+      if (list.length) {
+        select.value = String(list[0].id);
+        if (!document.getElementById('attendanceDate').value) {
+          document.getElementById('attendanceDate').value = getSuggestedDateForMarket(list[0]);
+        }
+      }
+      updateDayInfo();
+    }
+
+    function clearMobileFilters() {
+      document.getElementById('attendanceSectionFilter').value = 'all';
+      document.getElementById('attendanceSearchInput').value = '';
+      renderAttendanceCards();
+    }
+
+    function handleMarketChange() {
+      if (!document.getElementById('attendanceDate').value) {
+        setSuggestedDateForSelectedMarket(false);
+        return;
+      }
+      updateDayInfo();
+      loadAttendanceSheet();
+    }
+
+    function getFilteredAttendanceRows() {
+      var section = document.getElementById('attendanceSectionFilter').value;
+      var search = document.getElementById('attendanceSearchInput').value.trim().toLocaleLowerCase('tr-TR');
+      return attendanceSheet.filter(function(item) {
+        var matchesSection = section === 'all' || item.sectionType === section;
+        var text = [item.vendorName, item.marketName, item.sectionType, item.stallLabel, item.stallNo, item.note].join(' ').toLocaleLowerCase('tr-TR');
+        var matchesSearch = !search || text.indexOf(search) !== -1;
+        return matchesSection && matchesSearch;
+      });
+    }
+
+    function renderSummary() {
+      var box = document.getElementById('summaryGrid');
+      var rows = attendanceSheet;
+      var selectedCount = rows.filter(function(item) { return !!item.selectedStatus; }).length;
+      var varCount = rows.filter(function(item) { return item.selectedStatus === 'Var'; }).length;
+      var yokCount = rows.filter(function(item) { return item.selectedStatus === 'Yok'; }).length;
+      var izinliCount = rows.filter(function(item) { return item.selectedStatus === 'İzinli'; }).length;
+      var raporluCount = rows.filter(function(item) { return item.selectedStatus === 'Raporlu'; }).length;
+      box.innerHTML = '' +
+        '<div class="summary-card"><div class="summary-label">Toplam</div><div class="summary-value">' + rows.length + '</div></div>' +
+        '<div class="summary-card info"><div class="summary-label">İşaretlenen</div><div class="summary-value">' + selectedCount + '</div></div>' +
+        '<div class="summary-card ok"><div class="summary-label">Var</div><div class="summary-value">' + varCount + '</div></div>' +
+        '<div class="summary-card missing"><div class="summary-label">Yok</div><div class="summary-value">' + yokCount + '</div></div>' +
+        '<div class="summary-card info"><div class="summary-label">İzinli</div><div class="summary-value">' + izinliCount + '</div></div>' +
+        '<div class="summary-card warn"><div class="summary-label">Raporlu</div><div class="summary-value">' + raporluCount + '</div></div>';
+      var info = document.getElementById('attendanceListInfo');
+      if (!rows.length) info.textContent = 'Seçili pazar ve tarihte gösterilecek aktif satıcı bulunmuyor.';
+      else info.textContent = 'Toplam ' + rows.length + ' satıcı var. Filtreye göre ' + getFilteredAttendanceRows().length + ' satır gösteriliyor.';
+    }
+
+    function buildBadge(label, className) {
+      return '<span class="badge' + (className ? ' ' + className : '') + '">' + escapeHtml(label) + '</span>';
+    }
+
+    function renderAttendanceCards() {
+      var container = document.getElementById('attendanceCardList');
+      renderSummary();
+      if (!attendanceSheet.length) {
+        container.innerHTML = '<div class="empty-state">Liste boş. Önce pazarı ve tarihi seç, sonra yoklama satırları burada açılsın.</div>';
+        return;
+      }
+      var rows = getFilteredAttendanceRows();
+      if (!rows.length) {
+        container.innerHTML = '<div class="empty-state">Bu filtreye uygun satıcı bulunmuyor.</div>';
+        return;
+      }
+      var html = '';
+      for (var i = 0; i < rows.length; i++) {
+        var item = rows[i];
+        var selected = item.selectedStatus || '';
+        var badges = buildBadge(item.sectionType || '-', 'info') + buildBadge('Yer: ' + (item.stallLabel || '-'));
+        if (item.isLocked) {
+          badges += buildBadge((item.lockedStatus || item.leaveType || 'Kilitli') + ' · Otomatik', item.leaveType === 'Raporlu' ? 'warn' : 'info');
+          if (item.leavePeriodText) badges += buildBadge(item.leavePeriodText);
+        } else if (item.attendanceStatus) {
+          badges += buildBadge('Kayıtlı: ' + item.attendanceStatus, item.attendanceStatus === 'Var' ? 'ok' : (item.attendanceStatus === 'Yok' ? 'missing' : 'info'));
+        } else if (item.recommendedStatus) {
+          badges += buildBadge('Öneri: ' + item.recommendedStatus, item.recommendedStatus === 'Raporlu' ? 'warn' : 'info');
+        }
+        html += '<article class="vendor-card">' +
+          '<div class="vendor-top"><div><h3 class="vendor-name">' + escapeHtml(item.vendorName) + '</h3><div class="vendor-sub">' + escapeHtml(item.marketName || '-') + ' · ' + escapeHtml(item.sectionType || '-') + '</div></div>' +
+          (selected ? buildBadge(selected, selected === 'Var' ? 'ok' : (selected === 'Yok' ? 'missing' : (selected === 'Raporlu' ? 'warn' : 'info'))) : '') +
+          '</div>' +
+          '<div class="badge-row">' + badges + '</div>' +
+          '<div class="status-grid">' +
+            buildStatusButton(item.vendorId, 'Var', selected, item.isLocked) +
+            buildStatusButton(item.vendorId, 'Yok', selected, item.isLocked) +
+            buildStatusButton(item.vendorId, 'İzinli', selected, item.isLocked) +
+            buildStatusButton(item.vendorId, 'Raporlu', selected, item.isLocked) +
+          '</div>' +
+          '<input class="note-input" type="text" value="' + escapeHtml(item.note || '') + '" ' + (item.isLocked ? 'disabled' : '') + ' placeholder="Kısa not" oninput="updateAttendanceNote(' + item.vendorId + ', this.value)" />' +
+        '</article>';
+      }
+      container.innerHTML = html;
+    }
+
+    function buildStatusButton(vendorId, label, activeLabel, isLocked) {
+      var cls = label.toLocaleLowerCase('tr-TR');
+      return '<button class="status-btn ' + cls + (label === activeLabel ? ' active' : '') + '" type="button" onclick="pickAttendanceStatus(' + vendorId + ', \'' + label + '\')" ' + (isLocked ? 'disabled' : '') + '>' + escapeHtml(label) + '</button>';
+    }
+
+    function pickAttendanceStatus(vendorId, label) {
+      var item = attendanceSheet.find(function(row) { return row.vendorId === vendorId; });
+      if (!item || item.isLocked) return;
+      item.selectedStatus = label;
+      hasUnsavedChanges = true;
+      renderAttendanceCards();
+    }
+
+    function updateAttendanceNote(vendorId, value) {
+      var item = attendanceSheet.find(function(row) { return row.vendorId === vendorId; });
+      if (!item || item.isLocked) return;
+      item.note = value;
+      hasUnsavedChanges = true;
+    }
+
+    function markAllAttendance(label) {
+      if (!attendanceSheet.length) return;
+      for (var i = 0; i < attendanceSheet.length; i++) {
+        if (!attendanceSheet[i].isLocked) attendanceSheet[i].selectedStatus = label;
+      }
+      hasUnsavedChanges = true;
+      renderAttendanceCards();
+      showBanner('Kilitsiz tüm satırlar "' + label + '" olarak işaretlendi.', 'success');
+    }
+
+    async function loadMarkets() {
+      var response = await fetch('/api/markets');
+      var data = await response.json().catch(function() { return []; });
+      if (!response.ok) throw new Error(data.error || 'Pazar listesi yüklenemedi.');
+      markets = data;
+      populateMarketSelect();
+    }
+
+    async function loadAttendanceSheet() {
+      var marketId = document.getElementById('attendanceMarketFilter').value;
+      var date = document.getElementById('attendanceDate').value;
+      updateDayInfo();
+      if (!marketId || !date) {
+        attendanceSheet = [];
+        renderAttendanceCards();
+        return;
+      }
+      try {
+        showLoading('Yoklama listesi yükleniyor...');
+        var response = await fetch('/api/markets/attendance-sheet?marketId=' + encodeURIComponent(marketId) + '&date=' + encodeURIComponent(date));
+        var data = await response.json().catch(function() { return []; });
+        if (!response.ok) throw new Error(data.error || 'Yoklama listesi yüklenemedi.');
+        attendanceSheet = data.map(function(item) {
+          item.selectedStatus = item.isLocked ? (item.lockedStatus || item.leaveType || '') : (item.attendanceStatus || item.recommendedStatus || '');
+          return item;
+        });
+        hasUnsavedChanges = false;
+        renderAttendanceCards();
+        showBanner('', '');
+      } catch (error) {
+        attendanceSheet = [];
+        renderAttendanceCards();
+        showBanner(error.message || 'Yoklama listesi yüklenemedi.', 'warn');
+      } finally {
+        hideLoading();
+      }
+    }
+
+    async function saveMobileAttendanceSheet(silent) {
+      var marketId = document.getElementById('attendanceMarketFilter').value;
+      var date = document.getElementById('attendanceDate').value;
+      var entries = attendanceSheet.filter(function(item) { return !!item.selectedStatus; }).map(function(item) {
+        return { vendorId: item.vendorId, status: item.selectedStatus, note: item.note || '' };
+      });
+      if (!marketId) {
+        if (!silent) showBanner('Önce pazar seçmelisin.', 'warn');
+        return false;
+      }
+      if (!date) {
+        if (!silent) showBanner('Yoklama tarihi seçilmelidir.', 'warn');
+        return false;
+      }
+      if (!entries.length) {
+        if (!silent) showBanner('Kaydedilecek yoklama satırı bulunmuyor.', 'warn');
+        return false;
+      }
+      try {
+        showLoading('Yoklama kaydediliyor...');
+        var response = await fetch('/api/markets/attendance/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: date, entries: entries })
+        });
+        var data = await response.json().catch(function() { return {}; });
+        if (!response.ok) throw new Error(data.error || 'Yoklama kaydedilemedi.');
+        hasUnsavedChanges = false;
+        if (!silent) showBanner('Yoklama kaydedildi. İstersen şimdi PDF veya Excel çıktısı alabilirsin.', 'success');
+        return true;
+      } catch (error) {
+        if (!silent) showBanner(error.message || 'Yoklama kaydedilemedi.', 'warn');
+        return false;
+      } finally {
+        hideLoading();
+      }
+    }
+
+    async function ensureSavedAttendanceSession() {
+      if (!attendanceSheet.length) {
+        showBanner('Önce yoklama listesi açılmalıdır.', 'warn');
+        return null;
+      }
+      if (hasUnsavedChanges) {
+        var saved = await saveMobileAttendanceSheet(true);
+        if (!saved) {
+          showBanner('Önce kayıt tamamlanmalıdır.', 'warn');
+          return null;
+        }
+      }
+      var marketId = document.getElementById('attendanceMarketFilter').value;
+      var date = document.getElementById('attendanceDate').value;
+      try {
+        showLoading('Çıktı hazırlanıyor...');
+        var response = await fetch('/api/markets/attendance-session-detail?marketId=' + encodeURIComponent(marketId) + '&date=' + encodeURIComponent(date));
+        var data = await response.json().catch(function() { return {}; });
+        if (!response.ok) throw new Error(data.error || 'Kaydedilmiş yoklama detayı alınamadı.');
+        return data;
+      } catch (error) {
+        showBanner(error.message || 'Kaydedilmiş yoklama detayı alınamadı.', 'warn');
+        return null;
+      } finally {
+        hideLoading();
+      }
+    }
+
+    async function downloadCurrentAttendanceExcel() {
+      var marketId = document.getElementById('attendanceMarketFilter').value;
+      var date = document.getElementById('attendanceDate').value;
+      var detail = await ensureSavedAttendanceSession();
+      if (!detail) return;
+      window.location.href = '/api/markets/attendance-session-detail/export.xlsx?marketId=' + encodeURIComponent(marketId) + '&date=' + encodeURIComponent(date);
+      showBanner('Excel indirme başlatıldı.', 'success');
+    }
+
+    function getStatusClass(status) {
+      if (status === 'Var') return 'ok';
+      if (status === 'Yok') return 'missing';
+      if (status === 'Raporlu') return 'warn';
+      if (status === 'İzinli') return 'info';
+      return '';
+    }
+
+    function buildAttendanceReportHtml(detail) {
+      var rows = (detail.rows || []).map(function(item, index) {
+        return '<tr>' +
+          '<td>' + (index + 1) + '</td>' +
+          '<td><strong>' + escapeHtml(item.vendorName || '-') + '</strong></td>' +
+          '<td>' + escapeHtml(item.sectionType || '-') + '</td>' +
+          '<td>' + escapeHtml(item.stallLabel || '-') + '</td>' +
+          '<td>' + escapeHtml(item.status || '-') + '</td>' +
+          '<td>' + escapeHtml(item.note || '-') + '</td>' +
+          '<td>' + escapeHtml(item.updatedAt || '-') + '</td>' +
+        '</tr>';
+      }).join('');
+      if (!rows) rows = '<tr><td colspan="7">Kaydedilmiş yoklama satırı bulunmuyor.</td></tr>';
+      return '<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>Mobil Yoklama Raporu</title><style>' +
+        'body{font-family:Inter,Segoe UI,Arial,sans-serif;margin:0;padding:24px;color:#17202f;background:#fff;} .report{max-width:1100px;margin:0 auto;} ' +
+        '.top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:2px solid #e5e7eb;padding-bottom:14px;margin-bottom:18px;} ' +
+        '.title{font-size:26px;font-weight:900;letter-spacing:-.03em;margin:0;} .subtitle{margin-top:6px;color:#667085;font-size:13px;line-height:1.6;} .meta{display:grid;gap:6px;font-size:13px;color:#334155;text-align:right;} ' +
+        '.summary-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:18px 0 22px;} .summary-card{border:1px solid #dbe3ee;border-radius:14px;padding:14px;background:#f8fafc;} .summary-card.ok{background:#effcf3;border-color:#bbf7d0;color:#166534;} .summary-card.missing{background:#fff1f2;border-color:#fecdd3;color:#b91c1c;} .summary-card.info{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;} .summary-card.warn{background:#fffbeb;border-color:#fde68a;color:#92400e;} ' +
+        '.summary-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;opacity:.8;} .summary-value{font-size:28px;font-weight:900;margin-top:8px;} ' +
+        'table{width:100%;border-collapse:collapse;table-layout:fixed;} th,td{border:1px solid #dbe3ee;padding:10px 12px;font-size:12px;vertical-align:top;word-break:break-word;} th{background:#f8fafc;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#667085;} ' +
+        '.section-title{font-size:17px;font-weight:900;margin:0 0 10px;} @page{size:A4 landscape;margin:12mm;} @media print{body{padding:0;} .report{max-width:none;}}' +
+        '</style></head><body><div class="report">' +
+        '<div class="top"><div><h1 class="title">Mobil Yoklama Raporu</h1><div class="subtitle">Telefondan alınan yoklama için kaydedilmiş satıcı listesi ve durum özeti.</div></div><div class="meta"><div><strong>Pazar:</strong> ' + escapeHtml(detail.marketName || '-') + '</div><div><strong>Tarih:</strong> ' + escapeHtml(detail.attendanceDateText || '-') + '</div><div><strong>Son Güncelleme:</strong> ' + escapeHtml(detail.updatedAt || '-') + '</div></div></div>' +
+        '<div class="summary-grid">' +
+          '<div class="summary-card"><div class="summary-label">Toplam</div><div class="summary-value">' + escapeHtml(detail.recordCount || 0) + '</div></div>' +
+          '<div class="summary-card ok"><div class="summary-label">Var</div><div class="summary-value">' + escapeHtml(detail.presentCount || 0) + '</div></div>' +
+          '<div class="summary-card missing"><div class="summary-label">Yok</div><div class="summary-value">' + escapeHtml(detail.absentCount || 0) + '</div></div>' +
+          '<div class="summary-card info"><div class="summary-label">İzinli</div><div class="summary-value">' + escapeHtml(detail.leaveCount || 0) + '</div></div>' +
+          '<div class="summary-card warn"><div class="summary-label">Raporlu</div><div class="summary-value">' + escapeHtml(detail.reportCount || 0) + '</div></div>' +
+        '</div>' +
+        '<h2 class="section-title">Yoklama Listesi</h2>' +
+        '<table><thead><tr><th style="width:6%">#</th><th style="width:24%">Satıcı</th><th style="width:12%">Bölüm</th><th style="width:14%">Yer</th><th style="width:12%">Durum</th><th style="width:17%">Not</th><th style="width:15%">Son Güncelleme</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+        '</div></body></html>';
+    }
+
+    async function printCurrentAttendanceReport() {
+      var detail = await ensureSavedAttendanceSession();
+      if (!detail) return;
+      var reportHtml = buildAttendanceReportHtml(detail);
+      var printWindow = window.open('', '_blank', 'width=1200,height=820');
+      if (!printWindow) {
+        showBanner('Yazdırma penceresi açılamadı. Tarayıcı açılır pencere engelini kontrol et.', 'warn');
+        return;
+      }
+      printWindow.document.open();
+      printWindow.document.write(reportHtml);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.onload = function() { printWindow.print(); };
+      showBanner('PDF / yazdırma görünümü açıldı.', 'success');
+    }
+
+    async function reloadAllMobile() {
+      try {
+        showLoading('Veriler yükleniyor...');
+        await loadMarkets();
+        await loadAttendanceSheet();
+        showBanner('', '');
+      } catch (error) {
+        showBanner(error.message || 'Mobil yoklama verileri yüklenemedi.', 'warn');
+      } finally {
+        hideLoading();
+      }
+    }
+
+    window.addEventListener('beforeunload', function(event) {
+      if (!hasUnsavedChanges) return;
+      event.preventDefault();
+      event.returnValue = '';
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+      reloadAllMobile();
+    });
+  </script>
+</body>
+</html>
