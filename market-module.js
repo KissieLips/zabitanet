@@ -38,6 +38,19 @@ function sanitizeCellValue(value) {
   return String(value).trim();
 }
 
+function normalizeHeaderText(value) {
+  return String(value || '')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 function pickRowValue(row, aliases) {
   for (const alias of aliases) {
     if (Object.prototype.hasOwnProperty.call(row, alias)) {
@@ -46,6 +59,124 @@ function pickRowValue(row, aliases) {
     }
   }
   return '';
+}
+
+function buildRowAccessor(rowMap) {
+  return function getValue(aliases) {
+    for (const alias of aliases) {
+      const normalizedAlias = normalizeHeaderText(alias);
+      if (normalizedAlias && Object.prototype.hasOwnProperty.call(rowMap, normalizedAlias)) {
+        const value = sanitizeCellValue(rowMap[normalizedAlias]);
+        if (value) return value;
+      }
+    }
+    return '';
+  };
+}
+
+function extractVendorImportSheetData(workbook) {
+  const fieldAliases = {
+    marketName: ['Pazar Adı', 'Pazar', 'Pazar Yeri', 'Market'],
+    sectionType: ['Bölüm', 'Bolum', 'Section'],
+    stallColor: ['Yer Rengi', 'Numara Rengi', 'Renk', 'Stall Color'],
+    stallNo: ['Yer No', 'Yer / Tezgâh No', 'Yer / Tezgah No', 'Tezgah No', 'Tezgâh No', 'Stall No'],
+    fullName: ['Ad Soyad', 'Satıcı', 'Satıcı Adı Soyadı', 'Adı Soyadı', 'Full Name'],
+    identityNumber: ['T.C. Kimlik No', 'TC Kimlik No', 'T.C.', 'TC'],
+    phone: ['Telefon', 'Cep Telefonu', 'Phone'],
+    address: ['Adres', 'Address'],
+    note: ['Not', 'Açıklama', 'Aciklama'],
+    documentFolderUrl: ['Drive Klasörü', 'Belge Klasörü', 'Klasör Linki', 'Drive'],
+    documentSummary: ['Belge Özeti', 'Belge Durumu', 'Belge', 'Dokuman', 'Doküman'],
+    statusText: ['Kayıt Durumu', 'Durum', 'Aktiflik'],
+  };
+
+  const normalizedAliasMap = {};
+  Object.keys(fieldAliases).forEach((key) => {
+    normalizedAliasMap[key] = fieldAliases[key].map((alias) => normalizeHeaderText(alias)).filter(Boolean);
+  });
+
+  let bestMatch = null;
+
+  workbook.SheetNames.forEach((sheetName) => {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) return;
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+    rows.forEach((row, rowIndex) => {
+      const normalizedCells = row.map((cell) => normalizeHeaderText(cell));
+      const headerIndexMap = {};
+      Object.keys(normalizedAliasMap).forEach((key) => {
+        const aliases = normalizedAliasMap[key];
+        const foundIndex = normalizedCells.findIndex((cell) => aliases.includes(cell));
+        if (foundIndex !== -1) headerIndexMap[key] = foundIndex;
+      });
+
+      const score = Object.keys(headerIndexMap).length;
+      const hasRequiredHeaders = ['marketName', 'sectionType', 'stallNo', 'fullName'].every((key) => headerIndexMap[key] !== undefined);
+      if (!hasRequiredHeaders) return;
+
+      if (!bestMatch || score > bestMatch.score || (score === bestMatch.score && rowIndex < bestMatch.headerRowIndex)) {
+        bestMatch = {
+          sheetName,
+          headerRowIndex: rowIndex,
+          headerIndexMap,
+          score,
+          rows,
+        };
+      }
+    });
+  });
+
+  if (!bestMatch) {
+    throw new Error('Excel şablonunda gerekli sütun başlıkları bulunamadı. Pazar Adı, Bölüm, Yer Rengi, Yer No ve Ad Soyad başlıklarını kontrol edin.');
+  }
+
+  const dataRows = [];
+  for (let index = bestMatch.headerRowIndex + 1; index < bestMatch.rows.length; index += 1) {
+    const row = bestMatch.rows[index] || [];
+    const rowMap = {};
+    Object.entries(bestMatch.headerIndexMap).forEach(([key, columnIndex]) => {
+      rowMap[key] = sanitizeCellValue(row[columnIndex]);
+    });
+
+    const getValue = buildRowAccessor(rowMap);
+    const hasAnyCoreData = [
+      rowMap.marketName,
+      rowMap.sectionType,
+      rowMap.stallColor,
+      rowMap.stallNo,
+      rowMap.fullName,
+      rowMap.identityNumber,
+      rowMap.phone,
+      rowMap.address,
+      rowMap.note,
+      rowMap.documentFolderUrl,
+    ].some((value) => sanitizeCellValue(value));
+    if (!hasAnyCoreData) continue;
+
+    dataRows.push({
+      rowNumber: index + 1,
+      rawRow: {
+        'Pazar Adı': getValue(fieldAliases.marketName),
+        'Bölüm': getValue(fieldAliases.sectionType),
+        'Yer Rengi': getValue(fieldAliases.stallColor),
+        'Yer No': getValue(fieldAliases.stallNo),
+        'Ad Soyad': getValue(fieldAliases.fullName),
+        'T.C. Kimlik No': getValue(fieldAliases.identityNumber),
+        'Telefon': getValue(fieldAliases.phone),
+        'Adres': getValue(fieldAliases.address),
+        'Not': getValue(fieldAliases.note),
+        'Drive Klasörü': getValue(fieldAliases.documentFolderUrl),
+        'Belge Özeti': getValue(fieldAliases.documentSummary),
+        'Kayıt Durumu': getValue(fieldAliases.statusText),
+      },
+    });
+  }
+
+  if (!dataRows.length) {
+    throw new Error('Excel dosyasında başlıklardan sonra okunacak satır bulunamadı.');
+  }
+
+  return dataRows;
 }
 
 function getDocumentFlagsFromImportRow(sectionType, rawRow) {
@@ -78,14 +209,10 @@ function getDocumentFlagsFromImportRow(sectionType, rawRow) {
 
 async function buildVendorImportPreview(pool, fileBuffer) {
   const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
-  const firstSheetName = workbook.SheetNames[0];
-  if (!firstSheetName) {
+  if (!workbook.SheetNames || !workbook.SheetNames.length) {
     throw new Error('Excel dosyasında okunacak sayfa bulunamadı.');
   }
-  const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], { defval: '' });
-  if (!rawRows.length) {
-    throw new Error('Excel dosyasında veri bulunamadı.');
-  }
+  const rawRows = extractVendorImportSheetData(workbook);
 
   const marketRows = await pool.query('SELECT id, name FROM market_places');
   const marketMap = new Map(marketRows.rows.map((row) => [normalizeTextForMatch(row.name), row]));
@@ -107,8 +234,9 @@ async function buildVendorImportPreview(pool, fileBuffer) {
   const warnings = [];
 
   for (let index = 0; index < rawRows.length; index += 1) {
-    const rawRow = rawRows[index] || {};
-    const rowNumber = index + 2;
+    const rowEntry = rawRows[index] || {};
+    const rawRow = rowEntry.rawRow || {};
+    const rowNumber = rowEntry.rowNumber || (index + 2);
     const marketName = pickRowValue(rawRow, ['Pazar Adı', 'Pazar', 'Pazar Yeri', 'Market']);
     const sectionType = pickRowValue(rawRow, ['Bölüm', 'Bolum', 'Section']) || 'Esnaf';
     const stallColor = pickRowValue(rawRow, ['Yer Rengi', 'Numara Rengi', 'Renk', 'Stall Color']);
