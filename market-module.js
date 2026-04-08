@@ -900,6 +900,86 @@ function registerMarketModule({ app, pool }) {
     }
   });
 
+  app.get('/api/markets/attendance-session-detail', async (req, res) => {
+    const marketId = Number(req.query.marketId);
+    const attendanceDate = toInputDate(req.query.date);
+
+    if (!marketId) return res.status(400).json({ error: 'Pazar seçilmelidir.' });
+    if (!attendanceDate) return res.status(400).json({ error: 'Yoklama tarihi zorunludur.' });
+
+    try {
+      const result = await pool.query(
+        `
+          SELECT
+            a.id,
+            a.attendance_date,
+            a.status,
+            a.note,
+            a.updated_at,
+            v.id AS vendor_id,
+            v.full_name AS vendor_name,
+            v.market_id,
+            m.name AS market_name,
+            v.section_type,
+            v.stall_no,
+            v.stall_color
+          FROM market_attendance a
+          INNER JOIN market_vendors v ON v.id = a.vendor_id
+          INNER JOIN market_places m ON m.id = v.market_id
+          WHERE v.market_id = $1
+            AND a.attendance_date = $2
+          ORDER BY v.section_type ASC, NULLIF(v.stall_no, '') ASC, v.full_name ASC
+        `,
+        [marketId, attendanceDate]
+      );
+
+      const rows = result.rows.map((row) => ({
+        id: row.id,
+        attendanceDate: toInputDate(row.attendance_date),
+        attendanceDateText: formatDate(row.attendance_date),
+        status: row.status,
+        note: row.note || '',
+        updatedAt: formatDateTime(row.updated_at),
+        vendorId: row.vendor_id,
+        vendorName: row.vendor_name,
+        marketId: row.market_id,
+        marketName: row.market_name,
+        sectionType: row.section_type,
+        stallLabel: buildStallLabel(row),
+      }));
+
+      const marketName = rows.length ? rows[0].marketName : '';
+      const updatedAt = rows.length ? rows[0].updatedAt : '';
+      let presentCount = 0;
+      let absentCount = 0;
+      let leaveCount = 0;
+      let reportCount = 0;
+      for (const row of rows) {
+        if (row.status === 'Var') presentCount += 1;
+        else if (row.status === 'Yok') absentCount += 1;
+        else if (row.status === 'İzinli') leaveCount += 1;
+        else if (row.status === 'Raporlu') reportCount += 1;
+      }
+
+      res.json({
+        marketId,
+        marketName,
+        attendanceDate,
+        attendanceDateText: formatDate(attendanceDate),
+        updatedAt,
+        recordCount: rows.length,
+        presentCount,
+        absentCount,
+        leaveCount,
+        reportCount,
+        rows,
+      });
+    } catch (error) {
+      console.error('Yoklama oturum detayı alınamadı:', error);
+      res.status(500).json({ error: 'Yoklama oturum detayı alınamadı.' });
+    }
+  });
+
   app.get('/api/markets/attendance-history-summary', async (req, res) => {
     const marketId = String(req.query.marketId || 'all');
     const limit = Math.min(120, Math.max(10, Number(req.query.limit || 40)));
