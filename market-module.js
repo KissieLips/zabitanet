@@ -1,4 +1,5 @@
 const path = require('path');
+const multer = require('multer');
 const XLSX = require('xlsx');
 
 const DISPLAY_TIME_ZONE = process.env.DISPLAY_TIME_ZONE || 'Europe/Istanbul';
@@ -13,6 +14,174 @@ const MARKET_DOCUMENT_LABELS = {
   hasTaxRecord: 'Vergi Kayıt Belgesi',
   hasCksDocument: 'ÇKS Belgesi',
 };
+
+const vendorImportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+function normalizeTextForMatch(value) {
+  return String(value || '')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function sanitizeCellValue(value) {
+  if (value === undefined || value === null) return '';
+  return String(value).trim();
+}
+
+function pickRowValue(row, aliases) {
+  for (const alias of aliases) {
+    if (Object.prototype.hasOwnProperty.call(row, alias)) {
+      const value = sanitizeCellValue(row[alias]);
+      if (value) return value;
+    }
+  }
+  return '';
+}
+
+function getDocumentFlagsFromImportRow(sectionType, rawRow) {
+  const requiredKeys = getRequiredDocumentKeys(sectionType || '');
+  const flags = {
+    hasPhoto: false,
+    hasIdentityCopy: false,
+    hasChamberRecord: false,
+    hasPopulationRecord: false,
+    hasTaxRecord: false,
+    hasCksDocument: false,
+  };
+  const summaryText = normalizeTextForMatch(pickRowValue(rawRow, ['Belge Özeti', 'Belge Durumu', 'Belge', 'Dokuman', 'Doküman']));
+  if (summaryText && ['belge girilmedi', 'yok', 'eksik', '-', 'belgesiz'].includes(summaryText)) {
+    return flags;
+  }
+  Object.keys(flags).forEach((key) => {
+    const label = MARKET_DOCUMENT_LABELS[key];
+    const value = pickRowValue(rawRow, [label, key]);
+    if (value) flags[key] = toBoolean(value);
+  });
+  const hasAnyExplicitFlag = Object.keys(flags).some((key) => flags[key]);
+  if (!hasAnyExplicitFlag && summaryText) {
+    if (['tam', 'tamam', 'tamamlandi', 'tamamlandı', 'eksiksiz'].includes(summaryText)) {
+      requiredKeys.forEach((key) => { flags[key] = true; });
+    }
+  }
+  return flags;
+}
+
+async function buildVendorImportPreview(pool, fileBuffer) {
+  const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+  const firstSheetName = workbook.SheetNames[0];
+  if (!firstSheetName) {
+    throw new Error('Excel dosyasında okunacak sayfa bulunamadı.');
+  }
+  const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], { defval: '' });
+  if (!rawRows.length) {
+    throw new Error('Excel dosyasında veri bulunamadı.');
+  }
+
+  const marketRows = await pool.query('SELECT id, name FROM market_places');
+  const marketMap = new Map(marketRows.rows.map((row) => [normalizeTextForMatch(row.name), row]));
+  const existingVendorRows = await pool.query(`
+    SELECT market_id, section_type, COALESCE(stall_color, '') AS stall_color, COALESCE(stall_no, '') AS stall_no
+    FROM market_vendors
+  `);
+  const existingKeySet = new Set(
+    existingVendorRows.rows.map((row) => [
+      String(row.market_id),
+      normalizeTextForMatch(row.section_type),
+      normalizeTextForMatch(row.stall_color),
+      normalizeTextForMatch(row.stall_no),
+    ].join('|'))
+  );
+
+  const previewRows = [];
+  const fileKeySet = new Set();
+  const warnings = [];
+
+  for (let index = 0; index < rawRows.length; index += 1) {
+    const rawRow = rawRows[index] || {};
+    const rowNumber = index + 2;
+    const marketName = pickRowValue(rawRow, ['Pazar Adı', 'Pazar', 'Pazar Yeri', 'Market']);
+    const sectionType = pickRowValue(rawRow, ['Bölüm', 'Bolum', 'Section']) || 'Esnaf';
+    const stallColor = pickRowValue(rawRow, ['Yer Rengi', 'Numara Rengi', 'Renk', 'Stall Color']);
+    const stallNo = pickRowValue(rawRow, ['Yer No', 'Yer / Tezgâh No', 'Tezgah No', 'Tezgâh No', 'Stall No']);
+    const fullName = pickRowValue(rawRow, ['Ad Soyad', 'Satıcı', 'Satıcı Adı Soyadı', 'Adı Soyadı', 'Full Name']);
+    const identityNumber = pickRowValue(rawRow, ['T.C. Kimlik No', 'TC Kimlik No', 'T.C.', 'TC']);
+    const phone = pickRowValue(rawRow, ['Telefon', 'Cep Telefonu', 'Phone']);
+    const address = pickRowValue(rawRow, ['Adres', 'Address']);
+    const note = pickRowValue(rawRow, ['Not', 'Açıklama', 'Aciklama']);
+    const documentFolderUrl = pickRowValue(rawRow, ['Drive Klasörü', 'Belge Klasörü', 'Klasör Linki', 'Drive']);
+    const statusText = normalizeTextForMatch(pickRowValue(rawRow, ['Kayıt Durumu', 'Durum', 'Aktiflik']));
+    const isActive = !statusText || ['aktif', 'active', '1', 'evet', 'var'].includes(statusText);
+
+    const market = marketMap.get(normalizeTextForMatch(marketName));
+    const normalizedSection = normalizeSectionText(sectionType);
+    const sectionTypeResolved = MARKET_SECTION_ORDER.find((item) => normalizeSectionText(item) === normalizedSection) || sectionType;
+    const documentFlags = getDocumentFlagsFromImportRow(sectionTypeResolved, rawRow);
+
+    const errors = [];
+    if (!marketName) errors.push('Pazar adı boş');
+    if (!market) errors.push('Pazar eşleşmedi');
+    if (!fullName) errors.push('Ad Soyad boş');
+    if (!stallNo) errors.push('Yer No boş');
+    if (!sectionTypeResolved) errors.push('Bölüm boş');
+    if (identityNumber && !/^\d{11}$/.test(identityNumber)) errors.push('TC kimlik no 11 haneli değil');
+
+    const duplicateKey = market ? [
+      String(market.id),
+      normalizeTextForMatch(sectionTypeResolved),
+      normalizeTextForMatch(stallColor),
+      normalizeTextForMatch(stallNo),
+    ].join('|') : '';
+
+    if (duplicateKey && fileKeySet.has(duplicateKey)) errors.push('Dosya içinde aynı yer no tekrar ediyor');
+    if (duplicateKey && existingKeySet.has(duplicateKey)) errors.push('Aynı pazar / bölüm / renk / yer no zaten kayıtlı');
+    if (duplicateKey) fileKeySet.add(duplicateKey);
+
+    const item = {
+      rowNumber,
+      marketId: market ? market.id : null,
+      marketName: market ? market.name : marketName,
+      sectionType: sectionTypeResolved,
+      stallColor,
+      stallNo,
+      fullName,
+      identityNumber,
+      phone,
+      address,
+      note,
+      documentFolderUrl,
+      isActive,
+      hasPhoto: documentFlags.hasPhoto,
+      hasIdentityCopy: documentFlags.hasIdentityCopy,
+      hasChamberRecord: documentFlags.hasChamberRecord,
+      hasPopulationRecord: documentFlags.hasPopulationRecord,
+      hasTaxRecord: documentFlags.hasTaxRecord,
+      hasCksDocument: documentFlags.hasCksDocument,
+      errors,
+    };
+    previewRows.push(item);
+    if (errors.length) {
+      warnings.push('Satır ' + rowNumber + ': ' + errors.join(', '));
+    }
+  }
+
+  return {
+    totalRows: previewRows.length,
+    validRows: previewRows.filter((item) => !item.errors.length).length,
+    invalidRows: previewRows.filter((item) => item.errors.length).length,
+    rows: previewRows,
+    warnings,
+  };
+}
 
 function toInputDate(value) {
   if (!value) return '';
@@ -572,6 +741,96 @@ function registerMarketModule({ app, pool }) {
     } catch (error) {
       console.error('Satıcı Excel çıktısı oluşturulamadı:', error);
       res.status(500).json({ error: 'Satıcı Excel çıktısı oluşturulamadı.' });
+    }
+  });
+
+
+  app.post('/api/markets/vendors/import/preview', vendorImportUpload.single('file'), async (req, res) => {
+    try {
+      if (!req.file || !req.file.buffer) {
+        return res.status(400).json({ error: 'Excel dosyası yüklenmedi.' });
+      }
+      const preview = await buildVendorImportPreview(pool, req.file.buffer);
+      res.json(preview);
+    } catch (error) {
+      console.error('Satıcı import önizlemesi oluşturulamadı:', error);
+      res.status(400).json({ error: error.message || 'Excel dosyası okunamadı.' });
+    }
+  });
+
+  app.post('/api/markets/vendors/import/commit', async (req, res) => {
+    const rows = Array.isArray(req.body && req.body.rows) ? req.body.rows : [];
+    if (!rows.length) {
+      return res.status(400).json({ error: 'İçe aktarılacak satır bulunamadı.' });
+    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      let insertedCount = 0;
+      let skippedCount = 0;
+      const skippedRows = [];
+      for (const item of rows) {
+        const marketId = Number(item.marketId);
+        const fullName = String(item.fullName || '').trim();
+        const sectionType = String(item.sectionType || '').trim() || 'Esnaf';
+        const stallColor = String(item.stallColor || '').trim();
+        const stallNo = String(item.stallNo || '').trim();
+        const duplicateCheck = await client.query(
+          `SELECT id FROM market_vendors WHERE market_id = $1 AND section_type = $2 AND COALESCE(stall_color, '') = $3 AND COALESCE(stall_no, '') = $4 LIMIT 1`,
+          [marketId, sectionType, stallColor, stallNo]
+        );
+        if (!marketId || !fullName || !stallNo || duplicateCheck.rows.length) {
+          skippedCount += 1;
+          skippedRows.push({
+            rowNumber: item.rowNumber || null,
+            fullName,
+            stallNo,
+            reason: duplicateCheck.rows.length ? 'Aynı yer no zaten kayıtlı' : 'Zorunlu alan eksik',
+          });
+          continue;
+        }
+        await client.query(
+          `
+            INSERT INTO market_vendors (
+              market_id, full_name, identity_number, phone, address, section_type, stall_no, stall_color,
+              document_folder_url, has_photo, has_identity_copy, has_chamber_record,
+              has_population_record, has_tax_record, has_cks_document, note, is_active
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6, $7, $8,
+              $9, $10, $11, $12,
+              $13, $14, $15, $16, $17
+            )
+          `,
+          [
+            marketId,
+            fullName,
+            String(item.identityNumber || '').trim() || null,
+            String(item.phone || '').trim() || null,
+            String(item.address || '').trim() || null,
+            sectionType,
+            stallNo,
+            stallColor || null,
+            String(item.documentFolderUrl || '').trim() || null,
+            toBoolean(item.hasPhoto),
+            toBoolean(item.hasIdentityCopy),
+            toBoolean(item.hasChamberRecord),
+            toBoolean(item.hasPopulationRecord),
+            toBoolean(item.hasTaxRecord),
+            toBoolean(item.hasCksDocument),
+            String(item.note || '').trim() || null,
+            item.isActive === undefined ? true : toBoolean(item.isActive),
+          ]
+        );
+        insertedCount += 1;
+      }
+      await client.query('COMMIT');
+      res.status(201).json({ success: true, insertedCount, skippedCount, skippedRows });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Satıcı import kaydı yapılamadı:', error);
+      res.status(500).json({ error: 'Toplu satıcı aktarımı tamamlanamadı.' });
+    } finally {
+      client.release();
     }
   });
 
