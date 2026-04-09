@@ -63,7 +63,7 @@
     .filters.vendor { grid-template-columns: 170px 150px 150px 150px minmax(220px, 1fr) auto; }
     .filters.leave { grid-template-columns: 170px 150px 170px auto; }
     .filters.attendance { grid-template-columns: 200px 170px auto auto auto; }
-    .filters.attendance-quick { grid-template-columns: 170px 170px minmax(220px, 1fr) auto; margin-top: 10px; }
+    .filters.attendance-quick { grid-template-columns: 160px 160px 170px minmax(220px, 1fr) auto; margin-top: 10px; }
     .attendance-shell { display: grid; gap: 12px; }
     .attendance-shell.hidden, .hidden { display: none; }
     .attendance-list-summary { font-size: 12.5px; color: var(--muted); }
@@ -72,6 +72,7 @@
     .fixed-list-wrap table { min-width: 1080px; }
     .fixed-list-wrap.vendor-wrap table { min-width: 1080px; }
     .fixed-list-wrap.leave-wrap table { min-width: 980px; }
+    .fixed-list-wrap.history-wrap table { min-width: 940px; }
     .attendance-closed-box { padding: 18px; }
     input[type="text"], input[type="date"], select, textarea {
       width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; background: #fff; color: var(--text);
@@ -355,6 +356,13 @@
               <option value="Üretici">Üretici</option>
               <option value="Tuhafiye">Tuhafiye</option>
             </select>
+            <select id="attendanceColorFilter" onchange="onAttendanceFilterChange()">
+              <option value="all">Tüm Renkler</option>
+              <option value="Yeşil">Yeşil</option>
+              <option value="Kırmızı">Kırmızı</option>
+              <option value="Mavi">Mavi</option>
+              <option value="Renksiz">Renksiz</option>
+            </select>
             <select id="attendanceStatusFilter" onchange="onAttendanceFilterChange()">
               <option value="all">Tüm Durumlar</option>
               <option value="Var">Var</option>
@@ -394,7 +402,7 @@
             <div class="panel-subtitle">Geçmiş yoklamalar tarih bazlı listelenir. Buradan düzenleme için açabilir veya seçilen tarihin tüm yoklamasını tek işlemde silebilirsin.</div>
           </div>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap fixed-list-wrap history-wrap">
           <table>
             <thead>
               <tr>
@@ -689,7 +697,30 @@
       return normalizeVendorSortText(a.fullName).localeCompare(normalizeVendorSortText(b.fullName), 'tr');
     }
 
+    function getSectionSortValue(value) {
+      var map = { 'Esnaf': 1, 'Üretici': 2, 'Tuhafiye': 3 };
+      return map[String(value || '').trim()] || 99;
+    }
+
+    function getStallColorSortValue(sectionType, stallColor) {
+      var color = String(stallColor || '').trim().toLocaleLowerCase('tr-TR');
+      if (String(sectionType || '').trim() === 'Üretici') {
+        if (color === 'yeşil') return 1;
+        if (color === 'kırmızı') return 2;
+      }
+      if (color === 'mavi') return 3;
+      if (color === 'renksiz') return 4;
+      if (!color) return 5;
+      return 6;
+    }
+
     function compareAttendanceRowsByStall(a, b) {
+      var aSection = getSectionSortValue(a.sectionType);
+      var bSection = getSectionSortValue(b.sectionType);
+      if (aSection !== bSection) return aSection - bSection;
+      var aColor = getStallColorSortValue(a.sectionType, a.stallColor);
+      var bColor = getStallColorSortValue(b.sectionType, b.stallColor);
+      if (aColor !== bColor) return aColor - bColor;
       var aNo = extractLeadingNumber(a.stallNo || a.stallLabel);
       var bNo = extractLeadingNumber(b.stallNo || b.stallLabel);
       if (aNo !== bNo) return aNo - bNo;
@@ -787,6 +818,7 @@
 
     function clearAttendanceFilters() {
       document.getElementById('attendanceSectionFilter').value = 'all';
+      document.getElementById('attendanceColorFilter').value = 'all';
       document.getElementById('attendanceStatusFilter').value = 'all';
       document.getElementById('attendanceSearchInput').value = '';
       renderAttendanceSheet();
@@ -794,15 +826,17 @@
 
     function getFilteredAttendanceRows() {
       var section = document.getElementById('attendanceSectionFilter').value;
+      var colorFilter = document.getElementById('attendanceColorFilter').value;
       var statusFilter = document.getElementById('attendanceStatusFilter').value;
       var search = document.getElementById('attendanceSearchInput').value.trim().toLocaleLowerCase('tr-TR');
       return attendanceSheet.filter(function(item) {
         var selected = item.selectedStatus || '';
         var matchesSection = section === 'all' || item.sectionType === section;
+        var matchesColor = colorFilter === 'all' || (item.stallColor || '') === colorFilter;
         var matchesStatus = statusFilter === 'all' || (statusFilter === 'empty' ? !selected : selected === statusFilter);
-        var searchText = [item.vendorName, item.marketName, item.sectionType, item.stallLabel, item.stallNo, item.note].join(' ').toLocaleLowerCase('tr-TR');
+        var searchText = [item.vendorName, item.marketName, item.sectionType, item.stallColor, item.stallLabel, item.stallNo, item.note].join(' ').toLocaleLowerCase('tr-TR');
         var matchesSearch = !search || searchText.indexOf(search) !== -1;
-        return matchesSection && matchesStatus && matchesSearch;
+        return matchesSection && matchesColor && matchesStatus && matchesSearch;
       }).sort(compareAttendanceRowsByStall);
     }
 
@@ -986,7 +1020,7 @@
         return;
       }
       var rows = getFilteredAttendanceRows();
-      if (infoBox) infoBox.textContent = 'Toplam ' + attendanceSheet.length + ' satıcı var. Filtreye göre ' + rows.length + ' satır gösteriliyor. Liste yer numarasına göre sıralanır.';
+      if (infoBox) infoBox.textContent = 'Toplam ' + attendanceSheet.length + ' satıcı var. Filtreye göre ' + rows.length + ' satır gösteriliyor. Liste bölüm, renk ve yer numarasına göre sıralanır. Üreticide önce Yeşil, sonra Kırmızı gelir.';
       if (!rows.length) {
         body.innerHTML = '<tr><td colspan="5"><div class="empty-state">Bu filtreye uygun yoklama satırı bulunmuyor.</div></td></tr>';
         renderAttendancePagination(0, 0, 1, 0, 0);
