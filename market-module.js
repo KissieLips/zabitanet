@@ -1287,7 +1287,7 @@ function registerMarketModule({ app, pool }) {
           ) lr ON TRUE
           WHERE v.market_id = $1
             AND (v.is_active = TRUE OR a.id IS NOT NULL)
-          ORDER BY v.section_type ASC, NULLIF(v.stall_no, '') ASC, v.full_name ASC
+          ORDER BY v.section_type ASC, COALESCE(NULLIF(substring(COALESCE(v.stall_no, '') FROM '\d+'), ''), '999999')::int ASC, NULLIF(v.stall_no, '') ASC, v.full_name ASC
         `,
         [marketId, attendanceDate]
       );
@@ -1422,7 +1422,7 @@ function registerMarketModule({ app, pool }) {
           INNER JOIN market_places m ON m.id = v.market_id
           WHERE v.market_id = $1
             AND a.attendance_date = $2
-          ORDER BY v.section_type ASC, NULLIF(v.stall_no, '') ASC, v.full_name ASC
+          ORDER BY v.section_type ASC, COALESCE(NULLIF(substring(COALESCE(v.stall_no, '') FROM '\d+'), ''), '999999')::int ASC, NULLIF(v.stall_no, '') ASC, v.full_name ASC
         `,
         [marketId, attendanceDate]
       );
@@ -1503,7 +1503,7 @@ function registerMarketModule({ app, pool }) {
           INNER JOIN market_places m ON m.id = v.market_id
           WHERE v.market_id = $1
             AND a.attendance_date = $2
-          ORDER BY v.section_type ASC, NULLIF(v.stall_no, '') ASC, v.full_name ASC
+          ORDER BY v.section_type ASC, COALESCE(NULLIF(substring(COALESCE(v.stall_no, '') FROM '\d+'), ''), '999999')::int ASC, NULLIF(v.stall_no, '') ASC, v.full_name ASC
         `,
         [marketId, attendanceDate]
       );

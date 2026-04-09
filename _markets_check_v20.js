@@ -1,629 +1,4 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Zabıta Yönetim Sistemi - Pazar Yönetimi</title>
-  <style>
-    :root {
-      --bg: #f4f7fb;
-      --panel: #ffffff;
-      --panel-soft: #f8fafc;
-      --line: #dbe3ee;
-      --text: #17202f;
-      --muted: #667085;
-      --primary: #2563eb;
-      --danger: #dc2626;
-      --warning: #f59e0b;
-      --success: #16a34a;
-      --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-    }
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: Inter, "Segoe UI", Arial, sans-serif; background: #f3f6fa; color: var(--text); }
-    .app { min-height: 100vh; display: block; }
-    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #fff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: fixed; left: 0; top: 0; bottom: 0; width: min(84vw, 320px); height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); z-index: 60; transform: translateX(-100%); transition: transform 0.22s ease; box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18); overflow-y: auto; }
-    body.sidebar-open { overflow: hidden; }
-    body.sidebar-open .sidebar { transform: translateX(0); }
-    .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-    .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.16); }
-    .brand { font-size: 14px; font-weight: 700; line-height: 1.3; }
-    .brand-sub { font-size: 10.5px; color: rgba(255,255,255,0.62); line-height: 1.45; }
-    .nav-section-title { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.42); margin-top: 6px; padding: 0 2px; font-weight: 700; }
-    .menu { display: flex; flex-direction: column; gap: 4px; }
-    .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border-radius: 10px; font-size: 12.5px; text-decoration: none; color: rgba(255,255,255,0.84); transition: 0.18s ease; border: 1px solid transparent; font-weight: 500; }
-    .menu-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.08); }
-    .menu-item.active { background: rgba(255,255,255,0.08); color: #ffffff; border-color: rgba(255,255,255,0.1); font-weight: 600; }
-    .menu-left { display: inline-flex; align-items: center; gap: 8px; }
-    .sidebar-toggle { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px; border: 1px solid var(--line); background: #ffffff; color: var(--text); border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 700; box-shadow: var(--shadow); cursor: pointer; }
-    .sidebar-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); opacity: 0; pointer-events: none; transition: opacity 0.18s ease; z-index: 50; }
-    body.sidebar-open .sidebar-backdrop { opacity: 1; pointer-events: auto; }
-    .main { padding: 18px 20px; min-width: 0; }
-    .hero, .panel, .stat-card, .market-card { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
-    .hero { padding: 16px 18px; display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 12px; }
-    .hero-title { margin: 0; font-size: 26px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 700; }
-    .hero-text { margin: 6px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.6; max-width: 860px; }
-    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
-    .btn { border: none; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; transition: 0.15s ease; }
-    .btn:hover { transform: translateY(-1px); opacity: 0.96; }
-    .btn-primary { background: var(--primary); color: #fff; }
-    .btn-secondary { background: #64748b; color: #fff; }
-    .btn-ghost { background: #eef2ff; color: #1d4ed8; border: 1px solid #dbe7ff; }
-    .btn-danger { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
-    .btn-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-    .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
-    .stat-card { padding: 14px; display: grid; gap: 7px; }
-    .stat-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
-    .stat-value { font-size: 22px; font-weight: 700; line-height: 1.05; }
-    .stat-sub { font-size: 12px; color: var(--muted); }
-    .panel { padding: 16px; margin-bottom: 12px; }
-    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
-    .panel-title { font-size: 15px; font-weight: 700; }
-    .panel-subtitle { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
-    .filters { display: grid; gap: 10px; align-items: center; }
-    .filters.vendor { grid-template-columns: 170px 150px 150px 150px minmax(220px, 1fr) auto; }
-    .filters.leave { grid-template-columns: 170px 150px 170px auto; }
-    .filters.attendance { grid-template-columns: 200px 170px auto auto auto; }
-    .filters.attendance-quick { grid-template-columns: 170px 170px minmax(220px, 1fr) auto; margin-top: 10px; }
-    .attendance-shell { display: grid; gap: 12px; }
-    .attendance-shell.hidden, .hidden { display: none; }
-    .attendance-list-summary { font-size: 12.5px; color: var(--muted); }
-    .attendance-table-wrap { overflow-x: auto; overflow-y: visible; }
-    .attendance-closed-box { padding: 18px; }
-    input[type="text"], input[type="date"], select, textarea {
-      width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; background: #fff; color: var(--text);
-    }
-    input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
-    textarea { resize: vertical; min-height: 88px; }
-    .market-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-    .market-card { padding: 16px; display: grid; gap: 12px; }
-    .market-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
-    .market-name { font-size: 18px; font-weight: 700; line-height: 1.3; }
-    .market-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
-    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-    .badge.success { background: #dcfce7; color: #166534; }
-    .badge.warn { background: #fef3c7; color: #92400e; }
-    .badge.danger { background: #fee2e2; color: #b91c1c; }
-    .badge.info { background: #dbeafe; color: #1d4ed8; }
-    .badge.gray { background: #e5e7eb; color: #374151; }
-    .mini-btn { border: 1px solid var(--line); background: #fff; border-radius: 9px; padding: 7px 10px; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none; color: #111827; display: inline-flex; align-items: center; gap: 6px; }
-    .mini-btn.primary { border-color: #cfe0ff; color: #1d4ed8; background: #eef4ff; }
-    .mini-btn.warn { border-color: #fde68a; color: #92400e; background: #fffbeb; }
-    .pagination-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 6px 2px; flex-wrap: wrap; }
-    .pagination-info { font-size: 12px; color: var(--muted); }
-    .pagination-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .page-btn { min-width: 38px; justify-content: center; }
-    .page-btn.active { background: #eef4ff; border-color: #cfe0ff; color: #1d4ed8; }
-    .page-sep { color: var(--muted); font-size: 12px; padding: 0 4px; }
-    .market-sections { display: grid; gap: 8px; }
-    .section-line { display: flex; justify-content: space-between; gap: 12px; background: #f8fafc; border-radius: 10px; padding: 10px 12px; border: 1px solid #edf2f7; }
-    .section-label { font-weight: 700; font-size: 12.5px; }
-    .section-sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
-    .empty-state { border: 1px dashed var(--line); border-radius: 12px; background: #fbfdff; padding: 22px; text-align: center; color: var(--muted); font-size: 13px; }
-    .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
-    table { width: 100%; border-collapse: collapse; min-width: 1080px; }
-    th, td { padding: 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; text-align: left; vertical-align: top; }
-    th { background: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); position: sticky; top: 0; z-index: 1; }
-    tbody tr:hover { background: #f8fbff; }
-    .cell-title { font-weight: 700; line-height: 1.45; }
-    .cell-sub { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 4px; }
-    .stack { display: grid; gap: 4px; }
-    .doc-list { display: flex; gap: 6px; flex-wrap: wrap; }
-    .doc-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 600; border: 1px solid #e5e7eb; }
-    .doc-chip.ok { background: #effcf3; color: #166534; border-color: #bbf7d0; }
-    .doc-chip.missing { background: #fff1f2; color: #b91c1c; border-color: #fecdd3; }
-    .status-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
-    .status-btn { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
-    .status-btn:disabled { cursor: not-allowed; opacity: 0.55; background: #f8fafc; }
-    .status-btn.locked { border-style: dashed; }
-    .status-btn.active.var { background: #dcfce7; border-color: #bbf7d0; color: #166534; }
-    .status-btn.active.yok { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }
-    .status-btn.active.izinli { background: #dbeafe; border-color: #bfdbfe; color: #1d4ed8; }
-    .status-btn.active.raporlu { background: #fef3c7; border-color: #fde68a; color: #92400e; }
-    .attendance-note { min-width: 180px; }
-    .attendance-detail-modal { width: min(1120px, 96vw); }
-    .attendance-detail-modal .table-wrap { overflow-x: hidden; }
-    .attendance-detail-modal table { min-width: 0; table-layout: fixed; }
-    .attendance-detail-modal th, .attendance-detail-modal td { word-break: break-word; }
-    .attendance-detail-modal th:nth-child(1), .attendance-detail-modal td:nth-child(1) { width: 27%; }
-    .attendance-detail-modal th:nth-child(2), .attendance-detail-modal td:nth-child(2) { width: 23%; }
-    .attendance-detail-modal th:nth-child(3), .attendance-detail-modal td:nth-child(3) { width: 12%; }
-    .attendance-detail-modal th:nth-child(4), .attendance-detail-modal td:nth-child(4) { width: 18%; }
-    .attendance-detail-modal th:nth-child(5), .attendance-detail-modal td:nth-child(5) { width: 20%; }
-    .banner { padding: 12px 14px; border-radius: 12px; margin-bottom: 12px; font-size: 13px; display: none; }
-    .banner.show { display: block; }
-    .banner.info { background: #eef4ff; color: #1d4ed8; border: 1px solid #dbeafe; }
-    .banner.warn { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
-    .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: none; align-items: center; justify-content: center; padding: 18px; z-index: 90; }
-    .modal-overlay.show { display: flex; }
-    .modal { width: min(980px, 96vw); max-height: 92vh; overflow: auto; background: #fff; border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 18px 60px rgba(15,23,42,0.18); }
-    .modal.small { width: min(740px, 96vw); }
-    .modal-header { padding: 18px 20px 12px; border-bottom: 1px solid #edf2f7; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-    .modal-title { font-size: 18px; font-weight: 700; }
-    .modal-subtitle { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
-    .modal-body { padding: 18px 20px; display: grid; gap: 18px; }
-    .modal-footer { padding: 14px 20px 20px; display: flex; justify-content: flex-end; gap: 8px; }
-    .close-btn { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 9px 12px; font-weight: 700; cursor: pointer; }
-    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-    .form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .form-row-wide { grid-column: 1 / -1; }
-    .field label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 6px; color: #334155; }
-    .field-hint { font-size: 12px; color: var(--muted); margin-top: 5px; line-height: 1.5; }
-    .checkbox-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-    .checkbox-card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 12px; background: #f8fafc; display: flex; align-items: center; gap: 10px; }
-    .checkbox-card input { width: 18px; height: 18px; }
-    .modal-section { border: 1px solid #eef2f7; border-radius: 14px; padding: 16px; background: #fbfdff; }
-    .modal-section-title { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
-    .import-summary { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-    .import-summary .doc-chip.warn { background:#fff7ed; border-color:#fed7aa; color:#9a3412; }
-    .import-table-wrap { max-height: 340px; overflow:auto; border:1px solid #e5e7eb; border-radius: 12px; }
-    .import-table-wrap table { min-width: 760px; }
-    .import-help { font-size:12.5px; color: var(--muted); line-height:1.55; }
-    .status-pill { display:inline-flex; align-items:center; padding:4px 8px; border-radius:999px; font-size:11px; font-weight:700; border:1px solid #dbe3ef; background:#f8fbff; }
-    .status-pill.ok { background:#ecfdf3; color:#166534; border-color:#b7ebc6; }
-    .status-pill.err { background:#fff1f2; color:#be123c; border-color:#fecdd3; }
-    .muted { color: var(--muted); }
-    @media (max-width: 1220px) {
-      .market-grid { grid-template-columns: 1fr; }
-      .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .filters.vendor, .filters.leave, .filters.attendance { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
-    @media (max-width: 860px) {
-      .main { padding: 14px; }
-      .stats-grid, .filters.vendor, .filters.leave, .filters.attendance, .filters.attendance-quick, .form-grid, .form-grid.three, .checkbox-grid { grid-template-columns: 1fr; }
-      .hero-title { font-size: 22px; }
-      .modal { width: 100%; }
-    }
-  </style>
-</head>
-<body>
-  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
-  <div class="app">
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-top"><div class="brand-mark">ZB</div><div><div class="brand">Zabıta Yönetim Sistemi</div><div class="brand-sub">Kurumsal takip ve saha yönetimi</div></div></div>
-      <div class="nav-section-title">Modüller</div>
-      <nav class="menu">
-        <a href="/" class="menu-item"><span class="menu-left"><span>📌</span><span>Şikayet Takip</span></span></a>
-        <a href="/businesses" class="menu-item"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
-        <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
-        <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
-        <a href="/markets" class="menu-item active"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
-      </nav>
-    </aside>
-    <main class="main">
-      <button class="sidebar-toggle" type="button" onclick="toggleSidebar()">☰ Modüller</button>
-      <section class="hero">
-        <div>
-          <h1 class="hero-title">Pazar Yönetim Modülü</h1>
-          <p class="hero-text">Perşembe Pazarı ve Pazar Pazarı için satıcı bilgileri, belge takibi, tezgâh / yer numarası, izin-rapor kayıtları ve haftalık yoklama bu modülden yönetilir. Cumartesi Pazarı şimdilik pasif kayıt olarak hazır tutulur.</p>
-        </div>
-        <div class="toolbar">
-          <a class="btn btn-ghost" href="/markets/mobile-attendance">Mobil Yoklama</a>
-          <button class="btn btn-secondary" type="button" onclick="reloadAll()">Yenile</button>
-          <button class="btn btn-ghost" type="button" onclick="scrollToAttendance()">Yoklama Paneline Git</button>
-          <button class="btn btn-primary" type="button" onclick="openVendorModal()">+ Yeni Satıcı</button>
-        </div>
-      </section>
 
-      <div class="banner info" id="topBanner"></div>
-
-      <section class="stats-grid">
-        <div class="stat-card"><div class="stat-label">Aktif Pazar</div><div class="stat-value" id="statActiveMarkets">0</div><div class="stat-sub">Şu an aktif kullanılan pazar yeri</div></div>
-        <div class="stat-card"><div class="stat-label">Toplam Satıcı</div><div class="stat-value" id="statTotalVendors">0</div><div class="stat-sub">Sistemdeki kayıtlı satıcı adedi</div></div>
-        <div class="stat-card"><div class="stat-label">Eksik Belge</div><div class="stat-value" id="statMissingDocs">0</div><div class="stat-sub">Belgesi eksik görünen satıcı sayısı</div></div>
-        <div class="stat-card"><div class="stat-label">Seçili Günde İzin / Rapor</div><div class="stat-value" id="statOnLeave">0</div><div class="stat-sub">Yoklama ekranında otomatik işaretlenen kayıt</div></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">Pazar Yerleri Özeti</div>
-            <div class="panel-subtitle">Pazar günleri, aktif / pasif durumu, bölüm kapasiteleri ve mevcut satıcı sayısı tek ekranda görülür.</div>
-          </div>
-        </div>
-        <div id="marketGrid" class="market-grid"></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">Satıcı Kayıtları</div>
-            <div class="panel-subtitle">Satıcı bilgileri, tezgâh / yer numarası ve Drive belge klasörü bağlantısı burada tutulur.</div>
-          </div>
-          <div class="toolbar">
-            <button class="btn btn-ghost" type="button" onclick="downloadVendorExportExcel()">Excel İndir</button>
-            <button class="btn btn-secondary" type="button" onclick="printVendorReport()">PDF / Yazdır</button>
-            <button class="btn btn-secondary" type="button" onclick="openVendorImportModal()">Excel’den Toplu Aktar</button>
-            <button class="btn btn-primary" type="button" onclick="openVendorModal()">+ Yeni Satıcı</button>
-          </div>
-        </div>
-        <div class="filters vendor">
-          <select id="vendorMarketFilter" onchange="onVendorFilterChange()"></select>
-          <select id="vendorSectionFilter" onchange="onVendorFilterChange()">
-            <option value="all">Tüm Bölümler</option>
-            <option value="Esnaf">Esnaf</option>
-            <option value="Üretici">Üretici</option>
-            <option value="Tuhafiye">Tuhafiye</option>
-          </select>
-          <select id="vendorStatusFilter" onchange="onVendorFilterChange()">
-            <option value="all">Tüm Durumlar</option>
-            <option value="active">Aktif Satıcı</option>
-            <option value="passive">Pasif Satıcı</option>
-          </select>
-          <select id="vendorDocFilter" onchange="onVendorFilterChange()">
-            <option value="all">Belge Durumu</option>
-            <option value="complete">Belgeleri Tam</option>
-            <option value="missing">Belgesi Eksik</option>
-          </select>
-          <input type="text" id="vendorSearchInput" placeholder="Ad, TC, telefon, adres veya yer no ara" oninput="onVendorFilterChange()" />
-          <button class="btn btn-secondary" type="button" onclick="clearVendorFilters()">Temizle</button>
-        </div>
-        <div class="table-wrap" style="margin-top: 12px;">
-          <table>
-            <thead>
-              <tr>
-                <th>Satıcı</th>
-                <th>Pazar</th>
-                <th>Bölüm / Yer</th>
-                <th>Belge Özeti</th>
-                <th>Drive / Not</th>
-                <th>İşlem</th>
-              </tr>
-            </thead>
-            <tbody id="vendorTableBody">
-              <tr><td colspan="6"><div class="empty-state">Satıcı listesi yükleniyor...</div></td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="pagination-bar" id="vendorPaginationBar">
-          <div class="pagination-info" id="vendorPaginationInfo">Toplam 0 kayıt</div>
-          <div class="pagination-controls" id="vendorPaginationControls"></div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">İzin / Rapor Takibi</div>
-            <div class="panel-subtitle">Satıcı izin ve rapor aralıklarını girerek yoklama ekranında otomatik işaretleme yapılmasını sağlayabilirsin.</div>
-          </div>
-          <div class="toolbar">
-            <button class="btn btn-primary" type="button" onclick="openLeaveModal()">+ İzin / Rapor Ekle</button>
-          </div>
-        </div>
-        <div class="filters leave">
-          <select id="leaveMarketFilter" onchange="renderLeaveTable()"></select>
-          <select id="leaveTypeFilter" onchange="renderLeaveTable()">
-            <option value="all">Tüm Türler</option>
-            <option value="İzinli">İzinli</option>
-            <option value="Raporlu">Raporlu</option>
-          </select>
-          <select id="leaveActiveFilter" onchange="renderLeaveTable()">
-            <option value="all">Tüm Kayıtlar</option>
-            <option value="active">Şu an aktif olanlar</option>
-          </select>
-          <button class="btn btn-secondary" type="button" onclick="clearLeaveFilters()">Temizle</button>
-        </div>
-        <div class="table-wrap" style="margin-top: 12px;">
-          <table>
-            <thead>
-              <tr>
-                <th>Satıcı</th>
-                <th>Pazar</th>
-                <th>Tür</th>
-                <th>Tarih Aralığı</th>
-                <th>Açıklama</th>
-                <th>İşlem</th>
-              </tr>
-            </thead>
-            <tbody id="leaveTableBody">
-              <tr><td colspan="6"><div class="empty-state">İzin / rapor kayıtları yükleniyor...</div></td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="panel" id="attendancePanel">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">Yoklama Paneli</div>
-            <div class="panel-subtitle" id="attendancePanelSubtitle">Panel kapalı. Yeni yoklama başlatabilir veya geçmişten bir yoklamayı düzenleyebilirsin.</div>
-          </div>
-          <div class="toolbar">
-            <span class="badge gray" id="attendancePanelState">Kapalı</span>
-            <button class="btn btn-success" type="button" onclick="openAttendancePanelForNewSession()">Yeni Yoklama Aç</button>
-            <button class="btn btn-secondary" type="button" onclick="loadAttendanceSheet()">Listeyi Yenile</button>
-            <button class="btn btn-primary" type="button" onclick="saveAttendanceSheet()">Kaydet ve Kapat</button>
-            <button class="btn btn-ghost" type="button" onclick="closeAttendancePanel()">Paneli Kapat</button>
-          </div>
-        </div>
-        <div id="attendanceClosedState" class="empty-state attendance-closed-box">Yoklama paneli şu an kapalı. Yeni yoklama açabilir veya aşağıdaki geçmiş listesinden bir tarihi düzenlemek için seçebilirsin.</div>
-        <div id="attendancePanelBody" class="attendance-shell hidden">
-          <div class="toolbar">
-            <button class="btn btn-success" type="button" onclick="markAllAttendance('Var')">Hepsini Var Yap</button>
-          </div>
-          <div class="filters attendance">
-            <select id="attendanceMarketFilter" onchange="handleAttendanceMarketChange()"></select>
-            <input type="date" id="attendanceDate" onchange="handleAttendanceDateChange()" />
-            <button class="btn btn-secondary" type="button" onclick="setSuggestedDateForSelectedMarket(true)">Pazar Gününe Getir</button>
-            <button class="btn btn-ghost" type="button" onclick="copySelectedDateInfo()">Tarih Bilgisi</button>
-            <div class="muted" id="attendanceDayInfo"></div>
-          </div>
-          <div class="filters attendance-quick">
-            <select id="attendanceSectionFilter" onchange="onAttendanceFilterChange()">
-              <option value="all">Tüm Bölümler</option>
-              <option value="Esnaf">Esnaf</option>
-              <option value="Üretici">Üretici</option>
-              <option value="Tuhafiye">Tuhafiye</option>
-            </select>
-            <select id="attendanceStatusFilter" onchange="onAttendanceFilterChange()">
-              <option value="all">Tüm Durumlar</option>
-              <option value="Var">Var</option>
-              <option value="Yok">Yok</option>
-              <option value="İzinli">İzinli</option>
-              <option value="Raporlu">Raporlu</option>
-              <option value="empty">Henüz seçilmedi</option>
-            </select>
-            <input type="text" id="attendanceSearchInput" oninput="onAttendanceFilterChange()" placeholder="Satıcı adı veya yer no ara" />
-            <button class="btn btn-secondary" type="button" onclick="clearAttendanceFilters()">Filtreleri Temizle</button>
-          </div>
-          <div class="banner warn" id="attendanceWarning"></div>
-          <div class="attendance-list-summary" id="attendanceListInfo"></div>
-          <div class="table-wrap attendance-table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Satıcı</th>
-                  <th>Bölüm / Yer</th>
-                  <th>Otomatik Bilgi</th>
-                  <th>Yoklama</th>
-                  <th>Not</th>
-                </tr>
-              </thead>
-              <tbody id="attendanceTableBody">
-                <tr><td colspan="5"><div class="empty-state">Yoklama listesi yükleniyor...</div></td></tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="pagination-bar" id="attendancePaginationBar">
-            <div class="pagination-info" id="attendancePaginationInfo">Toplam 0 kayıt</div>
-            <div class="pagination-controls" id="attendancePaginationControls"></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <div class="panel-title">Yoklama Geçmişi</div>
-            <div class="panel-subtitle">Geçmiş yoklamalar tarih bazlı listelenir. Buradan düzenleme için açabilir veya seçilen tarihin tüm yoklamasını tek işlemde silebilirsin.</div>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Tarih</th>
-                <th>Pazar</th>
-                <th>Kayıt Özeti</th>
-                <th>Son Güncelleme</th>
-                <th>İşlem</th>
-              </tr>
-            </thead>
-            <tbody id="historyTableBody">
-              <tr><td colspan="5"><div class="empty-state">Yoklama geçmişi yükleniyor...</div></td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </main>
-  </div>
-
-  <div class="modal-overlay" id="vendorModal" onclick="closeModalOnOverlay(event, 'vendorModal')">
-    <div class="modal">
-      <div class="modal-header">
-        <div>
-          <div class="modal-title" id="vendorModalTitle">Yeni Satıcı Kaydı</div>
-          <div class="modal-subtitle">Satıcı bilgileri, yer numarası ve belge durumu bu formdan kaydedilir.</div>
-        </div>
-        <button class="close-btn" type="button" onclick="closeModal('vendorModal')">Kapat</button>
-      </div>
-      <div class="modal-body">
-        <div class="modal-section">
-          <div class="modal-section-title">Temel Bilgiler</div>
-          <div class="form-grid three">
-            <div class="field"><label for="vendorMarketId">Pazar Yeri *</label><select id="vendorMarketId"></select></div>
-            <div class="field"><label for="vendorFullName">Ad Soyad *</label><input type="text" id="vendorFullName" placeholder="Satıcı adı soyadı" /></div>
-            <div class="field"><label for="vendorIdentityNumber">TC Kimlik No</label><input type="text" id="vendorIdentityNumber" maxlength="11" placeholder="11 haneli" /></div>
-            <div class="field"><label for="vendorPhone">Telefon</label><input type="text" id="vendorPhone" placeholder="05xx xxx xx xx" /></div>
-            <div class="field"><label for="vendorSectionType">Bölüm *</label><select id="vendorSectionType" onchange="updateVendorDocumentHint()"><option value="Esnaf">Esnaf</option><option value="Üretici">Üretici</option><option value="Tuhafiye">Tuhafiye</option></select></div>
-            <div class="field"><label for="vendorStatus">Kayıt Durumu</label><select id="vendorStatus"><option value="true">Aktif</option><option value="false">Pasif</option></select></div>
-            <div class="field"><label for="vendorStallColor">Numara Rengi</label><select id="vendorStallColor"><option value="">Seçilmedi</option><option value="Mavi">Mavi</option><option value="Yeşil">Yeşil</option><option value="Kırmızı">Kırmızı</option><option value="Renksiz">Renksiz</option></select></div>
-            <div class="field"><label for="vendorStallNo">Yer / Tezgâh No</label><input type="text" id="vendorStallNo" placeholder="Örn: 15" /></div>
-            <div class="field form-row-wide"><label for="vendorAddress">Adres</label><textarea id="vendorAddress" placeholder="Satıcının açık adresi"></textarea></div>
-          </div>
-        </div>
-        <div class="modal-section">
-          <div class="modal-section-title">Belge ve Drive Bilgisi</div>
-          <div class="form-grid">
-            <div class="field form-row-wide"><label for="vendorDocumentFolderUrl">Drive Klasör Linki</label><input type="text" id="vendorDocumentFolderUrl" placeholder="https://drive.google.com/..." /><div class="field-hint">Sistemi hafif tutmak için dosyaları doğrudan Drive klasöründe saklayıp burada linkini tutabilirsin.</div></div>
-          </div>
-          <div class="field-hint" id="vendorDocumentHint"></div>
-          <div class="checkbox-grid" style="margin-top: 12px;">
-            <label class="checkbox-card"><input type="checkbox" id="hasPhoto" />Fotoğraf</label>
-            <label class="checkbox-card"><input type="checkbox" id="hasIdentityCopy" />Kimlik Fotokopisi</label>
-            <label class="checkbox-card"><input type="checkbox" id="hasChamberRecord" />Oda Kayıt Belgesi</label>
-            <label class="checkbox-card"><input type="checkbox" id="hasPopulationRecord" />Nüfus Kayıt Belgesi</label>
-            <label class="checkbox-card"><input type="checkbox" id="hasTaxRecord" />Vergi Kayıt Belgesi</label>
-            <label class="checkbox-card"><input type="checkbox" id="hasCksDocument" />ÇKS Belgesi</label>
-          </div>
-        </div>
-        <div class="modal-section">
-          <div class="modal-section-title">Ek Not</div>
-          <div class="field"><label for="vendorNote">Not</label><textarea id="vendorNote" placeholder="Kısa açıklama veya dosya notu"></textarea></div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" type="button" onclick="closeModal('vendorModal')">Vazgeç</button>
-        <button class="btn btn-primary" type="button" onclick="saveVendor()">Kaydet</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="vendorImportModal" onclick="closeModalOnOverlay(event, 'vendorImportModal')">
-    <div class="modal">
-      <div class="modal-header">
-        <div>
-          <div class="modal-title">Excel’den Toplu Satıcı Aktar</div>
-          <div class="modal-subtitle">Hazır Excel şablonunu yükleyip satırları önizleyebilir, uygun kayıtları tek seferde içeri alabilirsin.</div>
-        </div>
-        <button class="close-btn" type="button" onclick="closeModal('vendorImportModal')">Kapat</button>
-      </div>
-      <div class="modal-body">
-        <div class="modal-section">
-          <div class="modal-section-title">Dosya Yükleme</div>
-          <div class="form-grid">
-            <div class="field form-row-wide">
-              <label for="vendorImportFile">Excel Dosyası</label>
-              <input type="file" id="vendorImportFile" accept=".xlsx,.xls" />
-              <div class="field-hint">Şablondaki sütunlar: Pazar Adı, Bölüm, Yer Rengi, Yer No, Ad Soyad. Diğer alanlar boş olabilir.</div>
-            </div>
-          </div>
-          <div class="toolbar" style="margin-top:12px;">
-            <button class="btn btn-secondary" type="button" onclick="previewVendorImport()">Önizleme Oluştur</button>
-          </div>
-          <div class="import-summary" id="vendorImportSummary">
-            <span class="doc-chip">Henüz dosya seçilmedi.</span>
-          </div>
-          <div class="import-help" id="vendorImportHelp" style="margin-top:10px;">Sistem aynı pazar + bölüm + renk + yer no kombinasyonunu kontrol eder. Var olan kayıtlar önizlemede uyarı olarak gösterilir ve içe almada atlanır.</div>
-        </div>
-        <div class="modal-section">
-          <div class="modal-section-title">Önizleme</div>
-          <div class="import-table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Satır</th>
-                  <th>Pazar</th>
-                  <th>Bölüm / Yer</th>
-                  <th>Ad Soyad</th>
-                  <th>Durum</th>
-                </tr>
-              </thead>
-              <tbody id="vendorImportPreviewBody">
-                <tr><td colspan="5"><div class="empty-state">Önizleme henüz oluşturulmadı.</div></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" type="button" onclick="closeModal('vendorImportModal')">Vazgeç</button>
-        <button class="btn btn-primary" type="button" id="vendorImportCommitBtn" onclick="commitVendorImport()" disabled>Uygun Satırları İçeri Al</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="leaveModal" onclick="closeModalOnOverlay(event, 'leaveModal')">
-    <div class="modal small">
-      <div class="modal-header">
-        <div>
-          <div class="modal-title" id="leaveModalTitle">Yeni İzin / Rapor Kaydı</div>
-          <div class="modal-subtitle">Bu kayıt yoklama ekranında seçilen tarihe göre otomatik öneri verir.</div>
-        </div>
-        <button class="close-btn" type="button" onclick="closeModal('leaveModal')">Kapat</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-grid">
-          <div class="field"><label for="leaveVendorId">Satıcı *</label><select id="leaveVendorId"></select></div>
-          <div class="field"><label for="leaveType">Tür *</label><select id="leaveType"><option value="İzinli">İzinli</option><option value="Raporlu">Raporlu</option></select></div>
-          <div class="field"><label for="leaveStartDate">Başlangıç Tarihi *</label><input type="date" id="leaveStartDate" /></div>
-          <div class="field"><label for="leaveEndDate">Bitiş Tarihi *</label><input type="date" id="leaveEndDate" /></div>
-          <div class="field form-row-wide"><label for="leaveNote">Açıklama</label><textarea id="leaveNote" placeholder="Örn: sağlık raporu / ailevi izin"></textarea></div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" type="button" onclick="closeModal('leaveModal')">Vazgeç</button>
-        <button class="btn btn-primary" type="button" onclick="saveLeaveRecord()">Kaydet</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="marketModal" onclick="closeModalOnOverlay(event, 'marketModal')">
-    <div class="modal small">
-      <div class="modal-header">
-        <div>
-          <div class="modal-title" id="marketModalTitle">Pazar Ayarları</div>
-          <div class="modal-subtitle">Pazar günü, aktiflik durumu ve bölüm kapasitesi burada güncellenir.</div>
-        </div>
-        <button class="close-btn" type="button" onclick="closeModal('marketModal')">Kapat</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-grid">
-          <div class="field"><label for="marketScheduledDay">Kurulum Günü</label><select id="marketScheduledDay"><option value="0">Pazar</option><option value="1">Pazartesi</option><option value="2">Salı</option><option value="3">Çarşamba</option><option value="4">Perşembe</option><option value="5">Cuma</option><option value="6">Cumartesi</option></select></div>
-          <div class="field"><label for="marketIsActive">Durum</label><select id="marketIsActive"><option value="true">Aktif</option><option value="false">Pasif</option></select></div>
-          <div class="field form-row-wide"><label for="marketNotes">Not</label><textarea id="marketNotes" placeholder="Kısa açıklama"></textarea></div>
-        </div>
-        <div class="modal-section">
-          <div class="modal-section-title">Bölüm Kapasiteleri</div>
-          <div class="form-grid three">
-            <div class="field"><label for="capacityEsnaf">Esnaf</label><input type="text" id="capacityEsnaf" placeholder="0" /></div>
-            <div class="field"><label for="capacityUretici">Üretici</label><input type="text" id="capacityUretici" placeholder="0" /></div>
-            <div class="field"><label for="capacityTuhafiye">Tuhafiye</label><input type="text" id="capacityTuhafiye" placeholder="0" /></div>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" type="button" onclick="closeModal('marketModal')">Vazgeç</button>
-        <button class="btn btn-primary" type="button" onclick="saveMarketConfig()">Kaydet</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="attendanceDetailModal" onclick="closeModalOnOverlay(event, 'attendanceDetailModal')">
-    <div class="modal attendance-detail-modal">
-      <div class="modal-header">
-        <div>
-          <div class="modal-title" id="attendanceDetailTitle">Yoklama Detayı</div>
-          <div class="modal-subtitle" id="attendanceDetailSubtitle">Seçilen tarihe ait kayıt özeti burada görüntülenir.</div>
-        </div>
-        <button class="close-btn" type="button" onclick="closeModal('attendanceDetailModal')">Kapat</button>
-      </div>
-      <div class="modal-body">
-        <div class="modal-section">
-          <div class="modal-section-title">Özet</div>
-          <div class="doc-list" id="attendanceDetailSummary">
-            <span class="doc-chip">Kayıt bulunamadı.</span>
-          </div>
-        </div>
-        <div class="modal-section">
-          <div class="modal-section-title">Yoklama Listesi</div>
-          <div class="table-wrap attendance-detail-table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Satıcı</th>
-                  <th>Bölüm / Yer</th>
-                  <th>Durum</th>
-                  <th>Not</th>
-                  <th>Son Güncelleme</th>
-                </tr>
-              </thead>
-              <tbody id="attendanceDetailBody">
-                <tr><td colspan="5"><div class="empty-state">Detay yükleniyor...</div></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-ghost" type="button" onclick="downloadAttendanceDetailExcel()">Excel İndir</button>
-        <button class="btn btn-primary" type="button" onclick="printAttendanceDetailReport()">PDF / Yazdır</button>
-        <button class="btn btn-secondary" type="button" onclick="closeModal('attendanceDetailModal')">Kapat</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
     var markets = [];
     var vendors = [];
     var leaveRecords = [];
@@ -633,6 +8,10 @@
     var attendancePanelMode = 'new';
     var attendanceDetailSession = null;
     var vendorImportPreviewRows = [];
+    var vendorCurrentPage = 1;
+    var vendorPageSize = 10;
+    var attendanceCurrentPage = 1;
+    var attendancePageSize = 10;
     var editingVendorId = null;
     var editingLeaveId = null;
     var editingMarketId = null;
@@ -706,10 +85,22 @@
     }
 
     function onVendorFilterChange() {
+      vendorCurrentPage = 1;
+      renderVendorTable();
+    }
+
+    function changeVendorPage(page) {
+      vendorCurrentPage = page;
       renderVendorTable();
     }
 
     function onAttendanceFilterChange() {
+      attendanceCurrentPage = 1;
+      renderAttendanceSheet();
+    }
+
+    function changeAttendancePage(page) {
+      attendanceCurrentPage = page;
       renderAttendanceSheet();
     }
 
@@ -730,21 +121,51 @@
     }
 
     function renderVendorPagination(totalItems, totalPages, currentPage, startIndex, endIndex) {
-      var bar = document.getElementById('vendorPaginationBar');
       var info = document.getElementById('vendorPaginationInfo');
       var controls = document.getElementById('vendorPaginationControls');
-      if (bar) bar.style.display = 'none';
-      if (info) info.textContent = totalItems ? ('Toplam ' + totalItems + ' kayıt') : 'Toplam 0 kayıt';
-      if (controls) controls.innerHTML = '';
+      if (!info || !controls) return;
+      if (!totalItems) {
+        info.textContent = 'Toplam 0 kayıt';
+        controls.innerHTML = '';
+        return;
+      }
+      info.textContent = 'Toplam ' + totalItems + ' kaydın ' + startIndex + '-' + endIndex + ' arası gösteriliyor';
+      var parts = [];
+      parts.push('<button class="mini-btn page-btn" type="button" ' + (currentPage === 1 ? 'disabled' : 'onclick="changeVendorPage(' + (currentPage - 1) + ')"') + '>‹</button>');
+      var pageList = buildPaginationPages(totalPages, currentPage);
+      for (var i = 0; i < pageList.length; i++) {
+        if (pageList[i] === '...') {
+          parts.push('<span class="page-sep">…</span>');
+        } else {
+          parts.push('<button class="mini-btn page-btn ' + (pageList[i] === currentPage ? 'active' : '') + '" type="button" onclick="changeVendorPage(' + pageList[i] + ')">' + pageList[i] + '</button>');
+        }
+      }
+      parts.push('<button class="mini-btn page-btn" type="button" ' + (currentPage === totalPages ? 'disabled' : 'onclick="changeVendorPage(' + (currentPage + 1) + ')"') + '>›</button>');
+      controls.innerHTML = parts.join('');
     }
 
     function renderAttendancePagination(totalItems, totalPages, currentPage, startIndex, endIndex) {
-      var bar = document.getElementById('attendancePaginationBar');
       var info = document.getElementById('attendancePaginationInfo');
       var controls = document.getElementById('attendancePaginationControls');
-      if (bar) bar.style.display = 'none';
-      if (info) info.textContent = totalItems ? ('Toplam ' + totalItems + ' kayıt') : 'Toplam 0 kayıt';
-      if (controls) controls.innerHTML = '';
+      if (!info || !controls) return;
+      if (!totalItems) {
+        info.textContent = 'Toplam 0 kayıt';
+        controls.innerHTML = '';
+        return;
+      }
+      info.textContent = 'Toplam ' + totalItems + ' kaydın ' + startIndex + '-' + endIndex + ' arası gösteriliyor';
+      var parts = [];
+      parts.push('<button class="mini-btn page-btn" type="button" ' + (currentPage === 1 ? 'disabled' : 'onclick="changeAttendancePage(' + (currentPage - 1) + ')"') + '>‹</button>');
+      var pageList = buildPaginationPages(totalPages, currentPage);
+      for (var i = 0; i < pageList.length; i++) {
+        if (pageList[i] === '...') {
+          parts.push('<span class="page-sep">…</span>');
+        } else {
+          parts.push('<button class="mini-btn page-btn ' + (pageList[i] === currentPage ? 'active' : '') + '" type="button" onclick="changeAttendancePage(' + pageList[i] + ')">' + pageList[i] + '</button>');
+        }
+      }
+      parts.push('<button class="mini-btn page-btn" type="button" ' + (currentPage === totalPages ? 'disabled' : 'onclick="changeAttendancePage(' + (currentPage + 1) + ')"') + '>›</button>');
+      controls.innerHTML = parts.join('');
     }
 
     function setAttendancePanelState(isOpen, mode) {
@@ -791,6 +212,7 @@
       document.getElementById('attendanceSectionFilter').value = 'all';
       document.getElementById('attendanceStatusFilter').value = 'all';
       document.getElementById('attendanceSearchInput').value = '';
+      attendanceCurrentPage = 1;
       renderAttendanceSheet();
     }
 
@@ -909,9 +331,15 @@
         renderStats();
         return;
       }
+      var totalPages = Math.max(1, Math.ceil(rows.length / vendorPageSize));
+      if (vendorCurrentPage > totalPages) vendorCurrentPage = totalPages;
+      if (vendorCurrentPage < 1) vendorCurrentPage = 1;
+      var startIndex = (vendorCurrentPage - 1) * vendorPageSize;
+      var endIndex = startIndex + vendorPageSize;
+      var pagedRows = rows.slice(startIndex, endIndex);
       var html = '';
-      for (var i = 0; i < rows.length; i++) {
-        var item = rows[i];
+      for (var i = 0; i < pagedRows.length; i++) {
+        var item = pagedRows[i];
         var docChips = item.documents.requiredDocs.map(function(label) {
           var isMissing = item.documents.missingDocs.indexOf(label) !== -1;
           return '<span class="doc-chip ' + (isMissing ? 'missing' : 'ok') + '">' + escapeHtml(label) + '</span>';
@@ -937,7 +365,7 @@
         '</tr>';
       }
       body.innerHTML = html;
-      renderVendorPagination(rows.length, 1, 1, rows.length ? 1 : 0, rows.length);
+      renderVendorPagination(rows.length, totalPages, vendorCurrentPage, startIndex + 1, Math.min(endIndex, rows.length));
       renderStats();
     }
 
@@ -988,16 +416,22 @@
         return;
       }
       var rows = getFilteredAttendanceRows();
-      if (infoBox) infoBox.textContent = 'Toplam ' + attendanceSheet.length + ' satıcı var. Filtreye göre ' + rows.length + ' satır gösteriliyor. Liste yer numarasına göre sıralanır.';
+      if (infoBox) infoBox.textContent = 'Toplam ' + attendanceSheet.length + ' satıcı var. Filtreye göre ' + rows.length + ' satır gösteriliyor. Liste yer numarasına göre sıralanır ve 10\'arlı sayfalanır.';
       if (!rows.length) {
         body.innerHTML = '<tr><td colspan="5"><div class="empty-state">Bu filtreye uygun yoklama satırı bulunmuyor.</div></td></tr>';
         renderAttendancePagination(0, 0, 1, 0, 0);
         renderStats();
         return;
       }
+      var totalPages = Math.max(1, Math.ceil(rows.length / attendancePageSize));
+      if (attendanceCurrentPage > totalPages) attendanceCurrentPage = totalPages;
+      if (attendanceCurrentPage < 1) attendanceCurrentPage = 1;
+      var startIndex = (attendanceCurrentPage - 1) * attendancePageSize;
+      var endIndex = startIndex + attendancePageSize;
+      var pagedRows = rows.slice(startIndex, endIndex);
       var html = '';
-      for (var i = 0; i < rows.length; i++) {
-        var item = rows[i];
+      for (var i = 0; i < pagedRows.length; i++) {
+        var item = pagedRows[i];
         var status = item.selectedStatus || '';
         var autoInfo = item.leaveType
           ? '<span class="badge ' + (item.leaveType === 'Raporlu' ? 'warn' : 'info') + '">' + escapeHtml(item.leaveType) + '</span><span class="badge" style="margin-left:6px;">Kilitli</span><div class="cell-sub">' + escapeHtml(item.leavePeriodText) + '</div><div class="cell-sub">' + escapeHtml(item.leaveNote || 'Açıklama yok') + '</div>'
@@ -1016,7 +450,7 @@
         '</tr>';
       }
       body.innerHTML = html;
-      renderAttendancePagination(rows.length, 1, 1, rows.length ? 1 : 0, rows.length);
+      renderAttendancePagination(rows.length, totalPages, attendanceCurrentPage, startIndex + 1, Math.min(endIndex, rows.length));
       renderStats();
     }
 
@@ -1086,6 +520,7 @@
       document.getElementById('vendorStatusFilter').value = 'all';
       document.getElementById('vendorDocFilter').value = 'all';
       document.getElementById('vendorSearchInput').value = '';
+      vendorCurrentPage = 1;
       renderVendorTable();
     }
 
@@ -1614,6 +1049,7 @@
         item.selectedStatus = item.isLocked ? (item.lockedStatus || item.leaveType || '') : (item.attendanceStatus || item.recommendedStatus || '');
         return item;
       });
+      attendanceCurrentPage = 1;
       renderAttendanceSheet();
     }
 
@@ -1861,6 +1297,4 @@
         showBanner(error.message || 'Pazar modülü yüklenemedi.', 'warn');
       }
     });
-  </script>
-</body>
-</html>
+  
