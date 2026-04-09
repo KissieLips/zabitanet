@@ -1412,45 +1412,75 @@ function registerMarketModule({ app, pool }) {
       const result = await pool.query(
         `
           SELECT
-            a.id,
-            a.attendance_date,
-            a.status,
-            a.note,
-            a.updated_at,
             v.id AS vendor_id,
-            v.full_name AS vendor_name,
             v.market_id,
             m.name AS market_name,
+            v.full_name AS vendor_name,
             v.section_type,
             v.stall_no,
-            v.stall_color
-          FROM market_attendance a
-          INNER JOIN market_vendors v ON v.id = a.vendor_id
+            v.stall_color,
+            a.id AS attendance_id,
+            a.attendance_date,
+            a.status AS attendance_status,
+            a.note AS attendance_note,
+            a.updated_at,
+            lr.leave_type,
+            lr.note AS leave_note,
+            lr.start_date AS leave_start_date,
+            lr.end_date AS leave_end_date
+          FROM market_vendors v
           INNER JOIN market_places m ON m.id = v.market_id
+          LEFT JOIN market_attendance a
+            ON a.vendor_id = v.id
+           AND a.attendance_date = $2
+          LEFT JOIN LATERAL (
+            SELECT *
+            FROM market_leave_records lr2
+            WHERE lr2.vendor_id = v.id
+              AND $2 BETWEEN lr2.start_date AND lr2.end_date
+            ORDER BY lr2.end_date DESC, lr2.id DESC
+            LIMIT 1
+          ) lr ON TRUE
           WHERE v.market_id = $1
-            AND a.attendance_date = $2
-          ORDER BY v.section_type ASC, COALESCE(NULLIF(substring(COALESCE(v.stall_no, '') FROM '\d+'), ''), '999999')::int ASC, NULLIF(v.stall_no, '') ASC, v.full_name ASC
+            AND (v.is_active = TRUE OR a.id IS NOT NULL)
+          ORDER BY v.section_type ASC,
+                   CASE COALESCE(v.stall_color, '')
+                     WHEN 'Yeşil' THEN 1
+                     WHEN 'Kırmızı' THEN 2
+                     WHEN 'Mavi' THEN 3
+                     WHEN 'Renksiz' THEN 4
+                     ELSE 9
+                   END ASC,
+                   COALESCE(NULLIF(substring(COALESCE(v.stall_no, '') FROM '\d+'), ''), '999999')::int ASC,
+                   NULLIF(v.stall_no, '') ASC,
+                   v.full_name ASC
         `,
         [marketId, attendanceDate]
       );
 
-      const rows = result.rows.map((row) => ({
-        id: row.id,
-        attendanceDate: toInputDate(row.attendance_date),
-        attendanceDateText: formatDate(row.attendance_date),
-        status: row.status,
-        note: row.note || '',
-        updatedAt: formatDateTime(row.updated_at),
-        vendorId: row.vendor_id,
-        vendorName: row.vendor_name,
-        marketId: row.market_id,
-        marketName: row.market_name,
-        sectionType: row.section_type,
-        stallLabel: buildStallLabel(row),
-      }));
+      const rows = result.rows.map((row) => {
+        const effectiveStatus = row.attendance_status || row.leave_type || '';
+        return {
+          id: row.attendance_id || null,
+          attendanceDate: toInputDate(row.attendance_date) || attendanceDate,
+          attendanceDateText: formatDate(row.attendance_date || attendanceDate),
+          status: effectiveStatus,
+          note: row.attendance_note || row.leave_note || '',
+          updatedAt: row.updated_at ? formatDateTime(row.updated_at) : '',
+          vendorId: row.vendor_id,
+          vendorName: row.vendor_name,
+          marketId: row.market_id,
+          marketName: row.market_name,
+          sectionType: row.section_type,
+          stallLabel: buildStallLabel(row),
+        };
+      });
 
       const marketName = rows.length ? rows[0].marketName : '';
-      const updatedAt = rows.length ? rows[0].updatedAt : '';
+      const updatedAt = rows.reduce((latest, row) => {
+        if (!row.updatedAt) return latest;
+        return latest || row.updatedAt;
+      }, '');
       let presentCount = 0;
       let absentCount = 0;
       let leaveCount = 0;
@@ -1482,6 +1512,7 @@ function registerMarketModule({ app, pool }) {
   });
 
 
+
   app.get('/api/markets/attendance-session-detail/export.xlsx', async (req, res) => {
     const marketId = Number(req.query.marketId);
     const attendanceDate = toInputDate(req.query.date);
@@ -1493,35 +1524,59 @@ function registerMarketModule({ app, pool }) {
       const result = await pool.query(
         `
           SELECT
-            a.id,
-            a.attendance_date,
-            a.status,
-            a.note,
-            a.updated_at,
             v.id AS vendor_id,
-            v.full_name AS vendor_name,
             v.market_id,
             m.name AS market_name,
+            v.full_name AS vendor_name,
             v.section_type,
             v.stall_no,
-            v.stall_color
-          FROM market_attendance a
-          INNER JOIN market_vendors v ON v.id = a.vendor_id
+            v.stall_color,
+            a.id AS attendance_id,
+            a.attendance_date,
+            a.status AS attendance_status,
+            a.note AS attendance_note,
+            a.updated_at,
+            lr.leave_type,
+            lr.note AS leave_note,
+            lr.start_date AS leave_start_date,
+            lr.end_date AS leave_end_date
+          FROM market_vendors v
           INNER JOIN market_places m ON m.id = v.market_id
+          LEFT JOIN market_attendance a
+            ON a.vendor_id = v.id
+           AND a.attendance_date = $2
+          LEFT JOIN LATERAL (
+            SELECT *
+            FROM market_leave_records lr2
+            WHERE lr2.vendor_id = v.id
+              AND $2 BETWEEN lr2.start_date AND lr2.end_date
+            ORDER BY lr2.end_date DESC, lr2.id DESC
+            LIMIT 1
+          ) lr ON TRUE
           WHERE v.market_id = $1
-            AND a.attendance_date = $2
-          ORDER BY v.section_type ASC, COALESCE(NULLIF(substring(COALESCE(v.stall_no, '') FROM '\d+'), ''), '999999')::int ASC, NULLIF(v.stall_no, '') ASC, v.full_name ASC
+            AND (v.is_active = TRUE OR a.id IS NOT NULL)
+          ORDER BY v.section_type ASC,
+                   CASE COALESCE(v.stall_color, '')
+                     WHEN 'Yeşil' THEN 1
+                     WHEN 'Kırmızı' THEN 2
+                     WHEN 'Mavi' THEN 3
+                     WHEN 'Renksiz' THEN 4
+                     ELSE 9
+                   END ASC,
+                   COALESCE(NULLIF(substring(COALESCE(v.stall_no, '') FROM '\d+'), ''), '999999')::int ASC,
+                   NULLIF(v.stall_no, '') ASC,
+                   v.full_name ASC
         `,
         [marketId, attendanceDate]
       );
 
       const rows = result.rows.map((row) => ({
-        id: row.id,
-        attendanceDate: toInputDate(row.attendance_date),
-        attendanceDateText: formatDate(row.attendance_date),
-        status: row.status || '',
-        note: row.note || '',
-        updatedAt: formatDateTime(row.updated_at),
+        id: row.attendance_id || null,
+        attendanceDate: toInputDate(row.attendance_date) || attendanceDate,
+        attendanceDateText: formatDate(row.attendance_date || attendanceDate),
+        status: row.attendance_status || row.leave_type || '',
+        note: row.attendance_note || row.leave_note || '',
+        updatedAt: row.updated_at ? formatDateTime(row.updated_at) : '',
         vendorId: row.vendor_id,
         vendorName: row.vendor_name || '',
         marketId: row.market_id,
@@ -1574,6 +1629,7 @@ function registerMarketModule({ app, pool }) {
       res.status(500).json({ error: 'Yoklama detay Excel çıktısı oluşturulamadı.' });
     }
   });
+
 
   app.get('/api/markets/attendance-history-summary', async (req, res) => {
     const marketId = String(req.query.marketId || 'all');
