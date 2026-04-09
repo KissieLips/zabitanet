@@ -531,6 +531,10 @@ function mapLeave(row) {
     marketId: row.market_id,
     marketName: row.market_name,
     vendorName: row.vendor_name,
+    sectionType: row.section_type || '',
+    stallNo: row.stall_no || '',
+    stallColor: row.stall_color || '',
+    stallLabel: buildStallLabel(row),
     leaveType: row.leave_type,
     startDate: toInputDate(row.start_date),
     endDate: toInputDate(row.end_date),
@@ -1202,12 +1206,28 @@ function registerMarketModule({ app, pool }) {
           lr.*,
           v.full_name AS vendor_name,
           v.market_id,
+          v.section_type,
+          v.stall_no,
+          v.stall_color,
           m.name AS market_name
         FROM market_leave_records lr
         INNER JOIN market_vendors v ON v.id = lr.vendor_id
         INNER JOIN market_places m ON m.id = v.market_id
         ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
-        ORDER BY lr.start_date DESC, lr.id DESC
+        ORDER BY m.display_order ASC,
+                 m.name ASC,
+                 lr.start_date DESC,
+                 CASE COALESCE(v.stall_color, '')
+                   WHEN 'Yeşil' THEN 1
+                   WHEN 'Kırmızı' THEN 2
+                   WHEN 'Mavi' THEN 3
+                   WHEN 'Renksiz' THEN 4
+                   ELSE 9
+                 END ASC,
+                 COALESCE(NULLIF(substring(COALESCE(v.stall_no, '') FROM '\d+'), ''), '999999')::int ASC,
+                 NULLIF(v.stall_no, '') ASC,
+                 v.full_name ASC,
+                 lr.id DESC
       `;
 
       const result = await pool.query(sql, values);
@@ -1215,6 +1235,98 @@ function registerMarketModule({ app, pool }) {
     } catch (error) {
       console.error('İzin / rapor kayıtları alınamadı:', error);
       res.status(500).json({ error: 'İzin / rapor kayıtları alınamadı.' });
+    }
+  });
+
+
+  app.get('/api/markets/leave-records/export.xlsx', async (req, res) => {
+    const marketId = String(req.query.marketId || 'all');
+    const leaveType = String(req.query.leaveType || 'all');
+    const activeOnly = String(req.query.activeOnly || 'all');
+
+    try {
+      const conditions = [];
+      const values = [];
+      if (marketId !== 'all') {
+        values.push(Number(marketId));
+        conditions.push(`m.id = $${values.length}`);
+      }
+      if (leaveType !== 'all') {
+        values.push(leaveType);
+        conditions.push(`lr.leave_type = $${values.length}`);
+      }
+      if (activeOnly === 'active') {
+        values.push(new Date().toISOString().slice(0, 10));
+        conditions.push(`$${values.length} BETWEEN lr.start_date AND lr.end_date`);
+      }
+
+      const sql = `
+        SELECT
+          lr.*,
+          v.full_name AS vendor_name,
+          v.market_id,
+          v.section_type,
+          v.stall_no,
+          v.stall_color,
+          m.name AS market_name
+        FROM market_leave_records lr
+        INNER JOIN market_vendors v ON v.id = lr.vendor_id
+        INNER JOIN market_places m ON m.id = v.market_id
+        ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
+        ORDER BY m.display_order ASC,
+                 m.name ASC,
+                 lr.start_date DESC,
+                 CASE COALESCE(v.stall_color, '')
+                   WHEN 'Yeşil' THEN 1
+                   WHEN 'Kırmızı' THEN 2
+                   WHEN 'Mavi' THEN 3
+                   WHEN 'Renksiz' THEN 4
+                   ELSE 9
+                 END ASC,
+                 COALESCE(NULLIF(substring(COALESCE(v.stall_no, '') FROM '\d+'), ''), '999999')::int ASC,
+                 NULLIF(v.stall_no, '') ASC,
+                 v.full_name ASC,
+                 lr.id DESC
+      `;
+
+      const result = await pool.query(sql, values);
+      const rows = result.rows.map(mapLeave);
+      const marketText = await getMarketNameById(pool, marketId);
+      const leaveTypeText = leaveType === 'all' ? 'Tüm Türler' : leaveType;
+      const activeText = activeOnly === 'active' ? 'Şu an aktif olanlar' : 'Tüm Kayıtlar';
+
+      const workbook = XLSX.utils.book_new();
+      const summaryRows = [
+        ['Pazar', marketText],
+        ['Tür', leaveTypeText],
+        ['Görünüm', activeText],
+        ['Toplam Kayıt', rows.length],
+        ['İzinli', rows.filter((item) => item.leaveType === 'İzinli').length],
+        ['Raporlu', rows.filter((item) => item.leaveType === 'Raporlu').length],
+      ];
+      const dataRows = rows.map((item, index) => ({
+        'Sıra': index + 1,
+        'Satıcı': item.vendorName || '',
+        'Pazar': item.marketName || '',
+        'Bölüm': item.sectionType || '',
+        'Yer No': item.stallLabel || '',
+        'Tür': item.leaveType || '',
+        'Başlangıç': item.startDateText || '',
+        'Bitiş': item.endDateText || '',
+        'Açıklama': item.note || '',
+        'Eklenme': item.createdAt || '',
+      }));
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(summaryRows), 'Filtre Özeti');
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(dataRows.length ? dataRows : [{ Bilgi: 'Bu filtreye uygun izin / rapor kaydı bulunamadı.' }]), 'İzin Rapor Listesi');
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      const safeMarket = String(marketText || 'tum-pazarlar').replace(/[^a-z0-9ğüşöçıİĞÜŞÖÇ\- ]/gi, '').trim().replace(/\s+/g, '-');
+      const filename = `izin-rapor-listesi-${safeMarket || 'tum-pazarlar'}.xlsx`;
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.send(buffer);
+    } catch (error) {
+      console.error('İzin / rapor Excel çıktısı oluşturulamadı:', error);
+      res.status(500).json({ error: 'İzin / rapor Excel çıktısı oluşturulamadı.' });
     }
   });
 
