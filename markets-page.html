@@ -67,7 +67,11 @@
     .attendance-shell { display: grid; gap: 12px; }
     .attendance-shell.hidden, .hidden { display: none; }
     .attendance-list-summary { font-size: 12.5px; color: var(--muted); }
-    .attendance-table-wrap { overflow-x: auto; overflow-y: visible; }
+    .attendance-table-wrap { max-height: 520px; overflow-x: auto; overflow-y: auto; }
+    .fixed-list-wrap { max-height: 520px; overflow-x: auto; overflow-y: auto; }
+    .fixed-list-wrap table { min-width: 1080px; }
+    .fixed-list-wrap.vendor-wrap table { min-width: 1080px; }
+    .fixed-list-wrap.leave-wrap table { min-width: 980px; }
     .attendance-closed-box { padding: 18px; }
     input[type="text"], input[type="date"], select, textarea {
       width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; background: #fff; color: var(--text);
@@ -257,7 +261,7 @@
           <input type="text" id="vendorSearchInput" placeholder="Ad, TC, telefon, adres veya yer no ara" oninput="onVendorFilterChange()" />
           <button class="btn btn-secondary" type="button" onclick="clearVendorFilters()">Temizle</button>
         </div>
-        <div class="table-wrap" style="margin-top: 12px;">
+        <div class="table-wrap fixed-list-wrap vendor-wrap" style="margin-top: 12px;">
           <table>
             <thead>
               <tr>
@@ -273,10 +277,6 @@
               <tr><td colspan="6"><div class="empty-state">Satıcı listesi yükleniyor...</div></td></tr>
             </tbody>
           </table>
-        </div>
-        <div class="pagination-bar" id="vendorPaginationBar">
-          <div class="pagination-info" id="vendorPaginationInfo">Toplam 0 kayıt</div>
-          <div class="pagination-controls" id="vendorPaginationControls"></div>
         </div>
       </section>
 
@@ -303,7 +303,7 @@
           </select>
           <button class="btn btn-secondary" type="button" onclick="clearLeaveFilters()">Temizle</button>
         </div>
-        <div class="table-wrap" style="margin-top: 12px;">
+        <div class="table-wrap fixed-list-wrap leave-wrap" style="margin-top: 12px;">
           <table>
             <thead>
               <tr>
@@ -383,10 +383,6 @@
                 <tr><td colspan="5"><div class="empty-state">Yoklama listesi yükleniyor...</div></td></tr>
               </tbody>
             </table>
-          </div>
-          <div class="pagination-bar" id="attendancePaginationBar">
-            <div class="pagination-info" id="attendancePaginationInfo">Toplam 0 kayıt</div>
-            <div class="pagination-controls" id="attendancePaginationControls"></div>
           </div>
         </div>
       </section>
@@ -736,6 +732,8 @@
       if (bar) bar.style.display = 'none';
       if (info) info.textContent = totalItems ? ('Toplam ' + totalItems + ' kayıt') : 'Toplam 0 kayıt';
       if (controls) controls.innerHTML = '';
+      return;
+      return;
     }
 
     function renderAttendancePagination(totalItems, totalPages, currentPage, startIndex, endIndex) {
