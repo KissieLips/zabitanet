@@ -1100,7 +1100,10 @@
         var item = rows[i];
         html += '<tr>' +
           '<td><div class="cell-title">' + escapeHtml(item.vendorName) + '</div><div class="cell-sub">Eklenme: ' + escapeHtml(item.createdAt) + '</div></td>' +
-          '<td>' + escapeHtml(item.marketName) + '</td>' +
+          '<td><div class="cell-title">' + escapeHtml(item.marketName) + '</div><div class="cell-sub">' +
+            '<span style="display:inline-block;margin-right:14px;">' + escapeHtml(item.sectionType || '-') + '</span>' +
+            '<span style="display:inline-block;">Yer: ' + escapeHtml(item.stallLabel || 'Atanmadı') + '</span>' +
+          '</div></td>' +
           '<td>' + (item.leaveType === 'Raporlu' ? '<span class="badge warn">Raporlu</span>' : '<span class="badge info">İzinli</span>') + '</td>' +
           '<td><div class="cell-title">' + escapeHtml(item.startDateText) + ' - ' + escapeHtml(item.endDateText) + '</div><div class="cell-sub">' + escapeHtml(item.remainingText || '-') + '</div></td>' +
           '<td>' + escapeHtml(item.note || 'Açıklama girilmedi') + '</td>' +
