@@ -1213,6 +1213,11 @@ function registerMarketModule({ app, pool }) {
         values.push(leaveType);
         conditions.push(`lr.leave_type = $${values.length}`);
       }
+      if (search) {
+        values.push(`%${search}%`);
+        const idx = values.length;
+        conditions.push(`(v.full_name ILIKE $${idx} OR m.name ILIKE $${idx} OR COALESCE(v.section_type, '') ILIKE $${idx} OR COALESCE(v.stall_color, '') ILIKE $${idx} OR COALESCE(v.stall_no, '') ILIKE $${idx} OR COALESCE(lr.note, '') ILIKE $${idx})`);
+      }
       const today = new Date().toISOString().slice(0, 10);
       if (activeOnly === 'open') {
         values.push(today);
@@ -1267,6 +1272,7 @@ function registerMarketModule({ app, pool }) {
     const marketId = String(req.query.marketId || 'all');
     const leaveType = String(req.query.leaveType || 'all');
     const activeOnly = String(req.query.activeOnly || 'open');
+    const search = String(req.query.search || '').trim();
 
     try {
       const conditions = [];
@@ -1278,6 +1284,11 @@ function registerMarketModule({ app, pool }) {
       if (leaveType !== 'all') {
         values.push(leaveType);
         conditions.push(`lr.leave_type = $${values.length}`);
+      }
+      if (search) {
+        values.push(`%${search}%`);
+        const idx = values.length;
+        conditions.push(`(v.full_name ILIKE $${idx} OR m.name ILIKE $${idx} OR COALESCE(v.section_type, '') ILIKE $${idx} OR COALESCE(v.stall_color, '') ILIKE $${idx} OR COALESCE(v.stall_no, '') ILIKE $${idx} OR COALESCE(lr.note, '') ILIKE $${idx})`);
       }
       const today = new Date().toISOString().slice(0, 10);
       if (activeOnly === 'open') {
@@ -1325,12 +1336,14 @@ function registerMarketModule({ app, pool }) {
       const marketText = await getMarketNameById(pool, marketId);
       const leaveTypeText = leaveType === 'all' ? 'Tüm Türler' : leaveType;
       const activeText = activeOnly === 'active' ? 'Şu an aktif olanlar' : (activeOnly === 'expired' ? 'İzni Bitenler' : (activeOnly === 'open' ? 'Açık Kayıtlar' : 'Tüm Kayıtlar'));
+      const searchText = search || 'Arama yok';
 
       const workbook = XLSX.utils.book_new();
       const summaryRows = [
         ['Pazar', marketText],
         ['Tür', leaveTypeText],
         ['Görünüm', activeText],
+        ['Arama', searchText],
         ['Toplam Kayıt', rows.length],
         ['İzinli', rows.filter((item) => item.leaveType === 'İzinli').length],
         ['Raporlu', rows.filter((item) => item.leaveType === 'Raporlu').length],
