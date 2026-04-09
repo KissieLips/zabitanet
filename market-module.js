@@ -1201,6 +1201,7 @@ function registerMarketModule({ app, pool }) {
     const marketId = String(req.query.marketId || 'all');
     const leaveType = String(req.query.leaveType || 'all');
     const activeOnly = String(req.query.activeOnly || 'open');
+    const search = String(req.query.search || '').trim();
 
     try {
       const conditions = [];
