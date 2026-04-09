@@ -249,6 +249,13 @@
             <option value="Üretici">Üretici</option>
             <option value="Tuhafiye">Tuhafiye</option>
           </select>
+          <select id="vendorColorFilter" onchange="onVendorFilterChange()">
+            <option value="all">Tüm Renkler</option>
+            <option value="Yeşil">Yeşil</option>
+            <option value="Kırmızı">Kırmızı</option>
+            <option value="Mavi">Mavi</option>
+            <option value="Renksiz">Renksiz</option>
+          </select>
           <select id="vendorStatusFilter" onchange="onVendorFilterChange()">
             <option value="all">Tüm Durumlar</option>
             <option value="active">Aktif Satıcı</option>
@@ -686,6 +693,12 @@
     }
 
     function compareVendorsByStall(a, b) {
+      var aSection = getSectionSortValue(a.sectionType);
+      var bSection = getSectionSortValue(b.sectionType);
+      if (aSection !== bSection) return aSection - bSection;
+      var aColor = getStallColorSortValue(a.sectionType, a.stallColor);
+      var bColor = getStallColorSortValue(b.sectionType, b.stallColor);
+      if (aColor !== bColor) return aColor - bColor;
       var aNo = extractLeadingNumber(a.stallNo || a.stallLabel);
       var bNo = extractLeadingNumber(b.stallNo || b.stallLabel);
       if (aNo !== bNo) return aNo - bNo;
@@ -918,17 +931,19 @@
     function getFilteredVendors() {
       var marketId = document.getElementById('vendorMarketFilter').value;
       var section = document.getElementById('vendorSectionFilter').value;
+      var color = document.getElementById('vendorColorFilter').value;
       var status = document.getElementById('vendorStatusFilter').value;
       var docStatus = document.getElementById('vendorDocFilter').value;
       var search = document.getElementById('vendorSearchInput').value.trim().toLocaleLowerCase('tr-TR');
       return vendors.filter(function(item) {
-        var text = [item.fullName, item.identityNumber, item.phone, item.address, item.stallLabel, item.marketName].join(' ').toLocaleLowerCase('tr-TR');
+        var text = [item.fullName, item.identityNumber, item.phone, item.address, item.stallLabel, item.marketName, item.sectionType, item.stallColor].join(' ').toLocaleLowerCase('tr-TR');
         var matchesMarket = marketId === 'all' || String(item.marketId) === String(marketId);
         var matchesSection = section === 'all' || item.sectionType === section;
+        var matchesColor = color === 'all' || (item.stallColor || '') === color;
         var matchesStatus = status === 'all' || (status === 'active' ? item.isActive : !item.isActive);
         var matchesDocs = docStatus === 'all' || (docStatus === 'complete' ? item.documents.isComplete : !item.documents.isComplete);
         var matchesSearch = !search || text.indexOf(search) !== -1;
-        return matchesMarket && matchesSection && matchesStatus && matchesDocs && matchesSearch;
+        return matchesMarket && matchesSection && matchesColor && matchesStatus && matchesDocs && matchesSearch;
       }).sort(compareVendorsByStall);
     }
 
@@ -1115,6 +1130,7 @@
     function clearVendorFilters() {
       document.getElementById('vendorMarketFilter').value = 'all';
       document.getElementById('vendorSectionFilter').value = 'all';
+      document.getElementById('vendorColorFilter').value = 'all';
       document.getElementById('vendorStatusFilter').value = 'all';
       document.getElementById('vendorDocFilter').value = 'all';
       document.getElementById('vendorSearchInput').value = '';
@@ -1125,11 +1141,13 @@
       var query = [];
       var marketId = document.getElementById('vendorMarketFilter').value;
       var section = document.getElementById('vendorSectionFilter').value;
+      var color = document.getElementById('vendorColorFilter').value;
       var status = document.getElementById('vendorStatusFilter').value;
       var docStatus = document.getElementById('vendorDocFilter').value;
       var search = document.getElementById('vendorSearchInput').value.trim();
       if (marketId) query.push('marketId=' + encodeURIComponent(marketId));
       if (section) query.push('section=' + encodeURIComponent(section));
+      if (color) query.push('color=' + encodeURIComponent(color));
       if (status) query.push('status=' + encodeURIComponent(status));
       if (docStatus) query.push('docStatus=' + encodeURIComponent(docStatus));
       if (search) query.push('search=' + encodeURIComponent(search));
@@ -1149,6 +1167,7 @@
       }
       var marketText = document.getElementById('vendorMarketFilter').selectedOptions[0] ? document.getElementById('vendorMarketFilter').selectedOptions[0].textContent : 'Tüm Pazarlar';
       var sectionText = document.getElementById('vendorSectionFilter').selectedOptions[0] ? document.getElementById('vendorSectionFilter').selectedOptions[0].textContent : 'Tüm Bölümler';
+      var colorText = document.getElementById('vendorColorFilter').selectedOptions[0] ? document.getElementById('vendorColorFilter').selectedOptions[0].textContent : 'Tüm Renkler';
       var statusText = document.getElementById('vendorStatusFilter').selectedOptions[0] ? document.getElementById('vendorStatusFilter').selectedOptions[0].textContent : 'Tüm Durumlar';
       var docText = document.getElementById('vendorDocFilter').selectedOptions[0] ? document.getElementById('vendorDocFilter').selectedOptions[0].textContent : 'Belge Durumu';
       var searchText = document.getElementById('vendorSearchInput').value.trim() || 'Yok';
@@ -1183,6 +1202,7 @@
         '<div class="meta-grid">' +
           '<div class="meta-card"><div class="meta-label">Pazar</div><div class="meta-value">' + escapeHtml(marketText) + '</div></div>' +
           '<div class="meta-card"><div class="meta-label">Bölüm</div><div class="meta-value">' + escapeHtml(sectionText) + '</div></div>' +
+          '<div class="meta-card"><div class="meta-label">Renk</div><div class="meta-value">' + escapeHtml(colorText) + '</div></div>' +
           '<div class="meta-card"><div class="meta-label">Durum</div><div class="meta-value">' + escapeHtml(statusText) + '</div></div>' +
           '<div class="meta-card"><div class="meta-label">Belge Durumu</div><div class="meta-value">' + escapeHtml(docText) + '</div></div>' +
           '<div class="meta-card" style="grid-column:1/-1;"><div class="meta-label">Arama</div><div class="meta-value">' + escapeHtml(searchText) + '</div></div>' +

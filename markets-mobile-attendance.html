@@ -32,29 +32,28 @@
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; font-family: Inter, Segoe UI, Arial, sans-serif; background: var(--bg); color: var(--text); }
     body { min-height: 100vh; }
-    .page { max-width: 860px; margin: 0 auto; padding: env(safe-area-inset-top, 0) 12px calc(118px + env(safe-area-inset-bottom, 0)) 12px; }
+    .page { max-width: 860px; margin: 0 auto; padding: env(safe-area-inset-top, 0) 12px calc(78px + env(safe-area-inset-bottom, 0)) 12px; }
     .hero {
-      position: sticky;
-      top: 0;
+      position: relative;
       z-index: 20;
-      margin: 0 -12px 12px;
-      padding: calc(10px + env(safe-area-inset-top, 0)) 12px 12px;
+      margin: 0 -12px 10px;
+      padding: calc(8px + env(safe-area-inset-top, 0)) 12px 10px;
       background: linear-gradient(135deg, #0f2748 0%, #1e3a5f 55%, #274c7a 100%);
       color: #fff;
-      box-shadow: 0 18px 34px rgba(15, 23, 42, 0.18);
+      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.14);
     }
     .hero-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .hero-title { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; margin: 0; }
-    .hero-sub { margin-top: 6px; font-size: 13px; line-height: 1.5; color: rgba(255,255,255,0.82); }
-    .hero-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .hero-title { font-size: 20px; font-weight: 800; letter-spacing: -0.03em; margin: 0; }
+    .hero-sub { margin-top: 5px; font-size: 12px; line-height: 1.45; color: rgba(255,255,255,0.82); max-width: 680px; }
+    .hero-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
     .chip-btn, .mini-link {
       border: 1px solid rgba(255,255,255,0.18);
       background: rgba(255,255,255,0.14);
       color: #fff;
       text-decoration: none;
-      padding: 10px 12px;
+      padding: 8px 10px;
       border-radius: 999px;
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 700;
       cursor: pointer;
       backdrop-filter: blur(6px);
@@ -63,10 +62,10 @@
     .panel {
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: 18px;
       box-shadow: var(--shadow);
-      padding: 14px;
-      margin-bottom: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
     }
     .panel-title { font-size: 18px; font-weight: 800; margin: 0; }
     .panel-sub { color: var(--muted); font-size: 13px; margin-top: 4px; line-height: 1.5; }
@@ -76,7 +75,7 @@
     label { font-size: 12px; font-weight: 800; color: #475467; text-transform: uppercase; letter-spacing: .05em; }
     select, input[type="date"], input[type="text"] {
       width: 100%;
-      min-height: 50px;
+      min-height: 46px;
       border-radius: 14px;
       border: 1px solid #cfd8e3;
       padding: 0 14px;
@@ -84,7 +83,7 @@
       background: #fff;
       color: var(--text);
     }
-    .helper-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+    .helper-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
     .muted { color: var(--muted); font-size: 13px; }
     .banner {
       display: none;
@@ -100,37 +99,37 @@
     .banner.show { display: block; }
     .banner.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); }
     .banner.success { background: var(--success-bg); border-color: var(--success-border); color: var(--success-text); }
-    .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .summary-card {
       border: 1px solid var(--border);
       background: #f8fafc;
-      border-radius: 16px;
-      padding: 12px;
-      min-height: 88px;
+      border-radius: 14px;
+      padding: 10px;
+      min-height: 74px;
     }
     .summary-card.ok { background: var(--success-bg); border-color: var(--success-border); color: var(--success-text); }
     .summary-card.missing { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
     .summary-card.info { background: var(--info-bg); border-color: var(--info-border); color: var(--info-text); }
     .summary-card.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); }
     .summary-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; opacity: .82; }
-    .summary-value { font-size: 30px; font-weight: 900; margin-top: 10px; letter-spacing: -0.03em; }
+    .summary-value { font-size: 24px; font-weight: 900; margin-top: 8px; letter-spacing: -0.03em; }
     .card-list { display: grid; gap: 12px; }
     .vendor-card {
       border: 1px solid var(--border);
       background: #fff;
-      border-radius: 18px;
-      padding: 14px;
+      border-radius: 16px;
+      padding: 12px;
       box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
     }
     .vendor-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-    .vendor-name { font-size: 19px; font-weight: 800; letter-spacing: -0.03em; margin: 0; }
+    .vendor-name { font-size: 17px; font-weight: 800; letter-spacing: -0.03em; margin: 0; }
     .vendor-sub { color: var(--muted); font-size: 14px; line-height: 1.5; margin-top: 4px; }
     .badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .badge {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 8px 10px;
+      padding: 6px 9px;
       border-radius: 999px;
       border: 1px solid var(--border);
       background: #f8fafc;
@@ -142,14 +141,14 @@
     .badge.missing { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
     .badge.info { background: var(--info-bg); border-color: var(--info-border); color: var(--info-text); }
     .badge.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); }
-    .status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+    .status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
     .status-btn {
       border: 1px solid #cbd5e1;
       background: #fff;
-      border-radius: 16px;
-      min-height: 56px;
-      padding: 0 10px;
-      font-size: 16px;
+      border-radius: 14px;
+      min-height: 48px;
+      padding: 0 8px;
+      font-size: 15px;
       font-weight: 800;
       color: #334155;
       cursor: pointer;
@@ -161,7 +160,7 @@
     .status-btn.izinli.active { background: var(--info-bg); border-color: var(--info-border); color: var(--info-text); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
     .status-btn.raporlu.active { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); box-shadow: 0 0 0 3px rgba(245,158,11,.12); }
     .status-btn:disabled { opacity: .58; cursor: not-allowed; }
-    .note-input { margin-top: 12px; min-height: 50px; }
+    .note-input { margin-top: 10px; min-height: 46px; }
     .empty-state {
       border: 1px dashed #cbd5e1;
       background: #f8fafc;
@@ -178,8 +177,8 @@
       right: 0;
       bottom: 0;
       z-index: 30;
-      padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0));
-      background: rgba(238,243,248,0.92);
+      padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0));
+      background: rgba(238,243,248,0.94);
       backdrop-filter: blur(18px);
       border-top: 1px solid rgba(148,163,184,.18);
     }
@@ -187,17 +186,18 @@
       max-width: 860px;
       margin: 0 auto;
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+      grid-template-columns: 1.15fr 1fr 0.95fr;
+      gap: 8px;
+      align-items: stretch;
     }
     .action-btn {
-      min-height: 54px;
-      border-radius: 16px;
+      min-height: 46px;
+      border-radius: 14px;
       border: 1px solid transparent;
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 800;
       cursor: pointer;
-      box-shadow: 0 12px 30px rgba(15,23,42,.10);
+      box-shadow: 0 10px 22px rgba(15,23,42,.08);
     }
     .action-btn.primary { background: var(--primary); color: #fff; }
     .action-btn.secondary { background: #fff; border-color: #cfd8e3; color: #243b53; }
@@ -224,9 +224,10 @@
       color: #243b53;
     }
     @media (min-width: 780px) {
+      .hero { position: sticky; top: 0; }
       .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .summary-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-      .bottom-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .bottom-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
   </style>
 </head>
@@ -240,9 +241,8 @@
         </div>
       </div>
       <div class="hero-actions">
-        <a class="mini-link" href="/markets">Masaüstü Pazar Modülü</a>
+        <a class="mini-link" href="/markets">Pazar Modülü</a>
         <button class="chip-btn" type="button" onclick="reloadAllMobile()">Yenile</button>
-        <button class="chip-btn primary" type="button" onclick="markAllAttendance('Var')">Hepsini Var Yap</button>
       </div>
     </header>
 
@@ -270,13 +270,24 @@
           </select>
         </div>
         <div class="field">
+          <label for="attendanceColorFilter">Renk</label>
+          <select id="attendanceColorFilter" onchange="renderAttendanceCards()">
+            <option value="all">Tüm Renkler</option>
+            <option value="Yeşil">Yeşil</option>
+            <option value="Kırmızı">Kırmızı</option>
+            <option value="Mavi">Mavi</option>
+            <option value="Renksiz">Renksiz</option>
+          </select>
+        </div>
+        <div class="field">
           <label for="attendanceSearchInput">Arama</label>
           <input type="text" id="attendanceSearchInput" oninput="renderAttendanceCards()" placeholder="Satıcı adı veya yer no ara" />
         </div>
       </div>
       <div class="helper-row">
         <button class="chip-btn" type="button" onclick="setSuggestedDateForSelectedMarket(true)">Pazar Gününe Getir</button>
-        <button class="chip-btn" type="button" onclick="clearMobileFilters()">Filtreleri Temizle</button>
+        <button class="chip-btn primary" type="button" onclick="markAllAttendance('Var')">Hepsini Var Yap</button>
+        <button class="chip-btn" type="button" onclick="clearMobileFilters()">Temizle</button>
         <span class="muted" id="attendanceDayInfo"></span>
       </div>
     </section>
@@ -296,10 +307,9 @@
 
   <div class="bottom-bar">
     <div class="bottom-actions">
-      <button class="action-btn ghost" type="button" onclick="markAllAttendance('Var')">Hepsini Var</button>
       <button class="action-btn primary" type="button" onclick="saveMobileAttendanceSheet(false)">Kaydet</button>
+      <button class="action-btn dark" type="button" onclick="printCurrentAttendanceReport()">PDF</button>
       <button class="action-btn secondary" type="button" onclick="downloadCurrentAttendanceExcel()">Excel</button>
-      <button class="action-btn dark" type="button" onclick="printCurrentAttendanceReport()">PDF / Yazdır</button>
     </div>
   </div>
 
@@ -417,8 +427,55 @@
       updateDayInfo();
     }
 
+    function normalizeSortText(value) {
+      return String(value || '').trim().toLocaleLowerCase('tr-TR');
+    }
+
+    function extractLeadingNumber(value) {
+      var text = String(value || '').trim();
+      if (!text) return Number.POSITIVE_INFINITY;
+      var match = text.match(/\d+/);
+      return match ? Number(match[0]) : Number.POSITIVE_INFINITY;
+    }
+
+    function getSectionSortValue(value) {
+      var map = { 'Esnaf': 1, 'Üretici': 2, 'Tuhafiye': 3 };
+      return map[String(value || '').trim()] || 99;
+    }
+
+    function getStallColorSortValue(sectionType, stallColor) {
+      var color = String(stallColor || '').trim().toLocaleLowerCase('tr-TR');
+      if (String(sectionType || '').trim() === 'Üretici') {
+        if (color === 'yeşil') return 1;
+        if (color === 'kırmızı') return 2;
+      }
+      if (color === 'mavi') return 3;
+      if (color === 'renksiz') return 4;
+      if (!color) return 5;
+      return 6;
+    }
+
+    function compareAttendanceRowsByStall(a, b) {
+      var aSection = getSectionSortValue(a.sectionType);
+      var bSection = getSectionSortValue(b.sectionType);
+      if (aSection !== bSection) return aSection - bSection;
+      var aColor = getStallColorSortValue(a.sectionType, a.stallColor);
+      var bColor = getStallColorSortValue(b.sectionType, b.stallColor);
+      if (aColor !== bColor) return aColor - bColor;
+      var aNo = extractLeadingNumber(a.stallNo || a.stallLabel);
+      var bNo = extractLeadingNumber(b.stallNo || b.stallLabel);
+      if (aNo !== bNo) return aNo - bNo;
+      var aText = normalizeSortText(a.stallNo || a.stallLabel);
+      var bText = normalizeSortText(b.stallNo || b.stallLabel);
+      if (aText && bText && aText !== bText) return aText.localeCompare(bText, 'tr');
+      if (aText && !bText) return -1;
+      if (!aText && bText) return 1;
+      return normalizeSortText(a.vendorName).localeCompare(normalizeSortText(b.vendorName), 'tr');
+    }
+
     function clearMobileFilters() {
       document.getElementById('attendanceSectionFilter').value = 'all';
+      document.getElementById('attendanceColorFilter').value = 'all';
       document.getElementById('attendanceSearchInput').value = '';
       renderAttendanceCards();
     }
@@ -434,13 +491,15 @@
 
     function getFilteredAttendanceRows() {
       var section = document.getElementById('attendanceSectionFilter').value;
+      var color = document.getElementById('attendanceColorFilter').value;
       var search = document.getElementById('attendanceSearchInput').value.trim().toLocaleLowerCase('tr-TR');
       return attendanceSheet.filter(function(item) {
         var matchesSection = section === 'all' || item.sectionType === section;
-        var text = [item.vendorName, item.marketName, item.sectionType, item.stallLabel, item.stallNo, item.note].join(' ').toLocaleLowerCase('tr-TR');
+        var matchesColor = color === 'all' || (item.stallColor || '') === color;
+        var text = [item.vendorName, item.marketName, item.sectionType, item.stallColor, item.stallLabel, item.stallNo, item.note].join(' ').toLocaleLowerCase('tr-TR');
         var matchesSearch = !search || text.indexOf(search) !== -1;
-        return matchesSection && matchesSearch;
-      });
+        return matchesSection && matchesColor && matchesSearch;
+      }).sort(compareAttendanceRowsByStall);
     }
 
     function renderSummary() {
@@ -460,7 +519,7 @@
         '<div class="summary-card warn"><div class="summary-label">Raporlu</div><div class="summary-value">' + raporluCount + '</div></div>';
       var info = document.getElementById('attendanceListInfo');
       if (!rows.length) info.textContent = 'Seçili pazar ve tarihte gösterilecek aktif satıcı bulunmuyor.';
-      else info.textContent = 'Toplam ' + rows.length + ' satıcı var. Filtreye göre ' + getFilteredAttendanceRows().length + ' satır gösteriliyor.';
+      else info.textContent = 'Toplam ' + rows.length + ' satıcı var. Filtreye göre ' + getFilteredAttendanceRows().length + ' satır gösteriliyor. Üreticide önce Yeşil, sonra Kırmızı listelenir.';
     }
 
     function buildBadge(label, className) {

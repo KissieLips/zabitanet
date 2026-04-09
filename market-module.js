@@ -520,6 +520,7 @@ function mapAttendanceRow(row, fallbackDate) {
 async function getMarketVendorRows(pool, filters = {}) {
   const marketId = String(filters.marketId || 'all');
   const section = String(filters.section || 'all');
+  const color = String(filters.color || 'all');
   const status = String(filters.status || 'all');
   const docStatus = String(filters.docStatus || 'all');
   const search = String(filters.search || '').trim();
@@ -534,6 +535,10 @@ async function getMarketVendorRows(pool, filters = {}) {
   if (section !== 'all') {
     values.push(section);
     conditions.push(`v.section_type = $${values.length}`);
+  }
+  if (color !== 'all') {
+    values.push(color);
+    conditions.push(`COALESCE(v.stall_color, '') = $${values.length}`);
   }
   if (status === 'active') conditions.push('v.is_active = TRUE');
   if (status === 'passive') conditions.push('v.is_active = FALSE');
@@ -843,6 +848,7 @@ function registerMarketModule({ app, pool }) {
       const rows = await getMarketVendorRows(pool, filters);
       const marketText = await getMarketNameById(pool, filters.marketId);
       const sectionText = String(filters.section || 'all') === 'all' ? 'Tüm Bölümler' : String(filters.section || 'Tüm Bölümler');
+      const colorText = String(filters.color || 'all') === 'all' ? 'Tüm Renkler' : String(filters.color || 'Tüm Renkler');
       const statusText = String(filters.status || 'all') === 'active' ? 'Aktif Satıcı' : (String(filters.status || 'all') === 'passive' ? 'Pasif Satıcı' : 'Tüm Durumlar');
       const docStatusText = String(filters.docStatus || 'all') === 'complete' ? 'Belgeleri Tam' : (String(filters.docStatus || 'all') === 'missing' ? 'Belgesi Eksik' : 'Belge Durumu');
       const searchText = String(filters.search || '').trim() || 'Yok';
@@ -851,6 +857,7 @@ function registerMarketModule({ app, pool }) {
       const summaryRows = [
         ['Pazar', marketText],
         ['Bölüm', sectionText],
+        ['Renk', colorText],
         ['Durum', statusText],
         ['Belge Durumu', docStatusText],
         ['Arama', searchText],
