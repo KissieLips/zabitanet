@@ -525,6 +525,19 @@ function mapVendor(row) {
 }
 
 function mapLeave(row) {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const endDate = toInputDate(row.end_date);
+  const startDate = toInputDate(row.start_date);
+  let remainingDays = null;
+  let remainingText = '-';
+  if (endDate) {
+    const diffMs = new Date(endDate + 'T00:00:00').getTime() - new Date(todayStr + 'T00:00:00').getTime();
+    remainingDays = Math.round(diffMs / 86400000);
+    if (remainingDays < 0) remainingText = 'Süresi doldu';
+    else if (remainingDays === 0) remainingText = 'Bugün bitiyor';
+    else remainingText = `${remainingDays} gün kaldı`;
+  }
   return {
     id: row.id,
     vendorId: row.vendor_id,
@@ -536,12 +549,16 @@ function mapLeave(row) {
     stallColor: row.stall_color || '',
     stallLabel: buildStallLabel(row),
     leaveType: row.leave_type,
-    startDate: toInputDate(row.start_date),
-    endDate: toInputDate(row.end_date),
+    startDate,
+    endDate,
     startDateText: formatDate(row.start_date),
     endDateText: formatDate(row.end_date),
     note: row.note || '',
     createdAt: formatDateTime(row.created_at),
+    remainingDays,
+    remainingText,
+    isExpired: remainingDays !== null ? remainingDays < 0 : false,
+    isActiveToday: Boolean(startDate && endDate && startDate <= todayStr && endDate >= todayStr),
   };
 }
 
@@ -1183,7 +1200,7 @@ function registerMarketModule({ app, pool }) {
   app.get('/api/markets/leave-records', async (req, res) => {
     const marketId = String(req.query.marketId || 'all');
     const leaveType = String(req.query.leaveType || 'all');
-    const activeOnly = String(req.query.activeOnly || 'false') === 'true';
+    const activeOnly = String(req.query.activeOnly || 'open');
 
     try {
       const conditions = [];
@@ -1196,9 +1213,16 @@ function registerMarketModule({ app, pool }) {
         values.push(leaveType);
         conditions.push(`lr.leave_type = $${values.length}`);
       }
-      if (activeOnly) {
-        values.push(new Date().toISOString().slice(0, 10));
+      const today = new Date().toISOString().slice(0, 10);
+      if (activeOnly === 'open') {
+        values.push(today);
+        conditions.push(`lr.end_date >= $${values.length}`);
+      } else if (activeOnly === 'active') {
+        values.push(today);
         conditions.push(`$${values.length} BETWEEN lr.start_date AND lr.end_date`);
+      } else if (activeOnly === 'expired') {
+        values.push(today);
+        conditions.push(`lr.end_date < $${values.length}`);
       }
 
       const sql = `
@@ -1242,7 +1266,7 @@ function registerMarketModule({ app, pool }) {
   app.get('/api/markets/leave-records/export.xlsx', async (req, res) => {
     const marketId = String(req.query.marketId || 'all');
     const leaveType = String(req.query.leaveType || 'all');
-    const activeOnly = String(req.query.activeOnly || 'all');
+    const activeOnly = String(req.query.activeOnly || 'open');
 
     try {
       const conditions = [];
@@ -1255,9 +1279,16 @@ function registerMarketModule({ app, pool }) {
         values.push(leaveType);
         conditions.push(`lr.leave_type = $${values.length}`);
       }
-      if (activeOnly === 'active') {
-        values.push(new Date().toISOString().slice(0, 10));
+      const today = new Date().toISOString().slice(0, 10);
+      if (activeOnly === 'open') {
+        values.push(today);
+        conditions.push(`lr.end_date >= $${values.length}`);
+      } else if (activeOnly === 'active') {
+        values.push(today);
         conditions.push(`$${values.length} BETWEEN lr.start_date AND lr.end_date`);
+      } else if (activeOnly === 'expired') {
+        values.push(today);
+        conditions.push(`lr.end_date < $${values.length}`);
       }
 
       const sql = `
@@ -1293,7 +1324,7 @@ function registerMarketModule({ app, pool }) {
       const rows = result.rows.map(mapLeave);
       const marketText = await getMarketNameById(pool, marketId);
       const leaveTypeText = leaveType === 'all' ? 'Tüm Türler' : leaveType;
-      const activeText = activeOnly === 'active' ? 'Şu an aktif olanlar' : 'Tüm Kayıtlar';
+      const activeText = activeOnly === 'active' ? 'Şu an aktif olanlar' : (activeOnly === 'expired' ? 'İzni Bitenler' : (activeOnly === 'open' ? 'Açık Kayıtlar' : 'Tüm Kayıtlar'));
 
       const workbook = XLSX.utils.book_new();
       const summaryRows = [
@@ -1313,6 +1344,7 @@ function registerMarketModule({ app, pool }) {
         'Tür': item.leaveType || '',
         'Başlangıç': item.startDateText || '',
         'Bitiş': item.endDateText || '',
+        'Kalan Gün': item.remainingText || '',
         'Açıklama': item.note || '',
         'Eklenme': item.createdAt || '',
       }));

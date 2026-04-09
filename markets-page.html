@@ -308,8 +308,10 @@
             <option value="Raporlu">Raporlu</option>
           </select>
           <select id="leaveActiveFilter" onchange="renderLeaveTable()">
-            <option value="all">Tüm Kayıtlar</option>
+            <option value="open">Açık Kayıtlar</option>
             <option value="active">Şu an aktif olanlar</option>
+            <option value="expired">İzni Bitenler</option>
+            <option value="all">Tüm Kayıtlar</option>
           </select>
           <button class="btn btn-secondary" type="button" onclick="clearLeaveFilters()">Temizle</button>
         </div>
@@ -998,8 +1000,11 @@
       return leaveRecords.filter(function(item) {
         var matchesMarket = marketId === 'all' || String(item.marketId) === String(marketId);
         var matchesType = type === 'all' || item.leaveType === type;
-        var matchesActive = activeMode === 'all' || (item.startDate <= today && item.endDate >= today);
-        return matchesMarket && matchesType && matchesActive;
+        var matchesMode = true;
+        if (activeMode === 'open') matchesMode = item.endDate >= today;
+        else if (activeMode === 'active') matchesMode = item.startDate <= today && item.endDate >= today;
+        else if (activeMode === 'expired') matchesMode = item.endDate < today;
+        return matchesMarket && matchesType && matchesMode;
       });
     }
 
@@ -1028,7 +1033,7 @@
       }
       var marketText = document.getElementById('leaveMarketFilter').selectedOptions[0] ? document.getElementById('leaveMarketFilter').selectedOptions[0].textContent : 'Tüm Pazarlar';
       var typeText = document.getElementById('leaveTypeFilter').selectedOptions[0] ? document.getElementById('leaveTypeFilter').selectedOptions[0].textContent : 'Tüm Türler';
-      var activeText = document.getElementById('leaveActiveFilter').selectedOptions[0] ? document.getElementById('leaveActiveFilter').selectedOptions[0].textContent : 'Tüm Kayıtlar';
+      var activeText = document.getElementById('leaveActiveFilter').selectedOptions[0] ? document.getElementById('leaveActiveFilter').selectedOptions[0].textContent : 'Açık Kayıtlar';
       var nowText = new Date().toLocaleString('tr-TR');
       var summaryHtml = [
         '<span class="doc-chip">Toplam: ' + rows.length + '</span>',
@@ -1041,7 +1046,7 @@
           '<td>' + escapeHtml(item.marketName || '-') + '</td>' +
           '<td>' + escapeHtml(item.sectionType || '-') + '<div class="sub">Yer: ' + escapeHtml(item.stallLabel || '-') + '</div></td>' +
           '<td>' + escapeHtml(item.leaveType || '-') + '</td>' +
-          '<td>' + escapeHtml((item.startDateText || '-') + ' - ' + (item.endDateText || '-')) + '</td>' +
+          '<td>' + escapeHtml((item.startDateText || '-') + ' - ' + (item.endDateText || '-')) + '<div class="sub">' + escapeHtml(item.remainingText || '-') + '</div></td>' +
           '<td>' + escapeHtml(item.note || 'Açıklama girilmedi') + '</td>' +
         '</tr>';
       }).join('');
@@ -1088,7 +1093,7 @@
           '<td><div class="cell-title">' + escapeHtml(item.vendorName) + '</div><div class="cell-sub">Eklenme: ' + escapeHtml(item.createdAt) + '</div></td>' +
           '<td>' + escapeHtml(item.marketName) + '</td>' +
           '<td>' + (item.leaveType === 'Raporlu' ? '<span class="badge warn">Raporlu</span>' : '<span class="badge info">İzinli</span>') + '</td>' +
-          '<td><div class="cell-title">' + escapeHtml(item.startDateText) + ' - ' + escapeHtml(item.endDateText) + '</div></td>' +
+          '<td><div class="cell-title">' + escapeHtml(item.startDateText) + ' - ' + escapeHtml(item.endDateText) + '</div><div class="cell-sub">' + escapeHtml(item.remainingText || '-') + '</div></td>' +
           '<td>' + escapeHtml(item.note || 'Açıklama girilmedi') + '</td>' +
           '<td><div class="toolbar"><button class="mini-btn primary" type="button" onclick="openLeaveModal(' + item.id + ')">Düzenle</button><button class="mini-btn" type="button" onclick="deleteLeaveRecord(' + item.id + ')">Sil</button></div></td>' +
         '</tr>';
@@ -1398,7 +1403,7 @@
     function clearLeaveFilters() {
       document.getElementById('leaveMarketFilter').value = 'all';
       document.getElementById('leaveTypeFilter').value = 'all';
-      document.getElementById('leaveActiveFilter').value = 'all';
+      document.getElementById('leaveActiveFilter').value = 'open';
       renderLeaveTable();
     }
 
