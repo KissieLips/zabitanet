@@ -428,7 +428,7 @@
     }
 
     function normalizeSortText(value) {
-      return String(value || '').trim().toLocaleLowerCase('tr-TR');
+      return String(value || '').trim();
     }
 
     function extractLeadingNumber(value) {
@@ -467,10 +467,10 @@
       if (aNo !== bNo) return aNo - bNo;
       var aText = normalizeSortText(a.stallNo || a.stallLabel);
       var bText = normalizeSortText(b.stallNo || b.stallLabel);
-      if (aText && bText && aText !== bText) return aText.localeCompare(bText, 'tr');
+      if (aText && bText && aText !== bText) return aText.localeCompare(bText, 'tr', { numeric: true, sensitivity: 'base' });
       if (aText && !bText) return -1;
       if (!aText && bText) return 1;
-      return normalizeSortText(a.vendorName).localeCompare(normalizeSortText(b.vendorName), 'tr');
+      return normalizeSortText(a.vendorName).localeCompare(normalizeSortText(b.vendorName), 'tr', { sensitivity: 'base' });
     }
 
     function clearMobileFilters() {

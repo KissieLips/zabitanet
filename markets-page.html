@@ -682,7 +682,7 @@
     function formatBadge(active) { return active ? '<span class="badge success">Aktif</span>' : '<span class="badge gray">Pasif</span>'; }
 
     function normalizeVendorSortText(value) {
-      return String(value || '').trim().toLocaleLowerCase('tr-TR');
+      return String(value || '').trim();
     }
 
     function extractLeadingNumber(value) {
@@ -704,10 +704,10 @@
       if (aNo !== bNo) return aNo - bNo;
       var aText = normalizeVendorSortText(a.stallNo || a.stallLabel);
       var bText = normalizeVendorSortText(b.stallNo || b.stallLabel);
-      if (aText && bText && aText !== bText) return aText.localeCompare(bText, 'tr');
+      if (aText && bText && aText !== bText) return aText.localeCompare(bText, 'tr', { numeric: true, sensitivity: 'base' });
       if (aText && !bText) return -1;
       if (!aText && bText) return 1;
-      return normalizeVendorSortText(a.fullName).localeCompare(normalizeVendorSortText(b.fullName), 'tr');
+      return normalizeVendorSortText(a.fullName).localeCompare(normalizeVendorSortText(b.fullName), 'tr', { sensitivity: 'base' });
     }
 
     function getSectionSortValue(value) {
@@ -739,10 +739,10 @@
       if (aNo !== bNo) return aNo - bNo;
       var aText = normalizeVendorSortText(a.stallNo || a.stallLabel);
       var bText = normalizeVendorSortText(b.stallNo || b.stallLabel);
-      if (aText && bText && aText !== bText) return aText.localeCompare(bText, 'tr');
+      if (aText && bText && aText !== bText) return aText.localeCompare(bText, 'tr', { numeric: true, sensitivity: 'base' });
       if (aText && !bText) return -1;
       if (!aText && bText) return 1;
-      return normalizeVendorSortText(a.vendorName).localeCompare(normalizeVendorSortText(b.vendorName), 'tr');
+      return normalizeVendorSortText(a.vendorName).localeCompare(normalizeVendorSortText(b.vendorName), 'tr', { sensitivity: 'base' });
     }
 
     function onVendorFilterChange() {

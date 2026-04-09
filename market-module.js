@@ -444,6 +444,55 @@ function buildStallLabel(row) {
   return `${color} ${number}`;
 }
 
+function getMarketSectionSortValue(value) {
+  const map = { 'Esnaf': 1, 'Üretici': 2, 'Tuhafiye': 3 };
+  return map[String(value || '').trim()] || 99;
+}
+
+function getMarketStallColorSortValue(sectionType, stallColor) {
+  const color = String(stallColor || '').trim().toLocaleLowerCase('tr-TR');
+  if (String(sectionType || '').trim() === 'Üretici') {
+    if (color === 'yeşil') return 1;
+    if (color === 'kırmızı') return 2;
+  }
+  if (color === 'mavi') return 3;
+  if (color === 'renksiz') return 4;
+  if (!color) return 5;
+  return 6;
+}
+
+function extractMarketStallSortNumber(value) {
+  const text = String(value || '').trim();
+  if (!text) return Number.POSITIVE_INFINITY;
+  const match = text.match(/\d+/);
+  return match ? Number(match[0]) : Number.POSITIVE_INFINITY;
+}
+
+function compareMarketRowsByStall(a, b) {
+  const aSection = getMarketSectionSortValue(a.sectionType || a.section_type);
+  const bSection = getMarketSectionSortValue(b.sectionType || b.section_type);
+  if (aSection !== bSection) return aSection - bSection;
+
+  const aColor = getMarketStallColorSortValue(a.sectionType || a.section_type, a.stallColor || a.stall_color);
+  const bColor = getMarketStallColorSortValue(b.sectionType || b.section_type, b.stallColor || b.stall_color);
+  if (aColor !== bColor) return aColor - bColor;
+
+  const aNumber = extractMarketStallSortNumber(a.stallNo || a.stall_no || a.stallLabel || a.stall_label);
+  const bNumber = extractMarketStallSortNumber(b.stallNo || b.stall_no || b.stallLabel || b.stall_label);
+  if (aNumber !== bNumber) return aNumber - bNumber;
+
+  const aLabel = String(a.stallLabel || a.stall_label || buildStallLabel(a) || '').trim();
+  const bLabel = String(b.stallLabel || b.stall_label || buildStallLabel(b) || '').trim();
+  if (aLabel || bLabel) {
+    const labelCompare = aLabel.localeCompare(bLabel, 'tr', { numeric: true, sensitivity: 'base' });
+    if (labelCompare !== 0) return labelCompare;
+  }
+
+  const aName = String(a.vendorName || a.vendor_name || a.fullName || a.full_name || '').trim();
+  const bName = String(b.vendorName || b.vendor_name || b.fullName || b.full_name || '').trim();
+  return aName.localeCompare(bName, 'tr', { sensitivity: 'base' });
+}
+
 function mapVendor(row) {
   const documents = buildDocumentSummary(row);
   return {
@@ -1472,9 +1521,11 @@ function registerMarketModule({ app, pool }) {
           marketId: row.market_id,
           marketName: row.market_name,
           sectionType: row.section_type,
+          stallNo: row.stall_no || '',
+          stallColor: row.stall_color || '',
           stallLabel: buildStallLabel(row),
         };
-      });
+      }).sort(compareMarketRowsByStall);
 
       const marketName = rows.length ? rows[0].marketName : '';
       const updatedAt = rows.reduce((latest, row) => {
@@ -1582,8 +1633,10 @@ function registerMarketModule({ app, pool }) {
         marketId: row.market_id,
         marketName: row.market_name || '',
         sectionType: row.section_type || '',
+        stallNo: row.stall_no || '',
+        stallColor: row.stall_color || '',
         stallLabel: buildStallLabel(row),
-      }));
+      })).sort(compareMarketRowsByStall);
 
       const marketName = rows.length ? rows[0].marketName : 'Pazar';
       let presentCount = 0;
