@@ -11,21 +11,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const DISPLAY_TIME_ZONE = process.env.DISPLAY_TIME_ZONE || "Europe/Istanbul";
 
-const DEFAULT_COMPLAINT_TOPICS = [
-  "Kaldırım İşgali",
-  "Görüntü Kirliliği",
-  "Çevre Kirliliği",
-  "Gürültü",
-  "Seyyar Satıcı",
-  "Ruhsatsız Faaliyet",
-  "Dilencilik",
-  "Atık / Moloz",
-  "İşgal / Masa Sandalye",
-  "Fiyat Etiketi / Tüketici",
-  "Pazar Düzeni",
-  "Diğer"
-];
-
 app.use(express.json());
 
 const pool = new Pool({
@@ -38,6 +23,21 @@ const uploadsRoot = path.join(__dirname, "uploads");
 const complaintUploadsRoot = path.join(uploadsRoot, "complaints");
 const businessUploadsRoot = path.join(uploadsRoot, "businesses");
 const businessInspectionUploadsRoot = path.join(uploadsRoot, "business-inspections");
+
+const DEFAULT_COMPLAINT_TOPICS = [
+  "Kaldırım İşgali",
+  "Görüntü Kirliliği",
+  "Çevre Kirliliği",
+  "Gürültü",
+  "Seyyar Satıcı",
+  "Ruhsatsız Faaliyet",
+  "Dilencilik",
+  "Atık / Moloz",
+  "İşgal / Masa Sandalye",
+  "Fiyat Etiketi / Tarife",
+  "Hijyen",
+  "Diğer"
+];
 
 fs.mkdirSync(complaintUploadsRoot, { recursive: true });
 fs.mkdirSync(businessUploadsRoot, { recursive: true });
@@ -392,38 +392,105 @@ function formatDateTime(value) {
   }).format(d);
 }
 
-function normalizeComplaintTopics(value) {
-  if (!value) return [];
-  const rawTopics = Array.isArray(value)
-    ? value
-    : typeof value === "string"
-      ? (() => {
-          try {
-            return JSON.parse(value);
-          } catch (error) {
-            return [];
-          }
-        })()
-      : [];
-
-  return rawTopics
-    .filter((topic) => topic && topic.id !== null && topic.id !== undefined && topic.name)
-    .map((topic) => ({
-      id: Number(topic.id),
-      name: String(topic.name),
-    }));
+function mapComplaintTopic(row) {
+  return {
+    id: Number(row.id),
+    name: row.name,
+  };
 }
 
-function buildComplaintTopicText(topics) {
-  if (!Array.isArray(topics) || topics.length === 0) return "";
-  return topics
-    .map((topic) => topic.name)
-    .filter(Boolean)
-    .join(", ");
+function normalizeTopicIds(topicIds) {
+  if (!Array.isArray(topicIds)) return [];
+
+  const normalized = [];
+  const seen = new Set();
+
+  for (const value of topicIds) {
+    const id = Number(value);
+    if (!Number.isInteger(id) || id <= 0 || seen.has(id)) continue;
+    seen.add(id);
+    normalized.push(id);
+  }
+
+  return normalized;
+}
+
+async function getComplaintTopicRowsByIds(topicIds, db = pool) {
+  const ids = normalizeTopicIds(topicIds);
+  if (!ids.length) return [];
+
+  const result = await db.query(
+    `
+      SELECT id, name
+      FROM complaint_topic_definitions
+      WHERE id = ANY($1::int[])
+      ORDER BY name ASC
+    `,
+    [ids]
+  );
+
+  return result.rows;
+}
+
+async function getComplaintTopicsMapForComplaintIds(complaintIds, db = pool) {
+  const ids = Array.from(new Set((complaintIds || []).map(Number).filter(function(value) {
+    return Number.isInteger(value) && value > 0;
+  })));
+
+  const topicMap = new Map();
+  for (const id of ids) topicMap.set(id, []);
+  if (!ids.length) return topicMap;
+
+  const result = await db.query(
+    `
+      SELECT l.complaint_id, d.id, d.name
+      FROM complaint_topic_links l
+      JOIN complaint_topic_definitions d ON d.id = l.topic_id
+      WHERE l.complaint_id = ANY($1::int[])
+      ORDER BY d.name ASC
+    `,
+    [ids]
+  );
+
+  for (const row of result.rows) {
+    const complaintId = Number(row.complaint_id);
+    if (!topicMap.has(complaintId)) topicMap.set(complaintId, []);
+    topicMap.get(complaintId).push(mapComplaintTopic(row));
+  }
+
+  return topicMap;
+}
+
+async function replaceComplaintTopics(db, complaintId, topicIds) {
+  const ids = normalizeTopicIds(topicIds);
+
+  await db.query('DELETE FROM complaint_topic_links WHERE complaint_id = $1', [complaintId]);
+
+  for (const topicId of ids) {
+    await db.query(
+      `
+        INSERT INTO complaint_topic_links (complaint_id, topic_id)
+        VALUES ($1, $2)
+        ON CONFLICT (complaint_id, topic_id) DO NOTHING
+      `,
+      [complaintId, topicId]
+    );
+  }
+}
+
+async function seedComplaintTopics() {
+  for (const topicName of DEFAULT_COMPLAINT_TOPICS) {
+    await pool.query(
+      'INSERT INTO complaint_topic_definitions (name) VALUES ($1) ON CONFLICT (name) DO NOTHING',
+      [topicName]
+    );
+  }
 }
 
 function mapComplaint(row) {
-  const topics = normalizeComplaintTopics(row.topics);
+  const topics = Array.isArray(row.topics)
+    ? row.topics.map(mapComplaintTopic)
+    : [];
 
   return {
     id: row.id,
@@ -431,9 +498,9 @@ function mapComplaint(row) {
     date: toInputDate(row.complaint_date),
     displayDate: formatDate(row.complaint_date),
     subject: row.subject,
+    summary: row.subject,
     topics: topics,
-    topicNames: topics.map((topic) => topic.name),
-    topicText: buildComplaintTopicText(topics),
+    topicNames: topics.map(function(topic) { return topic.name; }).join(", "),
     source: row.source,
     address: row.address || "",
     detail: row.detail || "",
@@ -911,97 +978,6 @@ function safeUnlink(filePath) {
   }
 }
 
-
-function normalizeComplaintTopicIds(topicIds) {
-  if (!Array.isArray(topicIds)) return [];
-  const seen = new Set();
-
-  return topicIds
-    .map((value) => Number(value))
-    .filter((value) => Number.isInteger(value) && value > 0)
-    .filter((value) => {
-      if (seen.has(value)) return false;
-      seen.add(value);
-      return true;
-    });
-}
-
-async function seedComplaintTopics() {
-  for (const topicName of DEFAULT_COMPLAINT_TOPICS) {
-    await pool.query(
-      `INSERT INTO complaint_topic_definitions (name)
-       VALUES ($1)
-       ON CONFLICT (name) DO NOTHING`,
-      [topicName]
-    );
-  }
-}
-
-async function saveComplaintTopics(client, complaintId, topicIds) {
-  const normalizedTopicIds = normalizeComplaintTopicIds(topicIds);
-
-  await client.query(
-    "DELETE FROM complaint_topic_links WHERE complaint_id = $1",
-    [complaintId]
-  );
-
-  if (normalizedTopicIds.length === 0) return [];
-
-  const validTopicResult = await client.query(
-    "SELECT id FROM complaint_topic_definitions WHERE id = ANY($1::int[])",
-    [normalizedTopicIds]
-  );
-
-  const validTopicIds = validTopicResult.rows.map((row) => Number(row.id));
-  if (validTopicIds.length === 0) return [];
-
-  const insertValues = [];
-  const params = [complaintId];
-  let paramIndex = 2;
-
-  for (const topicId of validTopicIds) {
-    insertValues.push(`($1, $${paramIndex})`);
-    params.push(topicId);
-    paramIndex += 1;
-  }
-
-  await client.query(
-    `INSERT INTO complaint_topic_links (complaint_id, topic_id)
-     VALUES ${insertValues.join(", ")}
-     ON CONFLICT (complaint_id, topic_id) DO NOTHING`,
-    params
-  );
-
-  return validTopicIds;
-}
-
-function complaintSelectSql(whereClause = "") {
-  return `
-    SELECT
-      c.*,
-      COALESCE(
-        json_agg(
-          DISTINCT jsonb_build_object('id', d.id, 'name', d.name)
-        ) FILTER (WHERE d.id IS NOT NULL),
-        '[]'::json
-      ) AS topics
-    FROM complaints c
-    LEFT JOIN complaint_topic_links ctl ON ctl.complaint_id = c.id
-    LEFT JOIN complaint_topic_definitions d ON d.id = ctl.topic_id
-    ${whereClause}
-    GROUP BY c.id
-  `;
-}
-
-async function getComplaintByIdFromDb(client, complaintId) {
-  const result = await client.query(
-    complaintSelectSql("WHERE c.id = $1") + " ORDER BY c.id DESC",
-    [complaintId]
-  );
-
-  return result.rows.length ? mapComplaint(result.rows[0]) : null;
-}
-
 async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS complaints (
@@ -1038,35 +1014,6 @@ async function initDb() {
   `);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS complaint_topic_definitions (
-      id SERIAL PRIMARY KEY,
-      name VARCHAR(120) UNIQUE NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS complaint_topic_links (
-      complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
-      topic_id INTEGER NOT NULL REFERENCES complaint_topic_definitions(id) ON DELETE RESTRICT,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (complaint_id, topic_id)
-    )
-  `);
-
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_complaint_topic_links_complaint_id
-    ON complaint_topic_links(complaint_id)
-  `);
-
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_complaint_topic_links_topic_id
-    ON complaint_topic_links(topic_id)
-  `);
-
-  await seedComplaintTopics();
-
-  await pool.query(`
     CREATE TABLE IF NOT EXISTS complaint_files (
       id SERIAL PRIMARY KEY,
       complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
@@ -1086,6 +1033,30 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_complaint_files_complaint_id
     ON complaint_files(complaint_id)
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS complaint_topic_definitions (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(120) UNIQUE NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS complaint_topic_links (
+      complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
+      topic_id INTEGER NOT NULL REFERENCES complaint_topic_definitions(id) ON DELETE CASCADE,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (complaint_id, topic_id)
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_complaint_topic_links_topic_id
+    ON complaint_topic_links(topic_id)
+  `);
+
+  await seedComplaintTopics();
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS business_categories (
@@ -1461,27 +1432,19 @@ async function nextComplaintNo() {
 app.get("/api/complaint-topics", async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, name, created_at
-       FROM complaint_topic_definitions
-       ORDER BY name ASC`
+      "SELECT id, name, created_at FROM complaint_topic_definitions ORDER BY name ASC"
     );
-
-    res.json(result.rows.map((row) => ({
-      id: Number(row.id),
-      name: row.name,
-      createdAt: formatDateTime(row.created_at),
-    })));
+    res.json(result.rows.map(mapComplaintTopic));
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Şikayet konu listesi alınamadı." });
+    res.status(500).json({ error: "Şikayet konuları alınamadı." });
   }
 });
 
 app.get("/api/complaints", async (req, res) => {
+
   try {
-    const result = await pool.query(
-      complaintSelectSql() + " ORDER BY c.id DESC"
-    );
+    const result = await pool.query("SELECT * FROM complaints ORDER BY id DESC");
     res.json(result.rows.map(mapComplaint));
   } catch (error) {
     console.error(error);
@@ -1496,7 +1459,6 @@ app.post("/api/complaints", async (req, res) => {
     const {
       date,
       subject,
-      topicIds,
       source,
       address,
       detail,
@@ -1504,26 +1466,15 @@ app.post("/api/complaints", async (req, res) => {
       status,
       note,
       controlDate,
+      topicIds,
     } = req.body;
 
-    const normalizedTopicIds = normalizeComplaintTopicIds(topicIds);
-    const trimmedSubject = typeof subject === "string" ? subject.trim() : "";
+    const normalizedTopicIds = normalizeTopicIds(topicIds);
+    const topicRows = await getComplaintTopicRowsByIds(normalizedTopicIds, client);
+    const finalSubject = String(subject || "").trim() || topicRows.map(function(row) { return row.name; }).join(", ");
 
-    if (!date || !source || (!trimmedSubject && normalizedTopicIds.length === 0)) {
-      return res.status(400).json({ error: "Tarih, kaynak ve en az bir konu bilgisi girin." });
-    }
-
-    await client.query("BEGIN");
-
-    let finalSubject = trimmedSubject;
-    if (normalizedTopicIds.length > 0) {
-      const topicNameResult = await client.query(
-        "SELECT name FROM complaint_topic_definitions WHERE id = ANY($1::int[]) ORDER BY name ASC",
-        [normalizedTopicIds]
-      );
-      if (!finalSubject) {
-        finalSubject = topicNameResult.rows.map((row) => row.name).join(", ");
-      }
+    if (!date || !source || !finalSubject) {
+      return res.status(400).json({ error: "Zorunlu alanları doldurun." });
     }
 
     const complaintNo = await nextComplaintNo();
@@ -1531,14 +1482,11 @@ app.post("/api/complaints", async (req, res) => {
     const finalAction = action || "Henüz İşlem Yapılmadı";
     const finalStatus = status || "Açık";
 
-    const processDate =
-      finalAction !== "Henüz İşlem Yapılmadı" ? date : null;
+    const processDate = finalAction !== "Henüz İşlem Yapılmadı" ? date : null;
+    const closedDate = finalStatus === "Kapatıldı" ? date : null;
+    const finalControlDate = finalStatus === "Süre Verildi" ? (controlDate || null) : null;
 
-    const closedDate =
-      finalStatus === "Kapatıldı" ? date : null;
-
-    const finalControlDate =
-      finalStatus === "Süre Verildi" ? (controlDate || null) : null;
+    await client.query('BEGIN');
 
     const result = await client.query(
       `
@@ -1559,7 +1507,7 @@ app.post("/api/complaints", async (req, res) => {
           )
         VALUES
           ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        RETURNING id
+        RETURNING *
       `,
       [
         complaintNo,
@@ -1577,15 +1525,15 @@ app.post("/api/complaints", async (req, res) => {
       ]
     );
 
-    const complaintId = result.rows[0].id;
-    await saveComplaintTopics(client, complaintId, normalizedTopicIds);
+    await replaceComplaintTopics(client, result.rows[0].id, topicRows.map(function(row) { return row.id; }));
+    await client.query('COMMIT');
 
-    await client.query("COMMIT");
-
-    const complaint = await getComplaintByIdFromDb(pool, complaintId);
-    res.json(complaint);
+    res.json(mapComplaint({
+      ...result.rows[0],
+      topics: topicRows
+    }));
   } catch (error) {
-    await client.query("ROLLBACK");
+    try { await client.query('ROLLBACK'); } catch (rollbackError) {}
     console.error(error);
     res.status(500).json({ error: "Kayıt eklenemedi." });
   } finally {
@@ -1601,7 +1549,6 @@ app.put("/api/complaints/:id", async (req, res) => {
     const {
       date,
       subject,
-      topicIds,
       source,
       address,
       detail,
@@ -1609,16 +1556,16 @@ app.put("/api/complaints/:id", async (req, res) => {
       status,
       note,
       controlDate,
+      topicIds,
     } = req.body;
 
-    const normalizedTopicIds = normalizeComplaintTopicIds(topicIds);
-    const trimmedSubject = typeof subject === "string" ? subject.trim() : "";
+    const normalizedTopicIds = normalizeTopicIds(topicIds);
+    const topicRows = await getComplaintTopicRowsByIds(normalizedTopicIds, client);
+    const finalSubject = String(subject || "").trim() || topicRows.map(function(row) { return row.name; }).join(", ");
 
-    if (!date || !source || (!trimmedSubject && normalizedTopicIds.length === 0)) {
-      return res.status(400).json({ error: "Tarih, kaynak ve en az bir konu bilgisi girin." });
+    if (!date || !source || !finalSubject) {
+      return res.status(400).json({ error: "Zorunlu alanları doldurun." });
     }
-
-    await client.query("BEGIN");
 
     const existingResult = await client.query(
       "SELECT * FROM complaints WHERE id = $1",
@@ -1626,22 +1573,10 @@ app.put("/api/complaints/:id", async (req, res) => {
     );
 
     if (existingResult.rows.length === 0) {
-      await client.query("ROLLBACK");
       return res.status(404).json({ error: "Kayıt bulunamadı." });
     }
 
     const existing = existingResult.rows[0];
-
-    let finalSubject = trimmedSubject;
-    if (normalizedTopicIds.length > 0) {
-      const topicNameResult = await client.query(
-        "SELECT name FROM complaint_topic_definitions WHERE id = ANY($1::int[]) ORDER BY name ASC",
-        [normalizedTopicIds]
-      );
-      if (!finalSubject) {
-        finalSubject = topicNameResult.rows.map((row) => row.name).join(", ");
-      }
-    }
 
     const finalAction = action || "Henüz İşlem Yapılmadı";
     const finalStatus = status || "Açık";
@@ -1661,7 +1596,9 @@ app.put("/api/complaints/:id", async (req, res) => {
         ? (controlDate || toInputDate(existing.control_date) || null)
         : null;
 
-    await client.query(
+    await client.query('BEGIN');
+
+    const result = await client.query(
       `
         UPDATE complaints
         SET
@@ -1677,6 +1614,7 @@ app.put("/api/complaints/:id", async (req, res) => {
           closed_date = $10,
           control_date = $11
         WHERE id = $12
+        RETURNING *
       `,
       [
         date,
@@ -1694,14 +1632,15 @@ app.put("/api/complaints/:id", async (req, res) => {
       ]
     );
 
-    await saveComplaintTopics(client, id, normalizedTopicIds);
+    await replaceComplaintTopics(client, id, topicRows.map(function(row) { return row.id; }));
+    await client.query('COMMIT');
 
-    await client.query("COMMIT");
-
-    const complaint = await getComplaintByIdFromDb(pool, id);
-    res.json(complaint);
+    res.json(mapComplaint({
+      ...result.rows[0],
+      topics: topicRows
+    }));
   } catch (error) {
-    await client.query("ROLLBACK");
+    try { await client.query('ROLLBACK'); } catch (rollbackError) {}
     console.error(error);
     res.status(500).json({ error: "Kayıt güncellenemedi." });
   } finally {
@@ -3300,6 +3239,11 @@ app.get("/businesses", (req, res) => {
     .form-group { display: grid; gap: 6px; }
     .form-group.full { grid-column: 1 / -1; }
     .form-group label { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }
+    .topic-picker { border: 1px solid #cfd8e4; border-radius: 12px; padding: 12px; background: #ffffff; min-height: 54px; display: grid; gap: 10px; }
+    .topic-picker-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 12px; }
+    .topic-check { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--text); line-height: 1.45; }
+    .topic-check input { width: 16px; min-width: 16px; height: 16px; padding: 0; margin-top: 2px; box-shadow: none; }
+    .topic-help { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
     .section-block { grid-column: 1 / -1; border: 1px solid #e2e8f0; border-radius: 14px; background: linear-gradient(180deg, #fbfdff 0%, #f8fbff 100%); padding: 14px; display: grid; gap: 12px; }
     .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
     .section-title-sm { font-size: 13px; font-weight: 700; color: #0f172a; line-height: 1.3; }
@@ -5075,91 +5019,6 @@ app.get("/businesses/:id", (req, res) => {
       return '<div class="inspection-field"><div class="inspection-field-label">' + label + '</div><div class="inspection-field-value">' + value + '</div></div>';
     }
 
-
-    function buildTopicChecklistHtml(containerId, selectedIds) {
-      var selectedMap = {};
-      var ids = Array.isArray(selectedIds) ? selectedIds : [];
-
-      for (var i = 0; i < ids.length; i++) {
-        selectedMap[String(ids[i])] = true;
-      }
-
-      if (!complaintTopicDefinitions.length) {
-        return '<div class="muted">Şikayet konusu listesi yüklenemedi.</div>';
-      }
-
-      var html = "";
-      for (var j = 0; j < complaintTopicDefinitions.length; j++) {
-        var topic = complaintTopicDefinitions[j];
-        var checked = selectedMap[String(topic.id)] ? ' checked' : '';
-        html += '<label class="topic-option">';
-        html += '<input type="checkbox" data-topic-container="' + escapeHtml(containerId) + '" value="' + escapeHtml(topic.id) + '"' + checked + ' />';
-        html += '<span>' + escapeHtml(topic.name) + '</span>';
-        html += '</label>';
-      }
-      return html;
-    }
-
-    function renderTopicChecklist(containerId, selectedIds) {
-      var container = document.getElementById(containerId);
-      if (!container) return;
-      container.innerHTML = buildTopicChecklistHtml(containerId, selectedIds);
-    }
-
-    function getSelectedTopicIds(containerId) {
-      var container = document.getElementById(containerId);
-      if (!container) return [];
-
-      var checkedInputs = container.querySelectorAll('input[type="checkbox"]:checked');
-      var ids = [];
-
-      for (var i = 0; i < checkedInputs.length; i++) {
-        ids.push(Number(checkedInputs[i].value));
-      }
-
-      return ids;
-    }
-
-    function buildTopicSummaryHtml(item) {
-      var topics = item && item.topics ? item.topics : [];
-      if (!topics.length) {
-        return '<span class="muted">Konu seçilmemiş</span>';
-      }
-
-      var html = '<div class="topic-summary">';
-      for (var i = 0; i < topics.length; i++) {
-        html += '<span class="topic-chip">' + escapeHtml(topics[i].name) + '</span>';
-      }
-      html += '</div>';
-      return html;
-    }
-
-    function complaintSearchText(item) {
-      var values = [
-        item.no || "",
-        item.subject || "",
-        item.topicText || "",
-        item.detail || "",
-        item.address || ""
-      ];
-
-      return values.join(" ").toLowerCase();
-    }
-
-    async function loadComplaintTopics() {
-      try {
-        var response = await fetch("/api/complaint-topics");
-        if (!response.ok) throw new Error();
-        complaintTopicDefinitions = await response.json();
-        renderTopicChecklist("newTopics", []);
-        renderTopicChecklist("editTopics", []);
-      } catch (error) {
-        complaintTopicDefinitions = [];
-        renderTopicChecklist("newTopics", []);
-        renderTopicChecklist("editTopics", []);
-      }
-    }
-
     function formatFileSize(bytes) {
       var size = Number(bytes || 0);
       if (!size) return '0 KB';
@@ -6630,14 +6489,6 @@ app.get("/", (req, res) => {
     input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
     textarea { resize: vertical; min-height: 88px; }
     .table-panel { padding-bottom: 12px; }
-    .topic-checklist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 4px; }
-    .topic-option { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #ffffff; cursor: pointer; transition: 0.15s ease; min-height: 46px; }
-    .topic-option:hover { border-color: #b6c4d6; background: #f8fbff; }
-    .topic-option input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); flex: 0 0 auto; }
-    .topic-option span { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.35; }
-    .topic-help { color: var(--muted); font-size: 12px; margin-top: 8px; }
-    .topic-summary { display: flex; flex-wrap: wrap; gap: 6px; }
-    .topic-chip { display: inline-flex; align-items: center; padding: 5px 10px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 12px; font-weight: 700; line-height: 1.2; }
     .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
     .table-wrap table td:first-child { min-width: 230px; }
     table { width: 100%; border-collapse: collapse; min-width: 860px; background: #ffffff; }
@@ -6785,13 +6636,13 @@ app.get("/", (req, res) => {
           <input type="date" id="filterDate" />
           <select id="filterSource"><option value="">Tüm Kaynaklar</option><option value="CİMER">CİMER</option><option value="Şeffaf Masa">Şeffaf Masa</option><option value="Büro Telefonu">Büro Telefonu</option><option value="Vatandaş Talebi">Vatandaş Talebi</option></select>
           <select id="filterStatus"><option value="">Tüm Durumlar</option><option value="Açık">Açık</option><option value="İnceleniyor">İnceleniyor</option><option value="Süre Verildi">Süre Verildi</option><option value="Kapatıldı">Kapatıldı</option></select>
-          <input type="text" id="searchInput" placeholder="Şikayet No, başlık veya konu ara..." />
+          <input type="text" id="searchInput" placeholder="Şikayet No veya konu başlığı ara..." />
           <button class="btn btn-secondary" type="button" onclick="renderTable()">🔎 Filtrele</button>
         </div>
       </section>
       <section class="panel table-panel">
         <div class="panel-header"><div class="panel-title">Şikayet kayıtları</div></div>
-        <div class="table-wrap"><table><thead><tr><th>Şikayet No</th><th>Tarih</th><th>Başlık / Konular</th><th>Kaynak</th><th>Durum</th><th>Yapılan İşlem</th><th>İşlemler</th></tr></thead><tbody id="complaintTableBody"></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>Şikayet No</th><th>Tarih</th><th>Konu</th><th>Kaynak</th><th>Durum</th><th>Yapılan İşlem</th><th>İşlemler</th></tr></thead><tbody id="complaintTableBody"></tbody></table></div>
         <div id="emptyNote" class="empty-note" style="display:none;">Kayıt bulunamadı.</div>
       </section>
     </main>
@@ -6815,7 +6666,7 @@ app.get("/", (req, res) => {
           </div>
           <div class="form-group">
             <label>Kısa Başlık / Özet</label>
-            <input type="text" id="newSubject" placeholder="Örn: İşyerinin kaldırımı işgal etmesi ve görüntü kirliliği oluşturması" />
+            <input type="text" id="newSubject" placeholder="Örn: İşyerinin kaldırım işgali ve görüntü kirliliği" />
           </div>
           <div class="form-group">
             <label>Şikayet Kaynağı *</label>
@@ -6829,8 +6680,8 @@ app.get("/", (req, res) => {
           </div>
           <div class="form-group full">
             <label>Şikayet Konuları *</label>
-            <div id="newTopics" class="topic-checklist"></div>
-            <div class="topic-help">Bir şikayet kaydına birden fazla konu seçebilirsiniz. İstatistiklerde her konu ayrı sayılır.</div>
+            <div class="topic-picker" id="newTopics"></div>
+            <div class="topic-help">Bir şikayet içinde birden fazla konu seçebilirsiniz. İstatistikler bu seçimlere göre hesaplanacaktır.</div>
           </div>
           <div class="form-group full">
             <label>Şikayet Adresi</label>
@@ -6957,8 +6808,8 @@ app.get("/", (req, res) => {
           </div>
           <div class="form-group full">
             <label>Şikayet Konuları *</label>
-            <div id="editTopics" class="topic-checklist"></div>
-            <div class="topic-help">Birden fazla konu seçebilirsiniz. Faaliyet raporunda her konu ayrı yansır.</div>
+            <div class="topic-picker" id="editTopics"></div>
+            <div class="topic-help">İstatistik ve faaliyet raporları için en az bir konu seçin.</div>
           </div>
           <div class="form-group full">
             <label>Şikayet Adresi</label>
@@ -7007,6 +6858,7 @@ app.get("/", (req, res) => {
 
   <script>
         var complaints = [];
+    var complaintTopicDefinitions = [];
     var editingId = null;
     var activeAlertType = "";
     var detailComplaintId = null;
@@ -7016,7 +6868,6 @@ app.get("/", (req, res) => {
       photo: ["Öncesi", "Sonrası", "Genel Saha Fotoğrafı"],
       document: ["Tutanak", "Ceza", "Tebligat", "Savunma", "Diğer Belge"]
     };
-    var complaintTopicDefinitions = [];
 
     function toggleSidebar(forceOpen) {
       var shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !document.body.classList.contains("sidebar-open");
@@ -7334,6 +7185,70 @@ app.get("/", (req, res) => {
       }
     }
 
+    async function loadComplaintTopics() {
+      try {
+        var response = await fetch("/api/complaint-topics");
+        if (!response.ok) throw new Error();
+        complaintTopicDefinitions = await response.json();
+      } catch (error) {
+        complaintTopicDefinitions = [];
+      }
+
+      renderTopicPicker("newTopics", []);
+      renderTopicPicker("editTopics", []);
+    }
+
+    function renderTopicPicker(containerId, selectedIds) {
+      var container = document.getElementById(containerId);
+      if (!container) return;
+
+      var selectedMap = {};
+      var normalized = Array.isArray(selectedIds) ? selectedIds : [];
+      for (var i = 0; i < normalized.length; i++) {
+        selectedMap[String(normalized[i])] = true;
+      }
+
+      if (!complaintTopicDefinitions.length) {
+        container.innerHTML = '<div class="muted">Konu listesi yüklenemedi.</div>';
+        return;
+      }
+
+      var html = '<div class="topic-picker-grid">';
+      for (var j = 0; j < complaintTopicDefinitions.length; j++) {
+        var topic = complaintTopicDefinitions[j];
+        var checked = selectedMap[String(topic.id)] ? ' checked' : '';
+        html += '<label class="topic-check"><input type="checkbox" value="' + String(topic.id) + '"' + checked + ' /><span>' + escapeHtml(topic.name) + '</span></label>';
+      }
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    function getSelectedTopicIds(containerId) {
+      var container = document.getElementById(containerId);
+      if (!container) return [];
+
+      var ids = [];
+      var inputs = container.querySelectorAll('input[type="checkbox"]:checked');
+      for (var i = 0; i < inputs.length; i++) {
+        var value = Number(inputs[i].value);
+        if (!Number.isInteger(value) || value <= 0) continue;
+        ids.push(value);
+      }
+      return ids;
+    }
+
+    function getTopicNames(item) {
+      if (!item) return '';
+      if (Array.isArray(item.topics) && item.topics.length) {
+        var names = [];
+        for (var i = 0; i < item.topics.length; i++) {
+          if (item.topics[i] && item.topics[i].name) names.push(item.topics[i].name);
+        }
+        return names.join(', ');
+      }
+      return item.topicNames || '';
+    }
+
     async function loadComplaints() {
       try {
         var response = await fetch("/api/complaints");
@@ -7428,9 +7343,12 @@ app.get("/", (req, res) => {
         var dateMatch = !filterDate || item.date === filterDate;
         var sourceMatch = !filterSource || item.source === filterSource;
         var statusMatch = !filterStatus || item.status === filterStatus;
+        var topicNames = getTopicNames(item).toLowerCase();
         var searchMatch =
           !searchText ||
-          complaintSearchText(item).indexOf(searchText) > -1;
+          item.no.toLowerCase().indexOf(searchText) > -1 ||
+          item.subject.toLowerCase().indexOf(searchText) > -1 ||
+          topicNames.indexOf(searchText) > -1;
 
         return dateMatch && sourceMatch && statusMatch && searchMatch;
       });
@@ -7452,15 +7370,12 @@ app.get("/", (req, res) => {
         rows += "<tr>";
         rows += '<td class="complaint-no">' + escapeHtml(item.no) + "</td>";
         rows += "<td>" + escapeHtml(item.displayDate) + "</td>";
-        rows += "<td><div><strong>" + escapeHtml(item.subject || "-") + "</strong></div>";
-        if (item.topicText) {
-          rows += '<div class="topic-summary" style="margin-top:6px;">';
-          for (var topicIndex = 0; topicIndex < item.topics.length; topicIndex++) {
-            rows += '<span class="topic-chip">' + escapeHtml(item.topics[topicIndex].name) + '</span>';
-          }
-          rows += '</div>';
+        var topicLabel = getTopicNames(item) || item.subject || "-";
+        rows += "<td><div class='stack'><div class='cell-title compact'>" + escapeHtml(topicLabel) + "</div>";
+        if (item.subject && getTopicNames(item) && item.subject !== getTopicNames(item)) {
+          rows += "<div class='cell-sub'>Özet: " + escapeHtml(item.subject) + "</div>";
         }
-        rows += "</td>";
+        rows += "</div></td>";
         rows += "<td>" + sourceBadge(item.source) + "</td>";
         rows += "<td>" + getStatusBadge(item) + "</td>";
         rows += "<td>" + escapeHtml(item.action) + "</td>";
@@ -7479,8 +7394,8 @@ app.get("/", (req, res) => {
       document.getElementById("newNo").value = "Otomatik oluşturulacak";
       document.getElementById("newDate").value = todayInputDate();
       document.getElementById("newSubject").value = "";
-      renderTopicChecklist("newTopics", []);
       document.getElementById("newSource").value = "";
+      renderTopicPicker("newTopics", []);
       document.getElementById("newAddress").value = "";
       document.getElementById("newDetail").value = "";
       document.getElementById("newAction").value = "Henüz İşlem Yapılmadı";
@@ -7497,16 +7412,13 @@ app.get("/", (req, res) => {
         detailComplaintId = null;
         complaintFiles = [];
       }
-      if (id === "editModal") {
-        editingId = null;
-      }
     }
 
     async function saveNewComplaint() {
       var date = document.getElementById("newDate").value;
       var subject = document.getElementById("newSubject").value.trim();
-      var topicIds = getSelectedTopicIds("newTopics");
       var source = document.getElementById("newSource").value;
+      var topicIds = getSelectedTopicIds("newTopics");
       var address = document.getElementById("newAddress").value.trim();
       var detail = document.getElementById("newDetail").value.trim();
       var action = document.getElementById("newAction").value;
@@ -7514,8 +7426,8 @@ app.get("/", (req, res) => {
       var controlDate = document.getElementById("newControlDate").value;
       var note = document.getElementById("newNote").value.trim();
 
-      if (!date || !source || (!subject && topicIds.length === 0)) {
-        alert("Tarih, kaynak ve en az bir konu bilgisi girmeniz gerekiyor.");
+      if (!date || !source || topicIds.length === 0) {
+        alert("Tarih, kaynak ve en az bir şikayet konusu seçmeniz gerekiyor.");
         return;
       }
 
@@ -7531,8 +7443,8 @@ app.get("/", (req, res) => {
           body: JSON.stringify({
             date: date,
             subject: subject,
-            topicIds: topicIds,
             source: source,
+            topicIds: topicIds,
             address: address,
             detail: detail,
             action: action,
@@ -7563,8 +7475,8 @@ app.get("/", (req, res) => {
 
       var html = "";
       html += "<tr><th>Şikayet No</th><td>" + escapeHtml(item.no) + "</td></tr>";
-      html += "<tr><th>Kısa Başlık / Özet</th><td><strong>" + escapeHtml(item.subject || "-") + "</strong></td></tr>";
-      html += "<tr><th>Şikayet Konuları</th><td>" + buildTopicSummaryHtml(item) + "</td></tr>";
+      html += "<tr><th>Konu Başlıkları</th><td><strong>" + escapeHtml(getTopicNames(item) || "-") + "</strong></td></tr>";
+      html += "<tr><th>Kısa Özet</th><td>" + escapeHtml(item.subject || "-") + "</td></tr>";
       html += "<tr><th>Kaynak</th><td>" + escapeHtml(item.source) + "</td></tr>";
       html += "<tr><th>Adres</th><td>" + escapeHtml(item.address) + "</td></tr>";
       html += "<tr><th>Durum</th><td>" + getStatusBadge(item) + "</td></tr>";
@@ -7590,8 +7502,8 @@ app.get("/", (req, res) => {
       document.getElementById("editNo").value = item.no;
       document.getElementById("editDate").value = item.date;
       document.getElementById("editSubject").value = item.subject;
-      renderTopicChecklist("editTopics", (item.topics || []).map(function(topic) { return topic.id; }));
       document.getElementById("editSource").value = item.source;
+      renderTopicPicker("editTopics", (item.topics || []).map(function(topic) { return topic.id; }));
       document.getElementById("editAddress").value = item.address;
       document.getElementById("editDetail").value = item.detail;
       document.getElementById("editAction").value = item.action;
@@ -7607,11 +7519,10 @@ app.get("/", (req, res) => {
 
       var status = document.getElementById("editStatus").value;
       var controlDate = document.getElementById("editControlDate").value;
-      var subject = document.getElementById("editSubject").value.trim();
       var topicIds = getSelectedTopicIds("editTopics");
 
-      if (!document.getElementById("editDate").value || !document.getElementById("editSource").value || (!subject && topicIds.length === 0)) {
-        alert("Tarih, kaynak ve en az bir konu bilgisi girmeniz gerekiyor.");
+      if (topicIds.length === 0) {
+        alert("En az bir şikayet konusu seçmeniz gerekiyor.");
         return;
       }
 
@@ -7626,9 +7537,9 @@ app.get("/", (req, res) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             date: document.getElementById("editDate").value,
-            subject: subject,
-            topicIds: topicIds,
+            subject: document.getElementById("editSubject").value.trim(),
             source: document.getElementById("editSource").value,
+            topicIds: topicIds,
             address: document.getElementById("editAddress").value.trim(),
             detail: document.getElementById("editDetail").value.trim(),
             action: document.getElementById("editAction").value,
