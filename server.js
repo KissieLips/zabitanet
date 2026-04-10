@@ -6705,6 +6705,23 @@ app.get("/", (req, res) => {
     .form-group label { display: block; margin-bottom: 7px; font-weight: 700; font-size: 13px; color: #334155; }
     .hidden { display: none !important; }
     .modal-footer { padding: 14px 18px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); background: #ffffff; }
+    .modal-complaint-entry { max-width: 1020px; }
+    .modal-header-stack { display: grid; gap: 2px; }
+    .modal-header-stack small { font-size: 12px; font-weight: 600; color: rgba(31, 41, 55, 0.72); }
+    .complaint-entry-body { padding: 20px; }
+    .entry-shell { display: grid; gap: 14px; }
+    .entry-section { background: linear-gradient(180deg, #fbfdff 0%, #f8fafc 100%); border: 1px solid #e6edf5; border-radius: 16px; padding: 16px; }
+    .entry-section-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+    .entry-section-title { font-size: 14px; font-weight: 800; color: #0f172a; }
+    .entry-section-note { font-size: 12px; color: #64748b; margin-top: 2px; line-height: 1.45; }
+    .entry-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+    .complaint-entry-body .form-group { margin: 0; }
+    .complaint-entry-body .form-group label { margin-bottom: 8px; }
+    .complaint-entry-body input[disabled] { background: #f8fafc; color: #0f172a; font-weight: 700; }
+    .complaint-entry-body textarea { min-height: 108px; resize: vertical; }
+    .complaint-entry-body #newDetail { min-height: 120px; }
+    .complaint-entry-body #newNote { min-height: 96px; }
+    .topic-help { margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: #fff8dc; border: 1px solid #f3dd8b; color: #7c5a00; font-size: 12px; line-height: 1.45; }
     .detail-title { text-align: center; font-size: 21px; font-weight: 700; margin-bottom: 18px; letter-spacing: 0.02em; }
     .detail-table td, .detail-table th { border: 1px solid var(--line); padding: 14px 12px; }
     .detail-table th { width: 220px; background: #f8fafc; font-weight: 800; }
@@ -6748,7 +6765,7 @@ app.get("/", (req, res) => {
     .alert-item.today .alert-item-meta { color: #7c6030; }
     @media (max-width: 1280px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     .alert-item .btn { padding: 8px 10px; font-size: 12px; box-shadow: none; }
-    @media (max-width: 980px) { .main { padding: 16px; } .hero { padding: 14px; border-radius: 16px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; justify-content: space-between; flex-wrap: wrap; } .critical-grid, .stats-grid, .attachments-grid, .form-grid, .filters { grid-template-columns: 1fr; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .detail-table th { width: 150px; } }
+    @media (max-width: 980px) { .main { padding: 16px; } .hero { padding: 14px; border-radius: 16px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; justify-content: space-between; flex-wrap: wrap; } .critical-grid, .stats-grid, .attachments-grid, .form-grid, .filters, .entry-grid { grid-template-columns: 1fr; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .entry-section { padding: 14px; } .detail-table th { width: 150px; } }
     @media (max-width: 640px) { .main { padding: 14px; } .hero-title { font-size: 22px; } .panel-title { font-size: 17px; } .card, .critical-card { padding: 14px; } .section-actions { width: 100%; } .section-actions .btn { flex: 1; } .attachment-card { grid-template-columns: 1fr; } .attachment-thumb, .attachment-thumb-doc { width: 100%; height: 180px; } table { min-width: 760px; } .date-card { min-width: 0; width: 100%; } }
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
@@ -6832,79 +6849,114 @@ app.get("/", (req, res) => {
   </div>
 
 <div class="modal-overlay" id="newModal">
-    <div class="modal">
+    <div class="modal modal-complaint-entry">
       <div class="modal-header">
-        <span>Yeni Şikayet Ekle</span>
+        <div class="modal-header-stack">
+          <span>Yeni Şikayet Ekle</span>
+          <small>Kayıt bilgilerini düzenli şekilde girin, konu ve mahalleyi seçin.</small>
+        </div>
         <button class="close-btn" onclick="closeModal('newModal')">&times;</button>
       </div>
-      <div class="modal-body">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Şikayet No</label>
-            <input type="text" id="newNo" placeholder="Otomatik oluşturulacak" disabled />
-          </div>
-          <div class="form-group">
-            <label>Tarih *</label>
-            <input type="date" id="newDate" />
-          </div>
-          <input type="hidden" id="newSubject" value="" />
-          <div class="form-group">
-            <label>Şikayet Kaynağı *</label>
-            <select id="newSource">
-              <option value="">Seçiniz</option>
-              <option value="CİMER">CİMER</option>
-              <option value="Şeffaf Masa">Şeffaf Masa</option>
-              <option value="Büro Telefonu">Büro Telefonu</option>
-              <option value="Vatandaş Talebi">Vatandaş Talebi</option>
-            </select>
-          </div>
-          <div class="form-group full">
-            <label>Şikayet Konuları *</label>
-            <div class="topic-picker" id="newTopics"></div>
-            <div class="topic-help">Bir şikayet içinde birden fazla konu seçebilirsiniz. İstatistikler bu seçimlere göre hesaplanacaktır.</div>
-          </div>
-          <div class="form-group">
-            <label>Şikayete Konu Mahalle</label>
-            <select id="newNeighborhood">
-              <option value="">Mahalle seçiniz</option>
-            </select>
-          </div>
-          <div class="form-group full">
-            <label>Şikayet Adresi</label>
-            <textarea id="newAddress" placeholder="Şikayetin yapıldığı adres"></textarea>
-          </div>
-          <div class="form-group full">
-            <label>Şikayet Detayı</label>
-            <textarea id="newDetail" placeholder="Şikayet detayını buraya yazın..."></textarea>
-          </div>
-          <div class="form-group">
-            <label>Yapılan İşlem</label>
-            <select id="newAction">
-              <option value="Henüz İşlem Yapılmadı">Henüz İşlem Yapılmadı</option>
-              <option value="Uyarıldı">Uyarıldı</option>
-              <option value="İhtar Verildi">İhtar Verildi</option>
-              <option value="Tutanak Tutuldu">Tutanak Tutuldu</option>
-              <option value="Cezai İşlem Yapıldı">Cezai İşlem Yapıldı</option>
-              <option value="Süre Verildi">Süre Verildi</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Durum *</label>
-            <select id="newStatus">
-              <option value="Açık">Açık</option>
-              <option value="İnceleniyor">İnceleniyor</option>
-              <option value="Süre Verildi">Süre Verildi</option>
-              <option value="Kapatıldı">Kapatıldı</option>
-            </select>
-          </div>
-          <div class="form-group hidden" id="newControlWrap">
-            <label>Kontrol Tarihi</label>
-            <input type="date" id="newControlDate" />
-          </div>
-          <div class="form-group full">
-            <label>İşlem Açıklaması / Notlar</label>
-            <textarea id="newNote" placeholder="Yapılan işlemle ilgili ek notlar..."></textarea>
-          </div>
+      <div class="modal-body complaint-entry-body">
+        <input type="hidden" id="newSubject" value="" />
+        <div class="entry-shell">
+          <section class="entry-section">
+            <div class="entry-section-header">
+              <div>
+                <div class="entry-section-title">Kayıt Bilgileri</div>
+                <div class="entry-section-note">Temel kayıt alanları ve sınıflandırma bilgileri.</div>
+              </div>
+            </div>
+            <div class="entry-grid">
+              <div class="form-group">
+                <label>Şikayet No</label>
+                <input type="text" id="newNo" placeholder="Otomatik oluşturulacak" disabled />
+              </div>
+              <div class="form-group">
+                <label>Tarih *</label>
+                <input type="date" id="newDate" />
+              </div>
+              <div class="form-group">
+                <label>Şikayet Kaynağı *</label>
+                <select id="newSource">
+                  <option value="">Seçiniz</option>
+                  <option value="CİMER">CİMER</option>
+                  <option value="Şeffaf Masa">Şeffaf Masa</option>
+                  <option value="Büro Telefonu">Büro Telefonu</option>
+                  <option value="Vatandaş Talebi">Vatandaş Talebi</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Şikayete Konu Mahalle</label>
+                <select id="newNeighborhood">
+                  <option value="">Mahalle seçiniz</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <section class="entry-section">
+            <div class="entry-section-header">
+              <div>
+                <div class="entry-section-title">Konu ve Konum</div>
+                <div class="entry-section-note">Şikayetin konusu ile adres bilgilerini girin.</div>
+              </div>
+            </div>
+            <div class="entry-grid">
+              <div class="form-group full">
+                <label>Şikayet Konuları *</label>
+                <div class="topic-picker" id="newTopics"></div>
+                <div class="topic-help">Bir şikayet içinde birden fazla konu seçebilirsiniz. İstatistikler bu seçimlere göre hesaplanacaktır.</div>
+              </div>
+              <div class="form-group full">
+                <label>Şikayet Adresi</label>
+                <textarea id="newAddress" placeholder="Şikayetin yapıldığı adres"></textarea>
+              </div>
+            </div>
+          </section>
+
+          <section class="entry-section">
+            <div class="entry-section-header">
+              <div>
+                <div class="entry-section-title">Açıklama ve İşlem</div>
+                <div class="entry-section-note">Detay, işlem, durum ve not alanlarını düzenleyin.</div>
+              </div>
+            </div>
+            <div class="entry-grid">
+              <div class="form-group full">
+                <label>Şikayet Detayı</label>
+                <textarea id="newDetail" placeholder="Şikayet detayını buraya yazın..."></textarea>
+              </div>
+              <div class="form-group">
+                <label>Yapılan İşlem</label>
+                <select id="newAction">
+                  <option value="Henüz İşlem Yapılmadı">Henüz İşlem Yapılmadı</option>
+                  <option value="Uyarıldı">Uyarıldı</option>
+                  <option value="İhtar Verildi">İhtar Verildi</option>
+                  <option value="Tutanak Tutuldu">Tutanak Tutuldu</option>
+                  <option value="Cezai İşlem Yapıldı">Cezai İşlem Yapıldı</option>
+                  <option value="Süre Verildi">Süre Verildi</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Durum *</label>
+                <select id="newStatus">
+                  <option value="Açık">Açık</option>
+                  <option value="İnceleniyor">İnceleniyor</option>
+                  <option value="Süre Verildi">Süre Verildi</option>
+                  <option value="Kapatıldı">Kapatıldı</option>
+                </select>
+              </div>
+              <div class="form-group hidden" id="newControlWrap">
+                <label>Kontrol Tarihi</label>
+                <input type="date" id="newControlDate" />
+              </div>
+              <div class="form-group full">
+                <label>İşlem Açıklaması / Notlar</label>
+                <textarea id="newNote" placeholder="Yapılan işlemle ilgili ek notlar..."></textarea>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
       <div class="modal-footer">
