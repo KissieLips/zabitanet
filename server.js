@@ -6909,7 +6909,7 @@ app.get("/", (req, res) => {
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('detailModal')">Kapat</button>
-        <button class="btn btn-primary" onclick="window.print()">🖨 Yazdır / PDF</button>
+        <button class="btn btn-primary" onclick="printComplaintDetailReport()">🖨 Yazdır / PDF</button>
       </div>
     </div>
   </div>
@@ -7172,6 +7172,106 @@ app.get("/", (req, res) => {
       html += '</div>';
 
       target.innerHTML = html;
+    }
+
+    function getComplaintStatusTone(status) {
+      if (status === "Kapatıldı") return "ok";
+      if (status === "Süre Verildi") return "warn";
+      if (status === "İnceleniyor") return "info";
+      return "neutral";
+    }
+
+    function buildComplaintAttachmentRows(files) {
+      if (!files.length) {
+        return '<tr><td colspan="5">Bu kayda ait ek bulunmuyor.</td></tr>';
+      }
+
+      return files.map(function(file, index) {
+        return '<tr>' +
+          '<td>' + (index + 1) + '</td>' +
+          '<td><strong>' + escapeHtml(file.originalName || '-') + '</strong></td>' +
+          '<td>' + escapeHtml(file.fileType === "photo" ? "Fotoğraf" : "Evrak") + '</td>' +
+          '<td>' + escapeHtml(file.category || '-') + '<div class="sub">' + escapeHtml(file.createdAt || '-') + '</div></td>' +
+          '<td>' + escapeHtml(file.description || '-') + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    function printComplaintDetailReport() {
+      if (!detailComplaintId) {
+        alert('Önce bir şikayet detayı açılmalıdır.');
+        return;
+      }
+
+      var item = getComplaintById(detailComplaintId);
+      if (!item) {
+        alert('Şikayet kaydı bulunamadı.');
+        return;
+      }
+
+      var photoFiles = complaintFiles.filter(function(file) { return file.fileType === "photo"; });
+      var documentFiles = complaintFiles.filter(function(file) { return file.fileType === "document"; });
+      var statusTone = getComplaintStatusTone(item.status);
+      var nowText = new Date().toLocaleString('tr-TR');
+      var topicNames = getTopicNames(item) || '-';
+      var attachmentRows = buildComplaintAttachmentRows(complaintFiles);
+      var timelineRows = [
+        { label: 'Kayıt Tarihi', value: item.displayDate || '-' },
+        { label: 'İşlem Tarihi', value: item.processDateText || '-' },
+        { label: 'Kontrol Tarihi', value: item.controlDateText || '-' },
+        { label: 'Kapatma Tarihi', value: item.closedDateText || '-' },
+        { label: 'Sisteme Kayıt Zamanı', value: item.createdAt || '-' }
+      ].map(function(entry) {
+        return '<div class="meta-card"><div class="meta-label">' + escapeHtml(entry.label) + '</div><div class="meta-value">' + escapeHtml(entry.value) + '</div></div>';
+      }).join('');
+
+      var reportHtml = '<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>Şikayet Detay Raporu</title><style>' +
+        'body{font-family:Inter,Segoe UI,Arial,sans-serif;margin:0;padding:28px;color:#17202f;background:#fff;} ' +
+        '.report{max-width:1100px;margin:0 auto;} .top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:2px solid #e5e7eb;padding-bottom:14px;margin-bottom:18px;} ' +
+        '.title{font-size:28px;font-weight:800;letter-spacing:-0.03em;margin:0;} .subtitle{margin-top:6px;color:#667085;font-size:13px;line-height:1.6;} .meta{display:grid;gap:6px;font-size:13px;color:#334155;text-align:right;} ' +
+        '.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:18px 0 22px;} ' +
+        '.summary-card{border:1px solid #dbe3ee;border-radius:14px;padding:14px;background:#f8fafc;} .summary-card.ok{background:#effcf3;border-color:#bbf7d0;color:#166534;} .summary-card.warn{background:#fffbeb;border-color:#fde68a;color:#92400e;} .summary-card.info{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;} .summary-card.neutral{background:#f8fafc;border-color:#dbe3ee;color:#334155;} ' +
+        '.summary-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;opacity:.8;} .summary-value{font-size:24px;font-weight:800;margin-top:8px;line-height:1.25;} ' +
+        '.meta-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;margin:0 0 20px;} .meta-card{border:1px solid #dbe3ee;border-radius:14px;padding:12px;background:#f8fafc;} .meta-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#667085;margin-bottom:6px;} .meta-value{font-size:14px;font-weight:600;color:#111827;line-height:1.5;word-break:break-word;} ' +
+        '.section{margin-top:18px;} .section-title{font-size:17px;font-weight:800;margin:0 0 10px;} .content-card{border:1px solid #dbe3ee;border-radius:14px;padding:14px;background:#fff;margin-bottom:10px;} .content-label{font-size:12px;font-weight:800;color:#475569;margin-bottom:6px;} .content-value{font-size:13px;line-height:1.7;color:#17202f;white-space:pre-wrap;word-break:break-word;} ' +
+        'table{width:100%;border-collapse:collapse;table-layout:fixed;} th,td{border:1px solid #dbe3ee;padding:10px 12px;font-size:12px;vertical-align:top;word-break:break-word;} th{background:#f8fafc;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#667085;} .sub{font-size:11px;color:#64748b;margin-top:4px;} ' +
+        '@page{size:A4 portrait;margin:12mm;} @media print{body{padding:0;} .report{max-width:none;}}' +
+        '</style></head><body><div class="report">' +
+        '<div class="top"><div><h1 class="title">Şikayet Detay Raporu</h1><div class="subtitle">Seçili şikayet kaydının özet bilgileri, işlem durumu ve ekleri bu raporda düzenli şekilde gösterilir.</div></div><div class="meta"><div><strong>Şikayet No:</strong> ' + escapeHtml(item.no || '-') + '</div><div><strong>Rapor Tarihi:</strong> ' + escapeHtml(nowText) + '</div><div><strong>Kayıt Tarihi:</strong> ' + escapeHtml(item.displayDate || '-') + '</div></div></div>' +
+        '<div class="summary-grid">' +
+          '<div class="summary-card ' + statusTone + '"><div class="summary-label">Durum</div><div class="summary-value">' + escapeHtml(item.status || '-') + '</div></div>' +
+          '<div class="summary-card neutral"><div class="summary-label">Yapılan İşlem</div><div class="summary-value">' + escapeHtml(item.action || '-') + '</div></div>' +
+          '<div class="summary-card info"><div class="summary-label">Konu Başlığı</div><div class="summary-value">' + escapeHtml(String((item.topics || []).length || 0)) + '</div></div>' +
+          '<div class="summary-card warn"><div class="summary-label">Toplam Ek</div><div class="summary-value">' + escapeHtml(String(complaintFiles.length || 0)) + '</div></div>' +
+        '</div>' +
+        '<div class="meta-grid">' +
+          '<div class="meta-card"><div class="meta-label">Konu Başlıkları</div><div class="meta-value">' + escapeHtml(topicNames) + '</div></div>' +
+          '<div class="meta-card"><div class="meta-label">Şikayet Kaynağı</div><div class="meta-value">' + escapeHtml(item.source || '-') + '</div></div>' +
+          '<div class="meta-card"><div class="meta-label">Fotoğraf Sayısı</div><div class="meta-value">' + escapeHtml(String(photoFiles.length || 0)) + '</div></div>' +
+          '<div class="meta-card"><div class="meta-label">Evrak Sayısı</div><div class="meta-value">' + escapeHtml(String(documentFiles.length || 0)) + '</div></div>' +
+        '</div>' +
+        '<div class="section"><h2 class="section-title">Şikayet İçeriği</h2>' +
+          '<div class="content-card"><div class="content-label">Kısa Başlık / Özet</div><div class="content-value">' + escapeHtml(item.subject || '-') + '</div></div>' +
+          '<div class="content-card"><div class="content-label">Şikayet Adresi</div><div class="content-value">' + escapeHtml(item.address || '-') + '</div></div>' +
+          '<div class="content-card"><div class="content-label">Şikayet Detayı</div><div class="content-value">' + escapeHtml(item.detail || '-') + '</div></div>' +
+          '<div class="content-card"><div class="content-label">İşlem Açıklaması / Notlar</div><div class="content-value">' + escapeHtml(item.note || '-') + '</div></div>' +
+        '</div>' +
+        '<div class="section"><h2 class="section-title">Tarihçe</h2><div class="meta-grid">' + timelineRows + '</div></div>' +
+        '<div class="section"><h2 class="section-title">Ekler Özeti</h2><table><thead><tr><th style="width:6%">#</th><th style="width:29%">Dosya</th><th style="width:14%">Tür</th><th style="width:20%">Kategori / Tarih</th><th style="width:31%">Açıklama</th></tr></thead><tbody>' + attachmentRows + '</tbody></table></div>' +
+        '</div></body></html>';
+
+      var printWindow = window.open('', '_blank', 'width=1200,height=900');
+      if (!printWindow) {
+        alert('Yazdırma penceresi açılamadı. Tarayıcı açılır pencere engelini kontrol edin.');
+        return;
+      }
+      printWindow.document.open();
+      printWindow.document.write(reportHtml);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.onload = function() {
+        printWindow.print();
+      };
     }
 
     async function uploadDetailFile() {
