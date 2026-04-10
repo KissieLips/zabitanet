@@ -39,6 +39,29 @@ const DEFAULT_COMPLAINT_TOPICS = [
   "Diğer"
 ];
 
+const BUCAK_NEIGHBORHOODS = [
+  "Alaattin",
+  "Atilla",
+  "Barbaros",
+  "Camii",
+  "Cumhuriyet",
+  "Çamlıca",
+  "Çavuşlar",
+  "Çukur",
+  "Fatih",
+  "Karayvatlar",
+  "Konak",
+  "Mehmet Akif",
+  "Mimar Sinan",
+  "Oğuzhan",
+  "Onaç",
+  "Pazar",
+  "Sanayi",
+  "Yeni",
+  "Yetmişevler",
+  "Yunus Emre"
+];
+
 fs.mkdirSync(complaintUploadsRoot, { recursive: true });
 fs.mkdirSync(businessUploadsRoot, { recursive: true });
 fs.mkdirSync(businessInspectionUploadsRoot, { recursive: true });
@@ -503,6 +526,7 @@ function mapComplaint(row) {
     topics: topics,
     topicNames: topics.map(function(topic) { return topic.name; }).join(", "),
     source: row.source,
+    neighborhood: row.neighborhood || "",
     address: row.address || "",
     detail: row.detail || "",
     action: row.action_taken,
@@ -987,6 +1011,7 @@ async function initDb() {
       complaint_date DATE NOT NULL,
       subject VARCHAR(255) NOT NULL,
       source VARCHAR(100) NOT NULL,
+      neighborhood VARCHAR(120),
       address TEXT,
       detail TEXT,
       action_taken VARCHAR(150) NOT NULL DEFAULT 'Henüz İşlem Yapılmadı',
@@ -997,6 +1022,11 @@ async function initDb() {
       control_date DATE,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE complaints
+    ADD COLUMN IF NOT EXISTS neighborhood VARCHAR(120)
   `);
 
   await pool.query(`
@@ -1435,6 +1465,16 @@ async function nextComplaintNo() {
   return "ŞKY-" + currentYear + "-" + String(nextNumber).padStart(4, "0");
 }
 
+app.get("/api/complaints/next-no", async (req, res) => {
+  try {
+    const complaintNo = await nextComplaintNo();
+    res.json({ complaintNo });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Yeni şikayet numarası üretilemedi." });
+  }
+});
+
 app.get("/api/complaint-topics", async (req, res) => {
   try {
     const includeAll = req.query.all === "1" || req.query.all === "true";
@@ -1550,6 +1590,7 @@ app.post("/api/complaints", async (req, res) => {
       date,
       subject,
       source,
+      neighborhood,
       address,
       detail,
       action,
@@ -1586,6 +1627,7 @@ app.post("/api/complaints", async (req, res) => {
             complaint_date,
             subject,
             source,
+            neighborhood,
             address,
             detail,
             action_taken,
@@ -1596,7 +1638,7 @@ app.post("/api/complaints", async (req, res) => {
             control_date
           )
         VALUES
-          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING *
       `,
       [
@@ -1604,6 +1646,7 @@ app.post("/api/complaints", async (req, res) => {
         date,
         finalSubject,
         source,
+        (neighborhood || "").trim(),
         address || "",
         detail || "",
         finalAction,
@@ -1640,6 +1683,7 @@ app.put("/api/complaints/:id", async (req, res) => {
       date,
       subject,
       source,
+      neighborhood,
       address,
       detail,
       action,
@@ -1695,21 +1739,23 @@ app.put("/api/complaints/:id", async (req, res) => {
           complaint_date = $1,
           subject = $2,
           source = $3,
-          address = $4,
-          detail = $5,
-          action_taken = $6,
-          status = $7,
-          note = $8,
-          process_date = $9,
-          closed_date = $10,
-          control_date = $11
-        WHERE id = $12
+          neighborhood = $4,
+          address = $5,
+          detail = $6,
+          action_taken = $7,
+          status = $8,
+          note = $9,
+          process_date = $10,
+          closed_date = $11,
+          control_date = $12
+        WHERE id = $13
         RETURNING *
       `,
       [
         date,
         finalSubject,
         source,
+        (neighborhood || "").trim(),
         address || "",
         detail || "",
         finalAction,
@@ -6773,7 +6819,7 @@ app.get("/", (req, res) => {
           <input type="date" id="filterDate" />
           <select id="filterSource"><option value="">Tüm Kaynaklar</option><option value="CİMER">CİMER</option><option value="Şeffaf Masa">Şeffaf Masa</option><option value="Büro Telefonu">Büro Telefonu</option><option value="Vatandaş Talebi">Vatandaş Talebi</option></select>
           <select id="filterStatus"><option value="">Tüm Durumlar</option><option value="Açık">Açık</option><option value="İnceleniyor">İnceleniyor</option><option value="Süre Verildi">Süre Verildi</option><option value="Kapatıldı">Kapatıldı</option></select>
-          <input type="text" id="searchInput" placeholder="Şikayet No veya konu başlığı ara..." />
+          <input type="text" id="searchInput" placeholder="Şikayet No, konu veya mahalle ara..." />
           <button class="btn btn-secondary" type="button" onclick="renderTable()">🔎 Filtrele</button>
         </div>
       </section>
@@ -6801,10 +6847,7 @@ app.get("/", (req, res) => {
             <label>Tarih *</label>
             <input type="date" id="newDate" />
           </div>
-          <div class="form-group">
-            <label>Kısa Başlık / Özet</label>
-            <input type="text" id="newSubject" placeholder="Örn: İşyerinin kaldırım işgali ve görüntü kirliliği" />
-          </div>
+          <input type="hidden" id="newSubject" value="" />
           <div class="form-group">
             <label>Şikayet Kaynağı *</label>
             <select id="newSource">
@@ -6819,6 +6862,12 @@ app.get("/", (req, res) => {
             <label>Şikayet Konuları *</label>
             <div class="topic-picker" id="newTopics"></div>
             <div class="topic-help">Bir şikayet içinde birden fazla konu seçebilirsiniz. İstatistikler bu seçimlere göre hesaplanacaktır.</div>
+          </div>
+          <div class="form-group">
+            <label>Şikayete Konu Mahalle</label>
+            <select id="newNeighborhood">
+              <option value="">Mahalle seçiniz</option>
+            </select>
           </div>
           <div class="form-group full">
             <label>Şikayet Adresi</label>
@@ -6930,10 +6979,7 @@ app.get("/", (req, res) => {
             <label>Tarih *</label>
             <input type="date" id="editDate" />
           </div>
-          <div class="form-group">
-            <label>Kısa Başlık / Özet</label>
-            <input type="text" id="editSubject" />
-          </div>
+          <input type="hidden" id="editSubject" value="" />
           <div class="form-group">
             <label>Şikayet Kaynağı *</label>
             <select id="editSource">
@@ -6947,6 +6993,12 @@ app.get("/", (req, res) => {
             <label>Şikayet Konuları *</label>
             <div class="topic-picker" id="editTopics"></div>
             <div class="topic-help">İstatistik ve faaliyet raporları için en az bir konu seçin.</div>
+          </div>
+          <div class="form-group">
+            <label>Şikayete Konu Mahalle</label>
+            <select id="editNeighborhood">
+              <option value="">Mahalle seçiniz</option>
+            </select>
           </div>
           <div class="form-group full">
             <label>Şikayet Adresi</label>
@@ -7021,6 +7073,7 @@ app.get("/", (req, res) => {
 
   <script>
         var complaints = [];
+    var BUCakNeighborhoods = ["Alaattin", "Atilla", "Barbaros", "Camii", "Cumhuriyet", "Çamlıca", "Çavuşlar", "Çukur", "Fatih", "Karayvatlar", "Konak", "Mehmet Akif", "Mimar Sinan", "Oğuzhan", "Onaç", "Pazar", "Sanayi", "Yeni", "Yetmişevler", "Yunus Emre"];
     var complaintTopicDefinitions = [];
     var allComplaintTopicDefinitions = [];
     var editingId = null;
@@ -7247,11 +7300,12 @@ app.get("/", (req, res) => {
         '<div class="meta-grid">' +
           '<div class="meta-card"><div class="meta-label">Konu Başlıkları</div><div class="meta-value">' + escapeHtml(topicNames) + '</div></div>' +
           '<div class="meta-card"><div class="meta-label">Şikayet Kaynağı</div><div class="meta-value">' + escapeHtml(item.source || '-') + '</div></div>' +
+          '<div class="meta-card"><div class="meta-label">Mahalle</div><div class="meta-value">' + escapeHtml(item.neighborhood || '-') + '</div></div>' +
           '<div class="meta-card"><div class="meta-label">Fotoğraf Sayısı</div><div class="meta-value">' + escapeHtml(String(photoFiles.length || 0)) + '</div></div>' +
           '<div class="meta-card"><div class="meta-label">Evrak Sayısı</div><div class="meta-value">' + escapeHtml(String(documentFiles.length || 0)) + '</div></div>' +
         '</div>' +
         '<div class="section"><h2 class="section-title">Şikayet İçeriği</h2>' +
-          '<div class="content-card"><div class="content-label">Kısa Başlık / Özet</div><div class="content-value">' + escapeHtml(item.subject || '-') + '</div></div>' +
+          (item.subject && item.subject !== topicNames ? '<div class="content-card"><div class="content-label">Kısa Başlık / Özet</div><div class="content-value">' + escapeHtml(item.subject || '-') + '</div></div>' : '') +
           '<div class="content-card"><div class="content-label">Şikayet Adresi</div><div class="content-value">' + escapeHtml(item.address || '-') + '</div></div>' +
           '<div class="content-card"><div class="content-label">Şikayet Detayı</div><div class="content-value">' + escapeHtml(item.detail || '-') + '</div></div>' +
           '<div class="content-card"><div class="content-label">İşlem Açıklaması / Notlar</div><div class="content-value">' + escapeHtml(item.note || '-') + '</div></div>' +
@@ -7351,6 +7405,38 @@ app.get("/", (req, res) => {
         weekday: "long"
       }).format(now);
       document.getElementById("todayText").textContent = text;
+    }
+
+    function getComplaintNeighborhoodOptionsHtml(selectedValue) {
+      var current = String(selectedValue || "").trim();
+      var html = '<option value="">Mahalle seçiniz</option>';;
+      for (var i = 0; i < BUCakNeighborhoods.length; i++) {
+        var name = BUCakNeighborhoods[i];
+        var selected = current === name ? ' selected' : '';
+        html += '<option value="' + escapeHtml(name) + '"' + selected + '>' + escapeHtml(name) + '</option>';;
+      }
+      return html;
+    }
+
+    function populateComplaintNeighborhoodSelects(newValue, editValue) {
+      var newSelect = document.getElementById("newNeighborhood");
+      var editSelect = document.getElementById("editNeighborhood");
+      if (newSelect) newSelect.innerHTML = getComplaintNeighborhoodOptionsHtml(newValue || "");
+      if (editSelect) editSelect.innerHTML = getComplaintNeighborhoodOptionsHtml(editValue || "");
+    }
+
+    async function fillNextComplaintNoPreview() {
+      var input = document.getElementById("newNo");
+      if (!input) return;
+      input.value = "Şikayet numarası hazırlanıyor...";
+      try {
+        var response = await fetch("/api/complaints/next-no");
+        if (!response.ok) throw new Error();
+        var result = await response.json();
+        input.value = result && result.complaintNo ? result.complaintNo : "Otomatik oluşturulacak";
+      } catch (error) {
+        input.value = "Otomatik oluşturulacak";
+      }
     }
 
     function getStatusBadge(item) {
@@ -7849,11 +7935,14 @@ function getTopicNames(item) {
         var sourceMatch = !filterSource || item.source === filterSource;
         var statusMatch = !filterStatus || item.status === filterStatus;
         var topicNames = getTopicNames(item).toLowerCase();
+        var neighborhoodText = String(item.neighborhood || "").toLowerCase();
+        var subjectText = String(item.subject || "").toLowerCase();
         var searchMatch =
           !searchText ||
           item.no.toLowerCase().indexOf(searchText) > -1 ||
-          item.subject.toLowerCase().indexOf(searchText) > -1 ||
-          topicNames.indexOf(searchText) > -1;
+          subjectText.indexOf(searchText) > -1 ||
+          topicNames.indexOf(searchText) > -1 ||
+          neighborhoodText.indexOf(searchText) > -1;
 
         return dateMatch && sourceMatch && statusMatch && searchMatch;
       });
@@ -7895,12 +7984,13 @@ function getTopicNames(item) {
       tbody.innerHTML = rows;
     }
 
-    function openNewModal() {
-      document.getElementById("newNo").value = "Otomatik oluşturulacak";
+    async function openNewModal() {
+      document.getElementById("newNo").value = "Şikayet numarası hazırlanıyor...";
       document.getElementById("newDate").value = todayInputDate();
       document.getElementById("newSubject").value = "";
       document.getElementById("newSource").value = "";
       renderTopicPicker("newTopics", []);
+      populateComplaintNeighborhoodSelects("", document.getElementById("editNeighborhood") ? document.getElementById("editNeighborhood").value : "");
       document.getElementById("newAddress").value = "";
       document.getElementById("newDetail").value = "";
       document.getElementById("newAction").value = "Henüz İşlem Yapılmadı";
@@ -7909,6 +7999,7 @@ function getTopicNames(item) {
       document.getElementById("newNote").value = "";
       toggleNewControlDate();
       document.getElementById("newModal").classList.add("show");
+      await fillNextComplaintNoPreview();
     }
 
     function closeModal(id) {
@@ -7924,6 +8015,7 @@ function getTopicNames(item) {
       var subject = document.getElementById("newSubject").value.trim();
       var source = document.getElementById("newSource").value;
       var topicIds = getSelectedTopicIds("newTopics");
+      var neighborhood = document.getElementById("newNeighborhood").value;
       var address = document.getElementById("newAddress").value.trim();
       var detail = document.getElementById("newDetail").value.trim();
       var action = document.getElementById("newAction").value;
@@ -7950,6 +8042,7 @@ function getTopicNames(item) {
             subject: subject,
             source: source,
             topicIds: topicIds,
+            neighborhood: neighborhood,
             address: address,
             detail: detail,
             action: action,
@@ -7981,8 +8074,11 @@ function getTopicNames(item) {
       var html = "";
       html += "<tr><th>Şikayet No</th><td>" + escapeHtml(item.no) + "</td></tr>";
       html += "<tr><th>Konu Başlıkları</th><td><strong>" + escapeHtml(getTopicNames(item) || "-") + "</strong></td></tr>";
-      html += "<tr><th>Kısa Özet</th><td>" + escapeHtml(item.subject || "-") + "</td></tr>";
+      if (item.subject && item.subject !== getTopicNames(item)) {
+        html += "<tr><th>Kısa Özet</th><td>" + escapeHtml(item.subject || "-") + "</td></tr>";
+      }
       html += "<tr><th>Kaynak</th><td>" + escapeHtml(item.source) + "</td></tr>";
+      html += "<tr><th>Mahalle</th><td>" + escapeHtml(item.neighborhood || "-") + "</td></tr>";
       html += "<tr><th>Adres</th><td>" + escapeHtml(item.address) + "</td></tr>";
       html += "<tr><th>Durum</th><td>" + getStatusBadge(item) + "</td></tr>";
       html += "<tr><th>Yapılan İşlem</th><td>" + escapeHtml(item.action) + "</td></tr>";
@@ -8009,6 +8105,7 @@ function getTopicNames(item) {
       document.getElementById("editSubject").value = item.subject;
       document.getElementById("editSource").value = item.source;
       renderTopicPicker("editTopics", (item.topics || []).map(function(topic) { return topic.id; }));
+      populateComplaintNeighborhoodSelects(document.getElementById("newNeighborhood") ? document.getElementById("newNeighborhood").value : "", item.neighborhood || "");
       document.getElementById("editAddress").value = item.address;
       document.getElementById("editDetail").value = item.detail;
       document.getElementById("editAction").value = item.action;
@@ -8025,6 +8122,7 @@ function getTopicNames(item) {
       var status = document.getElementById("editStatus").value;
       var controlDate = document.getElementById("editControlDate").value;
       var topicIds = getSelectedTopicIds("editTopics");
+      var neighborhood = document.getElementById("editNeighborhood").value;
 
       if (topicIds.length === 0) {
         alert("En az bir şikayet konusu seçmeniz gerekiyor.");
@@ -8045,6 +8143,7 @@ function getTopicNames(item) {
             subject: document.getElementById("editSubject").value.trim(),
             source: document.getElementById("editSource").value,
             topicIds: topicIds,
+            neighborhood: neighborhood,
             address: document.getElementById("editAddress").value.trim(),
             detail: document.getElementById("editDetail").value.trim(),
             action: document.getElementById("editAction").value,
@@ -8085,6 +8184,7 @@ function getTopicNames(item) {
 
     document.addEventListener("DOMContentLoaded", async function() {
       setTodayText();
+      populateComplaintNeighborhoodSelects("", "");
       await loadComplaintTopics();
       await loadComplaints();
       document.getElementById("newStatus").addEventListener("change", toggleNewControlDate);
