@@ -15,6 +15,8 @@ const MARKET_DOCUMENT_LABELS = {
   hasCksDocument: 'ÇKS Belgesi',
 };
 
+const UNASSIGNED_VENDOR_LABEL = 'Yer Tahsisi Yapılmamış';
+
 const vendorImportUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -37,6 +39,25 @@ function sanitizeCellValue(value) {
   if (value === undefined || value === null) return '';
   return String(value).trim();
 }
+function isUnassignedVendorName(value) {
+  const normalized = normalizeTextForMatch(value);
+  return [
+    'bos',
+    'bos yer',
+    'yer tahsisi yapilmamis',
+    'yer tahsisi yapilmamis yer',
+  ].includes(normalized);
+}
+
+function getCanonicalVendorName(value) {
+  const trimmed = sanitizeCellValue(value);
+  return isUnassignedVendorName(trimmed) ? UNASSIGNED_VENDOR_LABEL : trimmed;
+}
+
+function isUnassignedVendorRow(row) {
+  return toBoolean(row && row.is_unassigned) || isUnassignedVendorName((row && (row.full_name || row.vendor_name || row.fullName || row.vendorName)) || '');
+}
+
 
 function normalizeMarketNameForMatch(value) {
   const normalized = normalizeTextForMatch(value);
@@ -257,7 +278,7 @@ async function buildVendorImportPreview(pool, fileBuffer) {
     const sectionType = pickRowValue(rawRow, ['Bölüm', 'Bolum', 'Section']) || 'Esnaf';
     const stallColor = pickRowValue(rawRow, ['Yer Rengi', 'Numara Rengi', 'Renk', 'Stall Color']);
     const stallNo = pickRowValue(rawRow, ['Yer No', 'Yer / Tezgâh No', 'Tezgah No', 'Tezgâh No', 'Stall No']);
-    const fullName = pickRowValue(rawRow, ['Ad Soyad', 'Satıcı', 'Satıcı Adı Soyadı', 'Adı Soyadı', 'Full Name']);
+    const fullName = getCanonicalVendorName(pickRowValue(rawRow, ['Ad Soyad', 'Satıcı', 'Satıcı Adı Soyadı', 'Adı Soyadı', 'Full Name']));
     const identityNumber = pickRowValue(rawRow, ['T.C. Kimlik No', 'TC Kimlik No', 'T.C.', 'TC']);
     const phone = pickRowValue(rawRow, ['Telefon', 'Cep Telefonu', 'Phone']);
     const address = pickRowValue(rawRow, ['Adres', 'Address']);
@@ -305,6 +326,7 @@ async function buildVendorImportPreview(pool, fileBuffer) {
       note,
       documentFolderUrl,
       isActive,
+      isUnassigned: isUnassignedVendorName(fullName),
       hasPhoto: documentFlags.hasPhoto,
       hasIdentityCopy: documentFlags.hasIdentityCopy,
       hasChamberRecord: documentFlags.hasChamberRecord,
@@ -495,13 +517,15 @@ function compareMarketRowsByStall(a, b) {
 
 function mapVendor(row) {
   const documents = buildDocumentSummary(row);
+  const isUnassigned = isUnassignedVendorRow(row);
   return {
     id: row.id,
     marketId: row.market_id,
     marketName: row.market_name,
     scheduledDay: row.scheduled_day,
     scheduledDayLabel: MARKET_DAY_LABELS[row.scheduled_day] || '',
-    fullName: row.full_name || '',
+    fullName: isUnassigned ? UNASSIGNED_VENDOR_LABEL : (row.full_name || ''),
+    rawFullName: row.full_name || '',
     identityNumber: row.identity_number || '',
     phone: row.phone || '',
     address: row.address || '',
@@ -518,6 +542,7 @@ function mapVendor(row) {
     hasCksDocument: toBoolean(row.has_cks_document),
     note: row.note || '',
     isActive: toBoolean(row.is_active),
+    isUnassigned,
     createdAt: formatDateTime(row.created_at),
     updatedAt: formatDateTime(row.updated_at),
     documents,
@@ -526,6 +551,7 @@ function mapVendor(row) {
 
 function mapLeave(row) {
   const today = new Date();
+  const isUnassigned = isUnassignedVendorRow(row);
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const endDate = toInputDate(row.end_date);
   const startDate = toInputDate(row.start_date);
@@ -543,7 +569,7 @@ function mapLeave(row) {
     vendorId: row.vendor_id,
     marketId: row.market_id,
     marketName: row.market_name,
-    vendorName: row.vendor_name,
+    vendorName: isUnassigned ? UNASSIGNED_VENDOR_LABEL : row.vendor_name,
     sectionType: row.section_type || '',
     stallNo: row.stall_no || '',
     stallColor: row.stall_color || '',
@@ -559,31 +585,34 @@ function mapLeave(row) {
     remainingText,
     isExpired: remainingDays !== null ? remainingDays < 0 : false,
     isActiveToday: Boolean(startDate && endDate && startDate <= todayStr && endDate >= todayStr),
+    isUnassigned,
   };
 }
 
 function mapAttendanceRow(row, fallbackDate) {
-  const recommendedStatus = row.attendance_status || row.leave_type || '';
-  const isLocked = Boolean(row.leave_type);
+  const isUnassigned = isUnassignedVendorRow(row);
+  const recommendedStatus = isUnassigned ? '' : (row.attendance_status || row.leave_type || '');
+  const isLocked = isUnassigned || Boolean(row.leave_type);
   return {
     vendorId: row.vendor_id,
     marketId: row.market_id,
     marketName: row.market_name,
-    vendorName: row.vendor_name,
+    vendorName: isUnassigned ? UNASSIGNED_VENDOR_LABEL : row.vendor_name,
     sectionType: row.section_type,
     stallNo: row.stall_no || '',
     stallColor: row.stall_color || '',
     stallLabel: buildStallLabel(row),
     attendanceDate: toInputDate(row.attendance_date) || fallbackDate,
-    attendanceStatus: row.attendance_status || '',
-    note: row.attendance_note || '',
+    attendanceStatus: isUnassigned ? '' : (row.attendance_status || ''),
+    note: isUnassigned ? '' : (row.attendance_note || ''),
     attendanceRecordId: row.attendance_id || null,
     recommendedStatus,
-    leaveType: row.leave_type || '',
-    leaveNote: row.leave_note || '',
-    leavePeriodText: row.leave_type ? `${formatDate(row.leave_start_date)} - ${formatDate(row.leave_end_date)}` : '',
+    leaveType: isUnassigned ? '' : (row.leave_type || ''),
+    leaveNote: isUnassigned ? '' : (row.leave_note || ''),
+    leavePeriodText: (!isUnassigned && row.leave_type) ? `${formatDate(row.leave_start_date)} - ${formatDate(row.leave_end_date)}` : '',
     isLocked,
-    lockedStatus: isLocked ? row.leave_type : '',
+    lockedStatus: isUnassigned ? '' : (isLocked ? row.leave_type : ''),
+    isUnassigned,
   };
 }
 
@@ -640,7 +669,7 @@ async function getMarketVendorRows(pool, filters = {}) {
   if (docStatus === 'complete') rows = rows.filter((item) => item.documents.isComplete);
   if (docStatus === 'missing') rows = rows.filter((item) => !item.documents.isComplete);
 
-  return rows;
+  return rows.sort(compareMarketRowsByStall);
 }
 
 async function getMarketNameById(pool, marketId) {
@@ -697,6 +726,7 @@ async function initMarketModuleDb(pool) {
       has_cks_document BOOLEAN NOT NULL DEFAULT FALSE,
       note TEXT,
       is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      is_unassigned BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -727,6 +757,16 @@ async function initMarketModuleDb(pool) {
       UNIQUE (vendor_id, attendance_date)
     )
   `);
+
+  await pool.query(`ALTER TABLE market_vendors ADD COLUMN IF NOT EXISTS is_unassigned BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`
+    UPDATE market_vendors
+    SET is_unassigned = TRUE,
+        full_name = $1,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE COALESCE(is_unassigned, FALSE) = FALSE
+      AND TRIM(UPPER(full_name)) IN ('BOŞ', 'BOS', 'YER TAHSISI YAPILMAMIS', 'YER TAHSİSİ YAPILMAMIŞ')
+  `, [UNASSIGNED_VENDOR_LABEL]);
 
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_market_sections_market_id ON market_sections(market_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_market_vendors_market_id ON market_vendors(market_id)`);
@@ -792,8 +832,8 @@ function registerMarketModule({ app, pool }) {
       const marketResult = await pool.query(`
         SELECT
           m.*,
-          COUNT(v.id)::int AS vendor_count,
-          COUNT(v.id) FILTER (WHERE v.is_active = TRUE)::int AS active_vendor_count
+          COUNT(v.id) FILTER (WHERE COALESCE(v.is_unassigned, FALSE) = FALSE)::int AS vendor_count,
+          COUNT(v.id) FILTER (WHERE v.is_active = TRUE AND COALESCE(v.is_unassigned, FALSE) = FALSE)::int AS active_vendor_count
         FROM market_places m
         LEFT JOIN market_vendors v ON v.market_id = m.id
         GROUP BY m.id
@@ -808,8 +848,8 @@ function registerMarketModule({ app, pool }) {
           s.capacity,
           s.number_color,
           s.display_order,
-          COUNT(v.id)::int AS vendor_count,
-          COUNT(v.id) FILTER (WHERE v.is_active = TRUE)::int AS active_vendor_count
+          COUNT(v.id) FILTER (WHERE COALESCE(v.is_unassigned, FALSE) = FALSE)::int AS vendor_count,
+          COUNT(v.id) FILTER (WHERE v.is_active = TRUE AND COALESCE(v.is_unassigned, FALSE) = FALSE)::int AS active_vendor_count
         FROM market_sections s
         LEFT JOIN market_vendors v
           ON v.market_id = s.market_id
@@ -931,14 +971,16 @@ function registerMarketModule({ app, pool }) {
         ['Durum', statusText],
         ['Belge Durumu', docStatusText],
         ['Arama', searchText],
-        ['Toplam Satıcı', rows.length],
-        ['Aktif', rows.filter((item) => item.isActive).length],
-        ['Pasif', rows.filter((item) => !item.isActive).length],
-        ['Belgeleri Tam', rows.filter((item) => item.documents && item.documents.isComplete).length],
-        ['Belgesi Eksik', rows.filter((item) => item.documents && !item.documents.isComplete).length],
+        ['Toplam Satıcı', rows.filter((item) => !item.isUnassigned).length],
+        ['Boş Yer', rows.filter((item) => item.isUnassigned).length],
+        ['Aktif', rows.filter((item) => !item.isUnassigned && item.isActive).length],
+        ['Pasif', rows.filter((item) => !item.isUnassigned && !item.isActive).length],
+        ['Belgeleri Tam', rows.filter((item) => !item.isUnassigned && item.documents && item.documents.isComplete).length],
+        ['Belgesi Eksik', rows.filter((item) => !item.isUnassigned && item.documents && !item.documents.isComplete).length],
       ];
       const dataRows = rows.map((item) => ({
         'Satıcı': item.fullName || '',
+        'Kayıt Türü': item.isUnassigned ? 'Yer Tahsisi Yapılmamış' : 'Satıcı',
         'TC Kimlik No': item.identityNumber || '',
         'Telefon': item.phone || '',
         'Pazar': item.marketName || '',
@@ -993,7 +1035,8 @@ function registerMarketModule({ app, pool }) {
       const skippedRows = [];
       for (const item of rows) {
         const marketId = Number(item.marketId);
-        const fullName = String(item.fullName || '').trim();
+        const fullName = getCanonicalVendorName(String(item.fullName || '').trim());
+        const isUnassigned = isUnassignedVendorName(fullName);
         const sectionType = String(item.sectionType || '').trim() || 'Esnaf';
         const stallColor = String(item.stallColor || '').trim();
         const stallNo = String(item.stallNo || '').trim();
@@ -1016,11 +1059,11 @@ function registerMarketModule({ app, pool }) {
             INSERT INTO market_vendors (
               market_id, full_name, identity_number, phone, address, section_type, stall_no, stall_color,
               document_folder_url, has_photo, has_identity_copy, has_chamber_record,
-              has_population_record, has_tax_record, has_cks_document, note, is_active
+              has_population_record, has_tax_record, has_cks_document, note, is_active, is_unassigned
             ) VALUES (
               $1, $2, $3, $4, $5, $6, $7, $8,
               $9, $10, $11, $12,
-              $13, $14, $15, $16, $17
+              $13, $14, $15, $16, $17, $18
             )
           `,
           [
@@ -1041,6 +1084,7 @@ function registerMarketModule({ app, pool }) {
             toBoolean(item.hasCksDocument),
             String(item.note || '').trim() || null,
             item.isActive === undefined ? true : toBoolean(item.isActive),
+            isUnassigned,
           ]
         );
         insertedCount += 1;
@@ -1059,7 +1103,8 @@ function registerMarketModule({ app, pool }) {
   app.post('/api/markets/vendors', async (req, res) => {
     const payload = req.body || {};
     const marketId = Number(payload.marketId);
-    const fullName = String(payload.fullName || '').trim();
+    const fullName = getCanonicalVendorName(String(payload.fullName || '').trim());
+    const isUnassigned = isUnassignedVendorName(fullName) || toBoolean(payload.isUnassigned);
     const identityNumber = String(payload.identityNumber || '').trim();
 
     if (!marketId) return res.status(400).json({ error: 'Pazar yeri seçilmelidir.' });
@@ -1077,11 +1122,11 @@ function registerMarketModule({ app, pool }) {
           INSERT INTO market_vendors (
             market_id, full_name, identity_number, phone, address, section_type, stall_no, stall_color,
             document_folder_url, has_photo, has_identity_copy, has_chamber_record,
-            has_population_record, has_tax_record, has_cks_document, note, is_active
+            has_population_record, has_tax_record, has_cks_document, note, is_active, is_unassigned
           ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8,
             $9, $10, $11, $12,
-            $13, $14, $15, $16, $17
+            $13, $14, $15, $16, $17, $18
           )
           RETURNING id
         `,
@@ -1103,6 +1148,7 @@ function registerMarketModule({ app, pool }) {
           toBoolean(payload.hasCksDocument),
           String(payload.note || '').trim() || null,
           payload.isActive === undefined ? true : toBoolean(payload.isActive),
+          isUnassigned,
         ]
       );
 
@@ -1117,7 +1163,8 @@ function registerMarketModule({ app, pool }) {
     const vendorId = Number(req.params.id);
     const payload = req.body || {};
     const marketId = Number(payload.marketId);
-    const fullName = String(payload.fullName || '').trim();
+    const fullName = getCanonicalVendorName(String(payload.fullName || '').trim());
+    const isUnassigned = isUnassignedVendorName(fullName) || toBoolean(payload.isUnassigned);
     const identityNumber = String(payload.identityNumber || '').trim();
 
     if (!vendorId) return res.status(400).json({ error: 'Geçerli satıcı seçilmedi.' });
@@ -1151,8 +1198,9 @@ function registerMarketModule({ app, pool }) {
               has_cks_document = $15,
               note = $16,
               is_active = $17,
+              is_unassigned = $18,
               updated_at = CURRENT_TIMESTAMP
-          WHERE id = $18
+          WHERE id = $19
         `,
         [
           marketId,
@@ -1172,6 +1220,7 @@ function registerMarketModule({ app, pool }) {
           toBoolean(payload.hasCksDocument),
           String(payload.note || '').trim() || null,
           toBoolean(payload.isActive),
+          isUnassigned,
           vendorId,
         ]
       );
@@ -1475,6 +1524,7 @@ function registerMarketModule({ app, pool }) {
             v.market_id,
             m.name AS market_name,
             v.full_name AS vendor_name,
+            v.is_unassigned,
             v.section_type,
             v.stall_no,
             v.stall_color,
@@ -1623,6 +1673,7 @@ function registerMarketModule({ app, pool }) {
             v.market_id,
             m.name AS market_name,
             v.full_name AS vendor_name,
+            v.is_unassigned,
             v.section_type,
             v.stall_no,
             v.stall_color,
@@ -1666,7 +1717,8 @@ function registerMarketModule({ app, pool }) {
       );
 
       const rows = result.rows.map((row) => {
-        const effectiveStatus = row.attendance_status || row.leave_type || '';
+        const isUnassigned = isUnassignedVendorRow(row);
+        const effectiveStatus = isUnassigned ? '' : (row.attendance_status || row.leave_type || '');
         return {
           id: row.attendance_id || null,
           attendanceDate: toInputDate(row.attendance_date) || attendanceDate,
@@ -1675,13 +1727,14 @@ function registerMarketModule({ app, pool }) {
           note: row.attendance_note || row.leave_note || '',
           updatedAt: row.updated_at ? formatDateTime(row.updated_at) : '',
           vendorId: row.vendor_id,
-          vendorName: row.vendor_name,
+          vendorName: isUnassignedVendorRow(row) ? UNASSIGNED_VENDOR_LABEL : row.vendor_name,
           marketId: row.market_id,
           marketName: row.market_name,
           sectionType: row.section_type,
           stallNo: row.stall_no || '',
           stallColor: row.stall_color || '',
           stallLabel: buildStallLabel(row),
+          isUnassigned,
         };
       }).sort(compareMarketRowsByStall);
 
@@ -1695,6 +1748,7 @@ function registerMarketModule({ app, pool }) {
       let leaveCount = 0;
       let reportCount = 0;
       for (const row of rows) {
+        if (row.isUnassigned) continue;
         if (row.status === 'Var') presentCount += 1;
         else if (row.status === 'Yok') absentCount += 1;
         else if (row.status === 'İzinli') leaveCount += 1;
@@ -1707,7 +1761,7 @@ function registerMarketModule({ app, pool }) {
         attendanceDate,
         attendanceDateText: formatDate(attendanceDate),
         updatedAt,
-        recordCount: rows.length,
+        recordCount: rows.filter((item) => !item.isUnassigned).length,
         presentCount,
         absentCount,
         leaveCount,
@@ -1737,6 +1791,7 @@ function registerMarketModule({ app, pool }) {
             v.market_id,
             m.name AS market_name,
             v.full_name AS vendor_name,
+            v.is_unassigned,
             v.section_type,
             v.stall_no,
             v.stall_color,
@@ -1780,14 +1835,15 @@ function registerMarketModule({ app, pool }) {
       );
 
       const rows = result.rows.map((row) => ({
+        isUnassigned: isUnassignedVendorRow(row),
         id: row.attendance_id || null,
         attendanceDate: toInputDate(row.attendance_date) || attendanceDate,
         attendanceDateText: formatDate(row.attendance_date || attendanceDate),
-        status: row.attendance_status || row.leave_type || '',
-        note: row.attendance_note || row.leave_note || '',
+        status: isUnassignedVendorRow(row) ? '' : (row.attendance_status || row.leave_type || ''),
+        note: isUnassignedVendorRow(row) ? '' : (row.attendance_note || row.leave_note || ''),
         updatedAt: row.updated_at ? formatDateTime(row.updated_at) : '',
         vendorId: row.vendor_id,
-        vendorName: row.vendor_name || '',
+        vendorName: isUnassignedVendorRow(row) ? UNASSIGNED_VENDOR_LABEL : (row.vendor_name || ''),
         marketId: row.market_id,
         marketName: row.market_name || '',
         sectionType: row.section_type || '',
@@ -1802,6 +1858,7 @@ function registerMarketModule({ app, pool }) {
       let leaveCount = 0;
       let reportCount = 0;
       for (const row of rows) {
+        if (row.isUnassigned) continue;
         if (row.status === 'Var') presentCount += 1;
         else if (row.status === 'Yok') absentCount += 1;
         else if (row.status === 'İzinli') leaveCount += 1;
@@ -1812,7 +1869,7 @@ function registerMarketModule({ app, pool }) {
       const summaryRows = [
         { Alan: 'Pazar', Değer: marketName },
         { Alan: 'Yoklama Tarihi', Değer: formatDate(attendanceDate) },
-        { Alan: 'Toplam Kayıt', Değer: rows.length },
+        { Alan: 'Toplam Kayıt', Değer: rows.filter((item) => !item.isUnassigned).length },
         { Alan: 'Var', Değer: presentCount },
         { Alan: 'Yok', Değer: absentCount },
         { Alan: 'İzinli', Değer: leaveCount },
@@ -1936,7 +1993,7 @@ function registerMarketModule({ app, pool }) {
         note: row.note || '',
         updatedAt: formatDateTime(row.updated_at),
         vendorId: row.vendor_id,
-        vendorName: row.vendor_name,
+        vendorName: isUnassignedVendorRow(row) ? UNASSIGNED_VENDOR_LABEL : row.vendor_name,
         marketId: row.market_id,
         marketName: row.market_name,
         sectionType: row.section_type,
