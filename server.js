@@ -11,6 +11,21 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const DISPLAY_TIME_ZONE = process.env.DISPLAY_TIME_ZONE || "Europe/Istanbul";
 
+const DEFAULT_COMPLAINT_TOPICS = [
+  "Kaldırım İşgali",
+  "Görüntü Kirliliği",
+  "Çevre Kirliliği",
+  "Gürültü",
+  "Seyyar Satıcı",
+  "Ruhsatsız Faaliyet",
+  "Dilencilik",
+  "Atık / Moloz",
+  "İşgal / Masa Sandalye",
+  "Fiyat Etiketi / Tüketici",
+  "Pazar Düzeni",
+  "Diğer"
+];
+
 app.use(express.json());
 
 const pool = new Pool({
