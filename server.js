@@ -3342,11 +3342,38 @@ app.get("/businesses", (req, res) => {
     .form-group { display: grid; gap: 6px; }
     .form-group.full { grid-column: 1 / -1; }
     .form-group label { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }
-    .topic-picker { border: 1px solid #cfd8e4; border-radius: 12px; padding: 12px; background: #ffffff; min-height: 54px; display: grid; gap: 10px; }
-    .topic-picker-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 12px; }
-    .topic-check { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--text); line-height: 1.45; }
-    .topic-check input { width: 16px; min-width: 16px; height: 16px; padding: 0; margin-top: 2px; box-shadow: none; }
+    .topic-picker { position: relative; display: grid; gap: 10px; }
+    .topic-select-trigger { width: 100%; border: 1px solid #cfd8e4; border-radius: 12px; padding: 12px 14px; background: #ffffff; display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; color: var(--text); cursor: pointer; font-size: 13px; box-shadow: none; }
+    .topic-select-trigger:hover { border-color: #94a3b8; }
+    .topic-picker.open .topic-select-trigger { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+    .topic-select-trigger-text { min-width: 0; }
+    .topic-select-trigger-title { font-weight: 700; color: #111827; }
+    .topic-select-trigger-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .topic-select-trigger-icon { flex-shrink: 0; color: var(--muted); font-size: 12px; }
+    .topic-select-dropdown { display: none; position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 25; background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 50px rgba(15, 23, 42, 0.12); padding: 12px; max-height: 260px; overflow: auto; }
+    .topic-picker.open .topic-select-dropdown { display: grid; gap: 8px; }
+    .topic-option { display: flex; align-items: flex-start; gap: 10px; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; cursor: pointer; background: #ffffff; }
+    .topic-option:hover { border-color: #cbd5e1; background: #f8fafc; }
+    .topic-option input { width: 16px; min-width: 16px; height: 16px; padding: 0; margin-top: 2px; box-shadow: none; }
+    .topic-option-main { min-width: 0; }
+    .topic-option-title { font-size: 13px; font-weight: 700; color: #111827; line-height: 1.4; }
+    .topic-option-sub { font-size: 11.5px; color: var(--muted); line-height: 1.45; margin-top: 2px; }
+    .topic-empty { padding: 12px; border: 1px dashed #cbd5e1; border-radius: 12px; color: var(--muted); font-size: 12.5px; text-align: center; }
+    .topic-selected-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .topic-chip { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 8px 10px; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 700; border: 1px solid #bfdbfe; }
+    .topic-chip.passive { background: #f3f4f6; color: #4b5563; border-color: #e5e7eb; }
+    .topic-chip button { border: none; background: transparent; color: inherit; font-size: 14px; line-height: 1; cursor: pointer; padding: 0; }
     .topic-help { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+    .topic-manager-note { margin-bottom: 14px; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+    .topic-manager-create { display: grid; grid-template-columns: minmax(240px, 1fr) 120px 140px; gap: 10px; align-items: end; margin-bottom: 16px; }
+    .topic-manager-list { display: grid; gap: 10px; }
+    .topic-manager-row { display: grid; grid-template-columns: minmax(220px, 1fr) 110px 150px 110px; gap: 10px; align-items: end; border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: #ffffff; }
+    .topic-manager-row.passive { background: #f8fafc; }
+    .topic-manager-meta { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+    .topic-manager-id { color: var(--muted); font-size: 11px; }
+    .topic-manager-badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 10px; font-size: 11px; font-weight: 700; }
+    .topic-manager-badge.active { background: #dcfce7; color: #166534; }
+    .topic-manager-badge.passive { background: #e5e7eb; color: #4b5563; }
     .section-block { grid-column: 1 / -1; border: 1px solid #e2e8f0; border-radius: 14px; background: linear-gradient(180deg, #fbfdff 0%, #f8fbff 100%); padding: 14px; display: grid; gap: 12px; }
     .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
     .section-title-sm { font-size: 13px; font-weight: 700; color: #0f172a; line-height: 1.3; }
@@ -6629,40 +6656,6 @@ app.get("/", (req, res) => {
     .detail-title { text-align: center; font-size: 21px; font-weight: 700; margin-bottom: 18px; letter-spacing: 0.02em; }
     .detail-table td, .detail-table th { border: 1px solid var(--line); padding: 14px 12px; }
     .detail-table th { width: 220px; background: #f8fafc; font-weight: 800; }
-    .topic-picker { position: relative; }
-    .topic-select-trigger { width: 100%; border: 1px solid #cfd8e4; border-radius: 12px; padding: 12px 14px; background: #ffffff; display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; color: var(--text); cursor: pointer; font-size: 13px; box-shadow: none; }
-    .topic-select-trigger:hover { border-color: #94a3b8; }
-    .topic-picker.open .topic-select-trigger { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
-    .topic-select-trigger-text { min-width: 0; }
-    .topic-select-trigger-title { font-weight: 700; color: #111827; }
-    .topic-select-trigger-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
-    .topic-select-trigger-icon { flex-shrink: 0; color: var(--muted); font-size: 12px; }
-    .topic-select-dropdown { display: none; position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 25; background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 50px rgba(15, 23, 42, 0.12); padding: 12px; }
-    .topic-picker.open .topic-select-dropdown { display: block; }
-    .topic-search { margin-bottom: 10px; }
-    .topic-options { display: grid; gap: 8px; max-height: 240px; overflow: auto; }
-    .topic-option { display: flex; align-items: flex-start; gap: 10px; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; cursor: pointer; background: #ffffff; }
-    .topic-option:hover { border-color: #cbd5e1; background: #f8fafc; }
-    .topic-option input { width: 16px; min-width: 16px; height: 16px; padding: 0; margin-top: 2px; box-shadow: none; }
-    .topic-option-main { min-width: 0; }
-    .topic-option-title { font-size: 13px; font-weight: 700; color: #111827; line-height: 1.4; }
-    .topic-option-sub { font-size: 11.5px; color: var(--muted); line-height: 1.45; margin-top: 2px; }
-    .topic-empty { padding: 12px; border: 1px dashed #cbd5e1; border-radius: 12px; color: var(--muted); font-size: 12.5px; text-align: center; }
-    .topic-selected-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-    .topic-chip { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 8px 10px; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 700; border: 1px solid #bfdbfe; }
-    .topic-chip.passive { background: #f3f4f6; color: #4b5563; border-color: #e5e7eb; }
-    .topic-chip button { border: none; background: transparent; color: inherit; font-size: 14px; line-height: 1; cursor: pointer; padding: 0; }
-    .topic-help { margin-top: 8px; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
-    .topic-manager-note { margin-bottom: 14px; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
-    .topic-manager-create { display: grid; grid-template-columns: minmax(240px, 1fr) 120px 140px; gap: 10px; align-items: end; margin-bottom: 16px; }
-    .topic-manager-list { display: grid; gap: 10px; }
-    .topic-manager-row { display: grid; grid-template-columns: minmax(220px, 1fr) 110px 150px 110px; gap: 10px; align-items: end; border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: #ffffff; }
-    .topic-manager-row.passive { background: #f8fafc; }
-    .topic-manager-meta { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
-    .topic-manager-id { color: var(--muted); font-size: 11px; }
-    .topic-manager-badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 10px; font-size: 11px; font-weight: 700; }
-    .topic-manager-badge.active { background: #dcfce7; color: #166534; }
-    .topic-manager-badge.passive { background: #e5e7eb; color: #4b5563; }
     .attachments-section { margin-top: 20px; border: 1px solid var(--line); border-radius: 14px; padding: 16px; background: var(--panel-soft); }
     .section-title { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
     .attachments-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
@@ -6993,6 +6986,7 @@ app.get("/", (req, res) => {
       </div>
     </div>
   </div>
+
 
   <div class="modal-overlay" id="topicManagerModal">
     <div class="modal" style="max-width: 900px;">
@@ -7368,11 +7362,16 @@ app.get("/", (req, res) => {
       renderTopicManagerList();
     }
 
-    function ensureTopicPickerState(containerId) {
-      if (!topicPickerState[containerId]) {
-        topicPickerState[containerId] = { search: "" };
-      }
-      return topicPickerState[containerId];
+    function getSortedTopicDefinitions() {
+      return complaintTopicDefinitions.slice().sort(function(a, b) {
+        if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+        var orderA = Number(a.sortOrder || 0);
+        var orderB = Number(b.sortOrder || 0);
+        if (orderA === 0 && orderB !== 0) return 1;
+        if (orderB === 0 && orderA !== 0) return -1;
+        if (orderA !== orderB) return orderA - orderB;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'tr');
+      });
     }
 
     function closeAllTopicPickers(exceptId) {
@@ -7389,17 +7388,6 @@ app.get("/", (req, res) => {
       var willOpen = !container.classList.contains('open');
       closeAllTopicPickers(containerId);
       container.classList.toggle('open', willOpen);
-      if (willOpen) {
-        var input = container.querySelector('.topic-search');
-        if (input) input.focus();
-      }
-    }
-
-    function filterTopicOptions(containerId, value) {
-      ensureTopicPickerState(containerId).search = String(value || '');
-      renderTopicPicker(containerId, getSelectedTopicIds(containerId));
-      var container = document.getElementById(containerId);
-      if (container) container.classList.add('open');
     }
 
     function handleTopicSelectionChange(containerId) {
@@ -7415,23 +7403,10 @@ app.get("/", (req, res) => {
       renderTopicPicker(containerId, ids);
     }
 
-    function getSortedTopicDefinitions() {
-      return complaintTopicDefinitions.slice().sort(function(a, b) {
-        if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
-        var orderA = Number(a.sortOrder || 0);
-        var orderB = Number(b.sortOrder || 0);
-        if (orderA === 0 && orderB !== 0) return 1;
-        if (orderB === 0 && orderA !== 0) return -1;
-        if (orderA !== orderB) return orderA - orderB;
-        return String(a.name || '').localeCompare(String(b.name || ''), 'tr');
-      });
-    }
-
     function renderTopicPicker(containerId, selectedIds) {
       var container = document.getElementById(containerId);
       if (!container) return;
 
-      var state = ensureTopicPickerState(containerId);
       var selectedMap = {};
       var normalized = Array.isArray(selectedIds) ? selectedIds : [];
       for (var i = 0; i < normalized.length; i++) {
@@ -7443,46 +7418,42 @@ app.get("/", (req, res) => {
         return;
       }
 
-      var searchText = String(state.search || '').toLocaleLowerCase('tr-TR').trim();
-      var allTopics = getSortedTopicDefinitions();
-      var selectedTopics = allTopics.filter(function(topic) {
+      var topics = getSortedTopicDefinitions();
+      var selectedTopics = topics.filter(function(topic) {
         return selectedMap[String(topic.id)];
       });
-      var visibleTopics = allTopics.filter(function(topic) {
-        if (!topic.isActive && !selectedMap[String(topic.id)]) return false;
-        if (!searchText) return true;
-        return String(topic.name || '').toLocaleLowerCase('tr-TR').indexOf(searchText) > -1;
-      });
+
       var summaryTitle = selectedTopics.length ? (selectedTopics.length + ' konu seçildi') : 'Konu seçiniz...';
-      var summarySub = selectedTopics.length ? selectedTopics.map(function(topic) { return topic.name; }).join(', ') : 'Açılır menüden bir veya birden fazla konu seçebilirsiniz.';
+      var summarySub = selectedTopics.length
+        ? selectedTopics.map(function(topic) { return topic.name; }).join(', ')
+        : 'Açılır listeden bir veya birden fazla konu seçebilirsiniz.';
 
       var html = '';
       html += '<button class="topic-select-trigger" type="button" onclick="toggleTopicDropdown(\'' + containerId + '\')">';
       html += '<span class="topic-select-trigger-text"><div class="topic-select-trigger-title">' + escapeHtml(summaryTitle) + '</div><div class="topic-select-trigger-sub">' + escapeHtml(summarySub) + '</div></span>';
       html += '<span class="topic-select-trigger-icon">▾</span>';
       html += '</button>';
-      html += '<div class="topic-select-dropdown" onclick="event.stopPropagation()">';
-      html += '<input type="text" class="topic-search" placeholder="Konu ara..." value="' + escapeHtml(state.search || '') + '" oninput="filterTopicOptions(\'' + containerId + '\', this.value)" />';
-      html += '<div class="topic-options">';
+      html += '<div class="topic-select-dropdown">';
 
-      if (!visibleTopics.length) {
-        html += '<div class="topic-empty">Aradığınız kritere uygun konu bulunamadı.</div>';
-      } else {
-        for (var j = 0; j < visibleTopics.length; j++) {
-          var topic = visibleTopics[j];
-          var checked = selectedMap[String(topic.id)] ? ' checked' : '';
-          var subText = topic.isActive ? 'Yeni kayıtlarda kullanılabilir.' : 'Pasif başlık. Eski kayıtlarda korunur.';
-          html += '<label class="topic-option">';
-          html += '<input type="checkbox" value="' + String(topic.id) + '"' + checked + ' onchange="handleTopicSelectionChange(\'' + containerId + '\')" />';
-          html += '<span class="topic-option-main">';
-          html += '<span class="topic-option-title">' + escapeHtml(topic.name) + (topic.isActive ? '' : ' (Pasif)') + '</span>';
-          html += '<span class="topic-option-sub">' + escapeHtml(subText) + '</span>';
-          html += '</span>';
-          html += '</label>';
-        }
+      var visibleCount = 0;
+      for (var j = 0; j < topics.length; j++) {
+        var topic = topics[j];
+        if (!topic.isActive && !selectedMap[String(topic.id)]) continue;
+        visibleCount += 1;
+        var checked = selectedMap[String(topic.id)] ? ' checked' : '';
+        html += '<label class="topic-option">';
+        html += '<input type="checkbox" value="' + String(topic.id) + '"' + checked + ' onchange="handleTopicSelectionChange(\'' + containerId + '\')" />';
+        html += '<span class="topic-option-main">';
+        html += '<span class="topic-option-title">' + escapeHtml(topic.name) + (topic.isActive ? '' : ' (Pasif)') + '</span>';
+        html += '<span class="topic-option-sub">' + escapeHtml(topic.isActive ? 'Yeni kayıtlarda kullanılabilir.' : 'Pasif başlık. Eski kayıtlarda korunur.') + '</span>';
+        html += '</span>';
+        html += '</label>';
       }
 
-      html += '</div>';
+      if (!visibleCount) {
+        html += '<div class="topic-empty">Henüz konu başlığı bulunmuyor.</div>';
+      }
+
       html += '</div>';
 
       if (selectedTopics.length) {
@@ -7984,9 +7955,7 @@ app.get("/", (req, res) => {
       }
       document.addEventListener("click", function(event) {
         var insidePicker = event.target.closest ? event.target.closest('.topic-picker') : null;
-        if (!insidePicker) {
-          closeAllTopicPickers();
-        }
+        if (!insidePicker) closeAllTopicPickers();
       });
       document.addEventListener("keydown", function(event) {
         if (event.key === "Escape") {
