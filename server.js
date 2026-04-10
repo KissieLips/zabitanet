@@ -3336,6 +3336,7 @@ app.get("/businesses", (req, res) => {
     .topic-trigger-text.placeholder { color: var(--muted); }
     .topic-caret { color: var(--muted); font-size: 12px; }
     .topic-dropdown { display: none; border: 1px solid #dbe3ef; border-radius: 14px; background: #ffffff; box-shadow: 0 14px 32px rgba(15, 23, 42, 0.10); padding: 10px; }
+    .topic-dropdown.open { display: block; }
     .topic-search { margin-bottom: 8px; }
     .topic-search input { width: 100%; }
     .topic-picker-grid { max-height: 220px; overflow: auto; display: grid; grid-template-columns: 1fr; gap: 6px; padding-right: 4px; }
@@ -6992,6 +6993,32 @@ app.get("/", (req, res) => {
     </div>
   </div>
 
+  <div class="modal-overlay" id="topicModal">
+    <div class="modal">
+      <div class="modal-header white">
+        <span>Konu Başlıkları</span>
+        <button class="close-btn" onclick="closeModal('topicModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="topic-manager-toolbar">
+          <div class="form-group" style="margin:0;">
+            <label>Yeni Konu Başlığı</label>
+            <input type="text" id="topicManagerName" placeholder="Örn: İşporta / Seyyar Satış" />
+          </div>
+          <div style="display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap;">
+            <button class="btn btn-primary" type="button" onclick="createComplaintTopic()">＋ Konu Ekle</button>
+          </div>
+        </div>
+        <div id="topicManagerList" class="topic-manager-list">
+          <div class="muted">Konu listesi yükleniyor...</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('topicModal')">Kapat</button>
+      </div>
+    </div>
+  </div>
+
   <script>
         var complaints = [];
     var complaintTopicDefinitions = [];
@@ -7374,23 +7401,63 @@ app.get("/", (req, res) => {
       }
 
       var html = '';
-      html += '<button class="topic-trigger" type="button" onclick="toggleTopicDropdown('' + containerId + '')">';
+      html += '<button class="topic-trigger" type="button" data-role="topic-trigger">';
       html += '<span class="topic-trigger-text placeholder">Konu seçiniz...</span>';
       html += '<span class="topic-caret">▾</span>';
       html += '</button>';
-      html += '<div class="topic-dropdown" style="display:none;">';
-      html += '<div class="topic-search"><input type="text" placeholder="Konu ara..." oninput="filterTopicOptions('' + containerId + '', this.value)" /></div>';
+      html += '<div class="topic-dropdown">';
+      html += '<div class="topic-search"><input type="text" placeholder="Konu ara..." data-role="topic-search" /></div>';
       html += '<div class="topic-picker-grid">';
       for (var j = 0; j < availableTopics.length; j++) {
         var topic = availableTopics[j];
         var checked = selectedMap[String(topic.id)] ? ' checked' : '';
         var passiveSuffix = topic.isActive ? '' : ' (pasif)';
-        html += '<label class="topic-check" data-topic-name="' + escapeHtml(topic.name.toLowerCase()) + '"><input type="checkbox" value="' + String(topic.id) + '"' + checked + ' onchange="updateTopicPickerState('' + containerId + '')" /><span>' + escapeHtml(topic.name + passiveSuffix) + '</span></label>';
+        html += '<label class="topic-check" data-topic-name="' + escapeHtml(String(topic.name || '').toLowerCase()) + '">';
+        html += '<input type="checkbox" value="' + String(topic.id) + '"' + checked + ' data-role="topic-checkbox" />';
+        html += '<span>' + escapeHtml(topic.name + passiveSuffix) + '</span>';
+        html += '</label>';
       }
       html += '</div>';
       html += '</div>';
       html += '<div class="topic-tags"></div>';
       container.innerHTML = html;
+
+      var trigger = container.querySelector('[data-role="topic-trigger"]');
+      var searchInput = container.querySelector('[data-role="topic-search"]');
+      var checkboxes = container.querySelectorAll('[data-role="topic-checkbox"]');
+
+      if (trigger) {
+        trigger.addEventListener('click', function(event) {
+          event.stopPropagation();
+          toggleTopicDropdown(containerId);
+        });
+      }
+
+      if (searchInput) {
+        searchInput.addEventListener('click', function(event) {
+          event.stopPropagation();
+        });
+        searchInput.addEventListener('input', function() {
+          filterTopicOptions(containerId, this.value);
+        });
+      }
+
+      for (var k = 0; k < checkboxes.length; k++) {
+        checkboxes[k].addEventListener('click', function(event) {
+          event.stopPropagation();
+        });
+        checkboxes[k].addEventListener('change', function() {
+          updateTopicPickerState(containerId);
+        });
+      }
+
+      var labels = container.querySelectorAll('.topic-check');
+      for (var m = 0; m < labels.length; m++) {
+        labels[m].addEventListener('click', function(event) {
+          event.stopPropagation();
+        });
+      }
+
       updateTopicPickerState(containerId);
     }
 
@@ -7399,9 +7466,13 @@ app.get("/", (req, res) => {
       if (!container) return;
       var dropdown = container.querySelector('.topic-dropdown');
       if (!dropdown) return;
-      var isOpen = dropdown.style.display === 'block';
+      var isOpen = dropdown.classList.contains('open');
       closeAllTopicDropdowns(containerId);
-      dropdown.style.display = isOpen ? 'none' : 'block';
+      if (!isOpen) {
+        dropdown.classList.add('open');
+        var searchInput = container.querySelector('[data-role="topic-search"]');
+        if (searchInput) searchInput.focus();
+      }
     }
 
     function closeAllTopicDropdowns(exceptId) {
@@ -7409,7 +7480,7 @@ app.get("/", (req, res) => {
       for (var i = 0; i < pickers.length; i++) {
         if (exceptId && pickers[i].id === exceptId) continue;
         var dropdown = pickers[i].querySelector('.topic-dropdown');
-        if (dropdown) dropdown.style.display = 'none';
+        if (dropdown) dropdown.classList.remove('open');
       }
     }
 
@@ -7420,8 +7491,7 @@ app.get("/", (req, res) => {
       var labels = container.querySelectorAll('.topic-check');
       for (var i = 0; i < labels.length; i++) {
         var name = labels[i].getAttribute('data-topic-name') || '';
-        labels[i].style.display = !search || name.indexOf(search) > -1 ? 'flex' : 'flex';
-        if (search && name.indexOf(search) === -1) labels[i].style.display = 'none';
+        labels[i].style.display = !search || name.indexOf(search) > -1 ? 'flex' : 'none';
       }
     }
 
@@ -7925,6 +7995,11 @@ function getTopicNames(item) {
         });
       }
       document.addEventListener('click', function(event) {
+        if (!event.target.closest('.topic-picker')) {
+          closeAllTopicDropdowns();
+        }
+      });
+      document.addEventListener("click", function(event) {
         if (!event.target.closest('.topic-picker')) {
           closeAllTopicDropdowns();
         }
