@@ -7371,167 +7371,160 @@ app.get("/", (req, res) => {
       renderTopicManagerList();
     }
 
+    function getComplaintTopicDefinitionById(topicId) {
+      var numericId = Number(topicId);
+      for (var i = 0; i < allComplaintTopicDefinitions.length; i++) {
+        if (Number(allComplaintTopicDefinitions[i].id) === numericId) return allComplaintTopicDefinitions[i];
+      }
+      for (var j = 0; j < complaintTopicDefinitions.length; j++) {
+        if (Number(complaintTopicDefinitions[j].id) === numericId) return complaintTopicDefinitions[j];
+      }
+      return null;
+    }
+
     function renderTopicPicker(containerId, selectedIds) {
       var container = document.getElementById(containerId);
       if (!container) return;
 
-      var selectedMap = {};
       var normalized = Array.isArray(selectedIds) ? selectedIds : [];
+      var orderedIds = [];
+      var seenMap = {};
       for (var i = 0; i < normalized.length; i++) {
-        selectedMap[String(normalized[i])] = true;
+        var numericId = Number(normalized[i]);
+        if (!Number.isInteger(numericId) || numericId <= 0) continue;
+        if (seenMap[String(numericId)]) continue;
+        seenMap[String(numericId)] = true;
+        orderedIds.push(numericId);
       }
 
-      var availableTopics = complaintTopicDefinitions.slice();
-      for (var extraIndex = 0; extraIndex < allComplaintTopicDefinitions.length; extraIndex++) {
-        var extraTopic = allComplaintTopicDefinitions[extraIndex];
-        if (!selectedMap[String(extraTopic.id)] || extraTopic.isActive) continue;
-        var exists = false;
-        for (var activeIndex = 0; activeIndex < availableTopics.length; activeIndex++) {
-          if (Number(availableTopics[activeIndex].id) === Number(extraTopic.id)) {
-            exists = true;
-            break;
-          }
-        }
-        if (!exists) availableTopics.push(extraTopic);
-      }
-
-      if (!availableTopics.length) {
-        container.innerHTML = '<div class="muted">Konu listesi yüklenemedi.</div>';
-        return;
+      var optionHtml = '<option value="">Konu seçiniz...</option>';
+      for (var j = 0; j < complaintTopicDefinitions.length; j++) {
+        var topic = complaintTopicDefinitions[j];
+        optionHtml += '<option value="' + String(topic.id) + '">' + escapeHtml(topic.name) + '</option>';
       }
 
       var html = '';
-      html += '<button class="topic-trigger" type="button" data-role="topic-trigger" style="width:100%;min-height:48px;border:1px solid #cfd8e4;border-radius:12px;background:#ffffff;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;font-size:14px;color:#17202f;cursor:pointer;">';
-      html += '<span class="topic-trigger-text placeholder" style="flex:1;min-width:0;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#667085;">Konu seçiniz...</span>';
-      html += '<span class="topic-caret" style="color:#667085;font-size:12px;">▾</span>';
-      html += '</button>';
-      html += '<div class="topic-dropdown" data-open="0" style="display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:250;background:#ffffff;border:1px solid #dbe3ef;border-radius:14px;box-shadow:0 14px 32px rgba(15,23,42,0.12);padding:10px;">';
-      html += '<div class="topic-search" style="margin-bottom:8px;"><input type="text" placeholder="Konu ara..." data-role="topic-search" style="width:100%;border:1px solid #cfd8e4;border-radius:10px;padding:10px 12px;font-size:13px;" /></div>';
-      html += '<div class="topic-picker-grid" style="max-height:220px;overflow:auto;display:grid;grid-template-columns:1fr;gap:6px;padding-right:4px;">';
-      for (var j = 0; j < availableTopics.length; j++) {
-        var topic = availableTopics[j];
-        var checked = selectedMap[String(topic.id)] ? ' checked' : '';
-        var passiveSuffix = topic.isActive ? '' : ' (pasif)';
-        html += '<label class="topic-check" data-topic-name="' + escapeHtml(String(topic.name || '').toLowerCase()) + '" style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#17202f;line-height:1.45;border-radius:10px;padding:8px 10px;cursor:pointer;">';
-        html += '<input type="checkbox" value="' + String(topic.id) + '"' + checked + ' data-role="topic-checkbox" style="width:16px;min-width:16px;height:16px;margin-top:2px;" />';
-        html += '<span>' + escapeHtml(topic.name + passiveSuffix) + '</span>';
-        html += '</label>';
-      }
+      html += '<div class="topic-select-row" style="display:grid;grid-template-columns:minmax(0,1fr);gap:10px;">';
+      html += '<select data-role="topic-select" style="width:100%;min-height:48px;border:1px solid #cfd8e4;border-radius:12px;background:#ffffff;padding:12px 14px;font-size:14px;color:#17202f;">';
+      html += optionHtml;
+      html += '</select>';
       html += '</div>';
-      html += '</div>';
-      html += '<div class="topic-tags" style="display:flex;flex-wrap:wrap;gap:8px;"></div>';
+      html += '<input type="hidden" data-role="topic-selected" value="' + orderedIds.join(',') + '" />';
+      html += '<div class="topic-tags" data-role="topic-tags" style="display:flex;flex-wrap:wrap;gap:8px;"></div>';
       container.innerHTML = html;
 
-      var trigger = container.querySelector('[data-role="topic-trigger"]');
-      var searchInput = container.querySelector('[data-role="topic-search"]');
-      var checkboxes = container.querySelectorAll('[data-role="topic-checkbox"]');
-
-      if (trigger) {
-        trigger.addEventListener('click', function(event) {
-          event.stopPropagation();
-          toggleTopicDropdown(containerId);
-        });
-      }
-
-      if (searchInput) {
-        searchInput.addEventListener('click', function(event) {
-          event.stopPropagation();
-        });
-        searchInput.addEventListener('input', function() {
-          filterTopicOptions(containerId, this.value);
-        });
-      }
-
-      for (var k = 0; k < checkboxes.length; k++) {
-        checkboxes[k].addEventListener('click', function(event) {
-          event.stopPropagation();
-        });
-        checkboxes[k].addEventListener('change', function() {
-          updateTopicPickerState(containerId);
-        });
-      }
-
-      var labels = container.querySelectorAll('.topic-check');
-      for (var m = 0; m < labels.length; m++) {
-        labels[m].addEventListener('click', function(event) {
-          event.stopPropagation();
+      var select = container.querySelector('[data-role="topic-select"]');
+      if (select) {
+        select.addEventListener('change', function() {
+          var value = Number(this.value);
+          if (!Number.isInteger(value) || value <= 0) return;
+          var ids = getSelectedTopicIds(containerId);
+          var exists = false;
+          for (var k = 0; k < ids.length; k++) {
+            if (Number(ids[k]) === value) {
+              exists = true;
+              break;
+            }
+          }
+          if (!exists) ids.push(value);
+          setSelectedTopicIds(containerId, ids);
+          this.value = '';
         });
       }
 
       updateTopicPickerState(containerId);
     }
 
-    function toggleTopicDropdown(containerId) {
+    function setSelectedTopicIds(containerId, ids) {
       var container = document.getElementById(containerId);
       if (!container) return;
-      var dropdown = container.querySelector('.topic-dropdown');
-      if (!dropdown) return;
-      var isOpen = dropdown.getAttribute('data-open') === '1';
-      closeAllTopicDropdowns(containerId);
-      if (!isOpen) {
-        dropdown.style.display = 'block';
-        dropdown.setAttribute('data-open', '1');
-        var searchInput = container.querySelector('[data-role="topic-search"]');
-        if (searchInput) searchInput.focus();
+      var hiddenInput = container.querySelector('[data-role="topic-selected"]');
+      if (!hiddenInput) return;
+
+      var orderedIds = [];
+      var seenMap = {};
+      var values = Array.isArray(ids) ? ids : [];
+      for (var i = 0; i < values.length; i++) {
+        var numericId = Number(values[i]);
+        if (!Number.isInteger(numericId) || numericId <= 0) continue;
+        if (seenMap[String(numericId)]) continue;
+        seenMap[String(numericId)] = true;
+        orderedIds.push(numericId);
       }
+
+      hiddenInput.value = orderedIds.join(',');
+      updateTopicPickerState(containerId);
+    }
+
+    function toggleTopicDropdown(containerId) {
+      return;
     }
 
     function closeAllTopicDropdowns(exceptId) {
-      var pickers = document.querySelectorAll('.topic-picker');
-      for (var i = 0; i < pickers.length; i++) {
-        if (exceptId && pickers[i].id === exceptId) continue;
-        var dropdown = pickers[i].querySelector('.topic-dropdown');
-        if (dropdown) {
-          dropdown.style.display = 'none';
-          dropdown.setAttribute('data-open', '0');
-        }
-      }
+      return;
     }
 
     function filterTopicOptions(containerId, query) {
-      var container = document.getElementById(containerId);
-      if (!container) return;
-      var search = String(query || '').toLowerCase().trim();
-      var labels = container.querySelectorAll('.topic-check');
-      for (var i = 0; i < labels.length; i++) {
-        var name = labels[i].getAttribute('data-topic-name') || '';
-        labels[i].style.display = !search || name.indexOf(search) > -1 ? 'flex' : 'none';
-      }
+      return;
     }
 
     function updateTopicPickerState(containerId) {
       var container = document.getElementById(containerId);
       if (!container) return;
-      var checked = container.querySelectorAll('input[type="checkbox"]:checked');
-      var names = [];
-      for (var i = 0; i < checked.length; i++) {
-        var label = checked[i].parentElement;
-        var textNode = label ? label.querySelector('span') : null;
-        if (textNode) names.push(textNode.textContent);
-      }
-      var triggerText = container.querySelector('.topic-trigger-text');
-      var tags = container.querySelector('.topic-tags');
-      if (triggerText) {
-        if (!names.length) {
-          triggerText.textContent = 'Konu seçiniz...';
-          triggerText.classList.add('placeholder');
-          triggerText.style.color = '#667085';
-        } else if (names.length <= 2) {
-          triggerText.textContent = names.join(', ');
-          triggerText.classList.remove('placeholder');
-          triggerText.style.color = '#17202f';
-        } else {
-          triggerText.textContent = names.slice(0, 2).join(', ') + ' +' + String(names.length - 2);
-          triggerText.classList.remove('placeholder');
-          triggerText.style.color = '#17202f';
+
+      var ids = getSelectedTopicIds(containerId);
+      var tags = container.querySelector('[data-role="topic-tags"]');
+      var select = container.querySelector('[data-role="topic-select"]');
+      if (!tags) return;
+
+      if (select && select.options) {
+        for (var i = 0; i < select.options.length; i++) {
+          var optionValue = Number(select.options[i].value);
+          if (!Number.isInteger(optionValue) || optionValue <= 0) {
+            select.options[i].disabled = false;
+            continue;
+          }
+          var selected = false;
+          for (var j = 0; j < ids.length; j++) {
+            if (Number(ids[j]) === optionValue) {
+              selected = true;
+              break;
+            }
+          }
+          select.options[i].disabled = selected;
         }
       }
-      if (tags) {
-        var tagsHtml = '';
-        for (var j = 0; j < names.length; j++) {
-          tagsHtml += '<span class="topic-tag">' + escapeHtml(names[j]) + '</span>';
-        }
-        tags.innerHTML = tagsHtml;
+
+      if (!ids.length) {
+        tags.innerHTML = '<span class="muted" style="font-size:12px;">Henüz konu seçilmedi.</span>';
+        return;
+      }
+
+      var html = '';
+      for (var k = 0; k < ids.length; k++) {
+        var topic = getComplaintTopicDefinitionById(ids[k]);
+        if (!topic) continue;
+        var label = topic.name + (topic.isActive ? '' : ' (pasif)');
+        html += '<span class="topic-tag" style="display:inline-flex;align-items:center;gap:8px;border-radius:999px;background:#edf2ff;color:#1f3b7a;padding:6px 10px;font-size:12px;font-weight:700;">';
+        html += '<span>' + escapeHtml(label) + '</span>';
+        html += '<button type="button" data-remove-topic="' + String(topic.id) + '" style="border:none;background:transparent;color:#1f3b7a;font-size:14px;line-height:1;cursor:pointer;padding:0;">×</button>';
+        html += '</span>';
+      }
+      tags.innerHTML = html;
+
+      var removeButtons = tags.querySelectorAll('[data-remove-topic]');
+      for (var m = 0; m < removeButtons.length; m++) {
+        removeButtons[m].addEventListener('click', function(event) {
+          event.preventDefault();
+          event.stopPropagation();
+          var removeId = Number(this.getAttribute('data-remove-topic'));
+          var currentIds = getSelectedTopicIds(containerId);
+          var nextIds = [];
+          for (var n = 0; n < currentIds.length; n++) {
+            if (Number(currentIds[n]) !== removeId) nextIds.push(Number(currentIds[n]));
+          }
+          setSelectedTopicIds(containerId, nextIds);
+        });
       }
     }
 
@@ -7539,12 +7532,18 @@ app.get("/", (req, res) => {
       var container = document.getElementById(containerId);
       if (!container) return [];
 
+      var hiddenInput = container.querySelector('[data-role="topic-selected"]');
+      if (!hiddenInput || !hiddenInput.value) return [];
+
+      var parts = String(hiddenInput.value).split(',');
       var ids = [];
-      var inputs = container.querySelectorAll('input[type="checkbox"]:checked');
-      for (var i = 0; i < inputs.length; i++) {
-        var value = Number(inputs[i].value);
-        if (!Number.isInteger(value) || value <= 0) continue;
-        ids.push(value);
+      var seenMap = {};
+      for (var i = 0; i < parts.length; i++) {
+        var numericId = Number(parts[i]);
+        if (!Number.isInteger(numericId) || numericId <= 0) continue;
+        if (seenMap[String(numericId)]) continue;
+        seenMap[String(numericId)] = true;
+        ids.push(numericId);
       }
       return ids;
     }
