@@ -396,7 +396,7 @@ function mapComplaintTopic(row) {
   return {
     id: Number(row.id),
     name: row.name,
-    isActive: row.is_active === undefined ? true : Boolean(row.is_active),
+    isActive: row.is_active !== false && row.is_active !== "f",
   };
 }
 
@@ -422,10 +422,10 @@ async function getComplaintTopicRowsByIds(topicIds, db = pool) {
 
   const result = await db.query(
     `
-      SELECT id, name
+      SELECT id, name, COALESCE(is_active, TRUE) AS is_active
       FROM complaint_topic_definitions
       WHERE id = ANY($1::int[])
-      ORDER BY name ASC
+      ORDER BY LOWER(name) ASC
     `,
     [ids]
   );
@@ -444,11 +444,11 @@ async function getComplaintTopicsMapForComplaintIds(complaintIds, db = pool) {
 
   const result = await db.query(
     `
-      SELECT l.complaint_id, d.id, d.name
+      SELECT l.complaint_id, d.id, d.name, COALESCE(d.is_active, TRUE) AS is_active
       FROM complaint_topic_links l
       JOIN complaint_topic_definitions d ON d.id = l.topic_id
       WHERE l.complaint_id = ANY($1::int[])
-      ORDER BY d.name ASC
+      ORDER BY LOWER(d.name) ASC
     `,
     [ids]
   );
@@ -482,7 +482,7 @@ async function replaceComplaintTopics(db, complaintId, topicIds) {
 async function seedComplaintTopics() {
   for (const topicName of DEFAULT_COMPLAINT_TOPICS) {
     await pool.query(
-      'INSERT INTO complaint_topic_definitions (name, is_active) VALUES ($1, TRUE) ON CONFLICT (name) DO NOTHING',
+      'INSERT INTO complaint_topic_definitions (name) VALUES ($1) ON CONFLICT (name) DO NOTHING',
       [topicName]
     );
   }
@@ -1039,7 +1039,6 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS complaint_topic_definitions (
       id SERIAL PRIMARY KEY,
       name VARCHAR(120) UNIQUE NOT NULL,
-      is_active BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -1438,11 +1437,11 @@ async function nextComplaintNo() {
 
 app.get("/api/complaint-topics", async (req, res) => {
   try {
-    const includeAll = String(req.query.all || "") === "1";
+    const includeAll = req.query.all === "1" || req.query.all === "true";
     const result = await pool.query(
       includeAll
-        ? "SELECT id, name, is_active, created_at FROM complaint_topic_definitions ORDER BY is_active DESC, name ASC"
-        : "SELECT id, name, is_active, created_at FROM complaint_topic_definitions WHERE is_active = TRUE ORDER BY name ASC"
+        ? "SELECT id, name, COALESCE(is_active, TRUE) AS is_active, created_at FROM complaint_topic_definitions ORDER BY LOWER(name) ASC"
+        : "SELECT id, name, COALESCE(is_active, TRUE) AS is_active, created_at FROM complaint_topic_definitions WHERE COALESCE(is_active, TRUE) = TRUE ORDER BY LOWER(name) ASC"
     );
     res.json(result.rows.map(mapComplaintTopic));
   } catch (error) {
@@ -1455,24 +1454,20 @@ app.post("/api/complaint-topics", async (req, res) => {
   try {
     const name = String((req.body && req.body.name) || "").trim();
     if (!name) {
-      return res.status(400).json({ error: "Konu adı gereklidir." });
-    }
-
-    const existing = await pool.query(
-      "SELECT id, name, is_active, created_at FROM complaint_topic_definitions WHERE LOWER(name) = LOWER($1) LIMIT 1",
-      [name]
-    );
-
-    if (existing.rows.length) {
-      return res.status(409).json({ error: "Bu konu başlığı zaten kayıtlı." });
+      return res.status(400).json({ error: "Konu adı zorunludur." });
     }
 
     const result = await pool.query(
-      "INSERT INTO complaint_topic_definitions (name, is_active) VALUES ($1, TRUE) RETURNING id, name, is_active, created_at",
+      `
+        INSERT INTO complaint_topic_definitions (name, is_active)
+        VALUES ($1, TRUE)
+        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+        RETURNING id, name, COALESCE(is_active, TRUE) AS is_active, created_at
+      `,
       [name]
     );
 
-    res.json(mapComplaintTopic(result.rows[0]));
+    res.status(201).json(mapComplaintTopic(result.rows[0]));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Konu başlığı eklenemedi." });
@@ -1483,42 +1478,44 @@ app.put("/api/complaint-topics/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({ error: "Geçersiz konu kimliği." });
+      return res.status(400).json({ error: "Geçersiz konu id." });
     }
 
-    const name = String((req.body && req.body.name) || "").trim();
-    const isActive = req.body && typeof req.body.isActive === "boolean" ? req.body.isActive : undefined;
+    const updates = [];
+    const values = [];
 
-    const existing = await pool.query(
-      "SELECT id, name, is_active, created_at FROM complaint_topic_definitions WHERE id = $1 LIMIT 1",
-      [id]
-    );
-
-    if (!existing.rows.length) {
-      return res.status(404).json({ error: "Konu başlığı bulunamadı." });
+    if (typeof req.body.name !== "undefined") {
+      const name = String(req.body.name || "").trim();
+      if (!name) {
+        return res.status(400).json({ error: "Konu adı boş olamaz." });
+      }
+      values.push(name);
+      updates.push(`name = $${values.length}`);
     }
 
-    const finalName = name || existing.rows[0].name;
-    const finalActive = isActive === undefined ? existing.rows[0].is_active : isActive;
-
-    const duplicate = await pool.query(
-      "SELECT id FROM complaint_topic_definitions WHERE LOWER(name) = LOWER($1) AND id <> $2 LIMIT 1",
-      [finalName, id]
-    );
-
-    if (duplicate.rows.length) {
-      return res.status(409).json({ error: "Bu konu adı başka bir kayıtta var." });
+    if (typeof req.body.isActive !== "undefined") {
+      values.push(!!req.body.isActive);
+      updates.push(`is_active = $${values.length}`);
     }
 
+    if (!updates.length) {
+      return res.status(400).json({ error: "Güncellenecek alan bulunamadı." });
+    }
+
+    values.push(id);
     const result = await pool.query(
       `
         UPDATE complaint_topic_definitions
-        SET name = $1, is_active = $2
-        WHERE id = $3
-        RETURNING id, name, is_active, created_at
+        SET ${updates.join(", ")}
+        WHERE id = $${values.length}
+        RETURNING id, name, COALESCE(is_active, TRUE) AS is_active, created_at
       `,
-      [finalName, finalActive, id]
+      values
     );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Konu başlığı bulunamadı." });
+    }
 
     res.json(mapComplaintTopic(result.rows[0]));
   } catch (error) {
@@ -3335,11 +3332,10 @@ app.get("/businesses", (req, res) => {
     .topic-picker { position: relative; display: grid; gap: 8px; }
     .topic-trigger { width: 100%; min-height: 50px; border: 1px solid #cfd8e4; border-radius: 12px; background: #ffffff; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; font-size: 14px; color: var(--text); cursor: pointer; }
     .topic-trigger:hover { border-color: #b9c7d8; }
-    .topic-trigger-text { flex: 1; min-width: 0; text-align: left; color: var(--text); }
+    .topic-trigger-text { flex: 1; min-width: 0; text-align: left; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .topic-trigger-text.placeholder { color: var(--muted); }
     .topic-caret { color: var(--muted); font-size: 12px; }
     .topic-dropdown { display: none; border: 1px solid #dbe3ef; border-radius: 14px; background: #ffffff; box-shadow: 0 14px 32px rgba(15, 23, 42, 0.10); padding: 10px; }
-    .topic-picker.open .topic-dropdown { display: block; }
     .topic-search { margin-bottom: 8px; }
     .topic-search input { width: 100%; }
     .topic-picker-grid { max-height: 220px; overflow: auto; display: grid; grid-template-columns: 1fr; gap: 6px; padding-right: 4px; }
@@ -7359,11 +7355,6 @@ app.get("/", (req, res) => {
       }
 
       var availableTopics = complaintTopicDefinitions.slice();
-      if (!availableTopics.length && !allComplaintTopicDefinitions.length) {
-        container.innerHTML = '<div class="muted">Konu listesi yüklenemedi.</div>';
-        return;
-      }
-
       for (var extraIndex = 0; extraIndex < allComplaintTopicDefinitions.length; extraIndex++) {
         var extraTopic = allComplaintTopicDefinitions[extraIndex];
         if (!selectedMap[String(extraTopic.id)] || extraTopic.isActive) continue;
@@ -7377,19 +7368,24 @@ app.get("/", (req, res) => {
         if (!exists) availableTopics.push(extraTopic);
       }
 
+      if (!availableTopics.length) {
+        container.innerHTML = '<div class="muted">Konu listesi yüklenemedi.</div>';
+        return;
+      }
+
       var html = '';
-      html += '<button class=\"topic-trigger\" type=\"button\" onclick=\"toggleTopicDropdown(\\'' + containerId + '\\', event)\">';
+      html += '<button class="topic-trigger" type="button" onclick="toggleTopicDropdown('' + containerId + '')">';
       html += '<span class="topic-trigger-text placeholder">Konu seçiniz...</span>';
       html += '<span class="topic-caret">▾</span>';
       html += '</button>';
-      html += '<div class="topic-dropdown">';
-      html += '<div class=\"topic-search\"><input type=\"text\" placeholder=\"Konu ara...\" oninput=\"filterTopicOptions(\\'' + containerId + '\\', this.value)\" /></div>';
+      html += '<div class="topic-dropdown" style="display:none;">';
+      html += '<div class="topic-search"><input type="text" placeholder="Konu ara..." oninput="filterTopicOptions('' + containerId + '', this.value)" /></div>';
       html += '<div class="topic-picker-grid">';
       for (var j = 0; j < availableTopics.length; j++) {
         var topic = availableTopics[j];
         var checked = selectedMap[String(topic.id)] ? ' checked' : '';
         var passiveSuffix = topic.isActive ? '' : ' (pasif)';
-        html += '<label class=\"topic-check\" data-topic-name=\"' + escapeHtml(topic.name.toLowerCase()) + '\"><input type=\"checkbox\" value=\"' + String(topic.id) + '\"' + checked + ' onchange=\"updateTopicPickerState(\\'' + containerId + '\\')\" /><span>' + escapeHtml(topic.name + passiveSuffix) + '</span></label>';
+        html += '<label class="topic-check" data-topic-name="' + escapeHtml(topic.name.toLowerCase()) + '"><input type="checkbox" value="' + String(topic.id) + '"' + checked + ' onchange="updateTopicPickerState('' + containerId + '')" /><span>' + escapeHtml(topic.name + passiveSuffix) + '</span></label>';
       }
       html += '</div>';
       html += '</div>';
@@ -7398,22 +7394,22 @@ app.get("/", (req, res) => {
       updateTopicPickerState(containerId);
     }
 
-    function toggleTopicDropdown(containerId, event) {
-      if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-      closeAllTopicDropdowns(containerId);
+    function toggleTopicDropdown(containerId) {
       var container = document.getElementById(containerId);
       if (!container) return;
-      container.classList.toggle('open');
+      var dropdown = container.querySelector('.topic-dropdown');
+      if (!dropdown) return;
+      var isOpen = dropdown.style.display === 'block';
+      closeAllTopicDropdowns(containerId);
+      dropdown.style.display = isOpen ? 'none' : 'block';
     }
 
     function closeAllTopicDropdowns(exceptId) {
       var pickers = document.querySelectorAll('.topic-picker');
       for (var i = 0; i < pickers.length; i++) {
         if (exceptId && pickers[i].id === exceptId) continue;
-        pickers[i].classList.remove('open');
+        var dropdown = pickers[i].querySelector('.topic-dropdown');
+        if (dropdown) dropdown.style.display = 'none';
       }
     }
 
@@ -7424,7 +7420,8 @@ app.get("/", (req, res) => {
       var labels = container.querySelectorAll('.topic-check');
       for (var i = 0; i < labels.length; i++) {
         var name = labels[i].getAttribute('data-topic-name') || '';
-        labels[i].style.display = !search || name.indexOf(search) > -1 ? 'flex' : 'none';
+        labels[i].style.display = !search || name.indexOf(search) > -1 ? 'flex' : 'flex';
+        if (search && name.indexOf(search) === -1) labels[i].style.display = 'none';
       }
     }
 
@@ -7453,11 +7450,11 @@ app.get("/", (req, res) => {
         }
       }
       if (tags) {
-        var html = '';
+        var tagsHtml = '';
         for (var j = 0; j < names.length; j++) {
-          html += '<span class="topic-tag">' + escapeHtml(names[j]) + '</span>';
+          tagsHtml += '<span class="topic-tag">' + escapeHtml(names[j]) + '</span>';
         }
-        tags.innerHTML = html;
+        tags.innerHTML = tagsHtml;
       }
     }
 
@@ -7473,18 +7470,6 @@ app.get("/", (req, res) => {
         ids.push(value);
       }
       return ids;
-    }
-
-    function getTopicNames(item) {
-      if (!item) return '';
-      if (Array.isArray(item.topics) && item.topics.length) {
-        var names = [];
-        for (var i = 0; i < item.topics.length; i++) {
-          if (item.topics[i] && item.topics[i].name) names.push(item.topics[i].name);
-        }
-        return names.join(', ');
-      }
-      return item.topicNames || '';
     }
 
     function renderTopicManagerList() {
@@ -7511,10 +7496,11 @@ app.get("/", (req, res) => {
       list.innerHTML = html;
     }
 
-    async function openTopicManager() {
-      document.getElementById('topicManagerName').value = '';
-      await loadComplaintTopics();
+    function openTopicManager() {
       document.getElementById('topicModal').classList.add('show');
+      var input = document.getElementById('topicManagerName');
+      if (input) input.value = '';
+      loadComplaintTopics();
     }
 
     async function createComplaintTopic() {
@@ -7578,6 +7564,18 @@ app.get("/", (req, res) => {
       } catch (error) {
         alert(error.message || 'Konu durumu güncellenemedi.');
       }
+    }
+
+function getTopicNames(item) {
+      if (!item) return '';
+      if (Array.isArray(item.topics) && item.topics.length) {
+        var names = [];
+        for (var i = 0; i < item.topics.length; i++) {
+          if (item.topics[i] && item.topics[i].name) names.push(item.topics[i].name);
+        }
+        return names.join(', ');
+      }
+      return item.topicNames || '';
     }
 
     async function loadComplaints() {
