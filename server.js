@@ -377,13 +377,48 @@ function formatDateTime(value) {
   }).format(d);
 }
 
+function normalizeComplaintTopics(value) {
+  if (!value) return [];
+  const rawTopics = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? (() => {
+          try {
+            return JSON.parse(value);
+          } catch (error) {
+            return [];
+          }
+        })()
+      : [];
+
+  return rawTopics
+    .filter((topic) => topic && topic.id !== null && topic.id !== undefined && topic.name)
+    .map((topic) => ({
+      id: Number(topic.id),
+      name: String(topic.name),
+    }));
+}
+
+function buildComplaintTopicText(topics) {
+  if (!Array.isArray(topics) || topics.length === 0) return "";
+  return topics
+    .map((topic) => topic.name)
+    .filter(Boolean)
+    .join(", ");
+}
+
 function mapComplaint(row) {
+  const topics = normalizeComplaintTopics(row.topics);
+
   return {
     id: row.id,
     no: row.complaint_no,
     date: toInputDate(row.complaint_date),
     displayDate: formatDate(row.complaint_date),
     subject: row.subject,
+    topics: topics,
+    topicNames: topics.map((topic) => topic.name),
+    topicText: buildComplaintTopicText(topics),
     source: row.source,
     address: row.address || "",
     detail: row.detail || "",
@@ -861,6 +896,97 @@ function safeUnlink(filePath) {
   }
 }
 
+
+function normalizeComplaintTopicIds(topicIds) {
+  if (!Array.isArray(topicIds)) return [];
+  const seen = new Set();
+
+  return topicIds
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0)
+    .filter((value) => {
+      if (seen.has(value)) return false;
+      seen.add(value);
+      return true;
+    });
+}
+
+async function seedComplaintTopics() {
+  for (const topicName of DEFAULT_COMPLAINT_TOPICS) {
+    await pool.query(
+      `INSERT INTO complaint_topic_definitions (name)
+       VALUES ($1)
+       ON CONFLICT (name) DO NOTHING`,
+      [topicName]
+    );
+  }
+}
+
+async function saveComplaintTopics(client, complaintId, topicIds) {
+  const normalizedTopicIds = normalizeComplaintTopicIds(topicIds);
+
+  await client.query(
+    "DELETE FROM complaint_topic_links WHERE complaint_id = $1",
+    [complaintId]
+  );
+
+  if (normalizedTopicIds.length === 0) return [];
+
+  const validTopicResult = await client.query(
+    "SELECT id FROM complaint_topic_definitions WHERE id = ANY($1::int[])",
+    [normalizedTopicIds]
+  );
+
+  const validTopicIds = validTopicResult.rows.map((row) => Number(row.id));
+  if (validTopicIds.length === 0) return [];
+
+  const insertValues = [];
+  const params = [complaintId];
+  let paramIndex = 2;
+
+  for (const topicId of validTopicIds) {
+    insertValues.push(`($1, $${paramIndex})`);
+    params.push(topicId);
+    paramIndex += 1;
+  }
+
+  await client.query(
+    `INSERT INTO complaint_topic_links (complaint_id, topic_id)
+     VALUES ${insertValues.join(", ")}
+     ON CONFLICT (complaint_id, topic_id) DO NOTHING`,
+    params
+  );
+
+  return validTopicIds;
+}
+
+function complaintSelectSql(whereClause = "") {
+  return `
+    SELECT
+      c.*,
+      COALESCE(
+        json_agg(
+          DISTINCT jsonb_build_object('id', d.id, 'name', d.name)
+        ) FILTER (WHERE d.id IS NOT NULL),
+        '[]'::json
+      ) AS topics
+    FROM complaints c
+    LEFT JOIN complaint_topic_links ctl ON ctl.complaint_id = c.id
+    LEFT JOIN complaint_topic_definitions d ON d.id = ctl.topic_id
+    ${whereClause}
+    GROUP BY c.id
+  `;
+}
+
+async function getComplaintByIdFromDb(client, complaintId) {
+  const result = await client.query(
+    complaintSelectSql("WHERE c.id = $1") + " ORDER BY c.id DESC",
+    [complaintId]
+  );
+
+  return result.rows.length ? mapComplaint(result.rows[0]) : null;
+}
+
 async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS complaints (
@@ -895,6 +1021,35 @@ async function initDb() {
     ALTER TABLE complaints
     ADD COLUMN IF NOT EXISTS control_date DATE
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS complaint_topic_definitions (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(120) UNIQUE NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS complaint_topic_links (
+      complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
+      topic_id INTEGER NOT NULL REFERENCES complaint_topic_definitions(id) ON DELETE RESTRICT,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (complaint_id, topic_id)
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_complaint_topic_links_complaint_id
+    ON complaint_topic_links(complaint_id)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_complaint_topic_links_topic_id
+    ON complaint_topic_links(topic_id)
+  `);
+
+  await seedComplaintTopics();
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS complaint_files (
@@ -1288,9 +1443,30 @@ async function nextComplaintNo() {
   return "ŞKY-" + currentYear + "-" + String(nextNumber).padStart(4, "0");
 }
 
+app.get("/api/complaint-topics", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, name, created_at
+       FROM complaint_topic_definitions
+       ORDER BY name ASC`
+    );
+
+    res.json(result.rows.map((row) => ({
+      id: Number(row.id),
+      name: row.name,
+      createdAt: formatDateTime(row.created_at),
+    })));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Şikayet konu listesi alınamadı." });
+  }
+});
+
 app.get("/api/complaints", async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM complaints ORDER BY id DESC");
+    const result = await pool.query(
+      complaintSelectSql() + " ORDER BY c.id DESC"
+    );
     res.json(result.rows.map(mapComplaint));
   } catch (error) {
     console.error(error);
@@ -1299,10 +1475,13 @@ app.get("/api/complaints", async (req, res) => {
 });
 
 app.post("/api/complaints", async (req, res) => {
+  const client = await pool.connect();
+
   try {
     const {
       date,
       subject,
+      topicIds,
       source,
       address,
       detail,
@@ -1312,8 +1491,24 @@ app.post("/api/complaints", async (req, res) => {
       controlDate,
     } = req.body;
 
-    if (!date || !subject || !source) {
-      return res.status(400).json({ error: "Zorunlu alanları doldurun." });
+    const normalizedTopicIds = normalizeComplaintTopicIds(topicIds);
+    const trimmedSubject = typeof subject === "string" ? subject.trim() : "";
+
+    if (!date || !source || (!trimmedSubject && normalizedTopicIds.length === 0)) {
+      return res.status(400).json({ error: "Tarih, kaynak ve en az bir konu bilgisi girin." });
+    }
+
+    await client.query("BEGIN");
+
+    let finalSubject = trimmedSubject;
+    if (normalizedTopicIds.length > 0) {
+      const topicNameResult = await client.query(
+        "SELECT name FROM complaint_topic_definitions WHERE id = ANY($1::int[]) ORDER BY name ASC",
+        [normalizedTopicIds]
+      );
+      if (!finalSubject) {
+        finalSubject = topicNameResult.rows.map((row) => row.name).join(", ");
+      }
     }
 
     const complaintNo = await nextComplaintNo();
@@ -1330,7 +1525,7 @@ app.post("/api/complaints", async (req, res) => {
     const finalControlDate =
       finalStatus === "Süre Verildi" ? (controlDate || null) : null;
 
-    const result = await pool.query(
+    const result = await client.query(
       `
         INSERT INTO complaints
           (
@@ -1349,12 +1544,12 @@ app.post("/api/complaints", async (req, res) => {
           )
         VALUES
           ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        RETURNING *
+        RETURNING id
       `,
       [
         complaintNo,
         date,
-        subject,
+        finalSubject,
         source,
         address || "",
         detail || "",
@@ -1367,19 +1562,31 @@ app.post("/api/complaints", async (req, res) => {
       ]
     );
 
-    res.json(mapComplaint(result.rows[0]));
+    const complaintId = result.rows[0].id;
+    await saveComplaintTopics(client, complaintId, normalizedTopicIds);
+
+    await client.query("COMMIT");
+
+    const complaint = await getComplaintByIdFromDb(pool, complaintId);
+    res.json(complaint);
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error(error);
     res.status(500).json({ error: "Kayıt eklenemedi." });
+  } finally {
+    client.release();
   }
 });
 
 app.put("/api/complaints/:id", async (req, res) => {
+  const client = await pool.connect();
+
   try {
     const { id } = req.params;
     const {
       date,
       subject,
+      topicIds,
       source,
       address,
       detail,
@@ -1389,20 +1596,37 @@ app.put("/api/complaints/:id", async (req, res) => {
       controlDate,
     } = req.body;
 
-    if (!date || !subject || !source) {
-      return res.status(400).json({ error: "Zorunlu alanları doldurun." });
+    const normalizedTopicIds = normalizeComplaintTopicIds(topicIds);
+    const trimmedSubject = typeof subject === "string" ? subject.trim() : "";
+
+    if (!date || !source || (!trimmedSubject && normalizedTopicIds.length === 0)) {
+      return res.status(400).json({ error: "Tarih, kaynak ve en az bir konu bilgisi girin." });
     }
 
-    const existingResult = await pool.query(
+    await client.query("BEGIN");
+
+    const existingResult = await client.query(
       "SELECT * FROM complaints WHERE id = $1",
       [id]
     );
 
     if (existingResult.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ error: "Kayıt bulunamadı." });
     }
 
     const existing = existingResult.rows[0];
+
+    let finalSubject = trimmedSubject;
+    if (normalizedTopicIds.length > 0) {
+      const topicNameResult = await client.query(
+        "SELECT name FROM complaint_topic_definitions WHERE id = ANY($1::int[]) ORDER BY name ASC",
+        [normalizedTopicIds]
+      );
+      if (!finalSubject) {
+        finalSubject = topicNameResult.rows.map((row) => row.name).join(", ");
+      }
+    }
 
     const finalAction = action || "Henüz İşlem Yapılmadı";
     const finalStatus = status || "Açık";
@@ -1422,7 +1646,7 @@ app.put("/api/complaints/:id", async (req, res) => {
         ? (controlDate || toInputDate(existing.control_date) || null)
         : null;
 
-    const result = await pool.query(
+    await client.query(
       `
         UPDATE complaints
         SET
@@ -1438,11 +1662,10 @@ app.put("/api/complaints/:id", async (req, res) => {
           closed_date = $10,
           control_date = $11
         WHERE id = $12
-        RETURNING *
       `,
       [
         date,
-        subject,
+        finalSubject,
         source,
         address || "",
         detail || "",
@@ -1456,10 +1679,18 @@ app.put("/api/complaints/:id", async (req, res) => {
       ]
     );
 
-    res.json(mapComplaint(result.rows[0]));
+    await saveComplaintTopics(client, id, normalizedTopicIds);
+
+    await client.query("COMMIT");
+
+    const complaint = await getComplaintByIdFromDb(pool, id);
+    res.json(complaint);
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error(error);
     res.status(500).json({ error: "Kayıt güncellenemedi." });
+  } finally {
+    client.release();
   }
 });
 
@@ -4829,6 +5060,91 @@ app.get("/businesses/:id", (req, res) => {
       return '<div class="inspection-field"><div class="inspection-field-label">' + label + '</div><div class="inspection-field-value">' + value + '</div></div>';
     }
 
+
+    function buildTopicChecklistHtml(containerId, selectedIds) {
+      var selectedMap = {};
+      var ids = Array.isArray(selectedIds) ? selectedIds : [];
+
+      for (var i = 0; i < ids.length; i++) {
+        selectedMap[String(ids[i])] = true;
+      }
+
+      if (!complaintTopicDefinitions.length) {
+        return '<div class="muted">Şikayet konusu listesi yüklenemedi.</div>';
+      }
+
+      var html = "";
+      for (var j = 0; j < complaintTopicDefinitions.length; j++) {
+        var topic = complaintTopicDefinitions[j];
+        var checked = selectedMap[String(topic.id)] ? ' checked' : '';
+        html += '<label class="topic-option">';
+        html += '<input type="checkbox" data-topic-container="' + escapeHtml(containerId) + '" value="' + escapeHtml(topic.id) + '"' + checked + ' />';
+        html += '<span>' + escapeHtml(topic.name) + '</span>';
+        html += '</label>';
+      }
+      return html;
+    }
+
+    function renderTopicChecklist(containerId, selectedIds) {
+      var container = document.getElementById(containerId);
+      if (!container) return;
+      container.innerHTML = buildTopicChecklistHtml(containerId, selectedIds);
+    }
+
+    function getSelectedTopicIds(containerId) {
+      var container = document.getElementById(containerId);
+      if (!container) return [];
+
+      var checkedInputs = container.querySelectorAll('input[type="checkbox"]:checked');
+      var ids = [];
+
+      for (var i = 0; i < checkedInputs.length; i++) {
+        ids.push(Number(checkedInputs[i].value));
+      }
+
+      return ids;
+    }
+
+    function buildTopicSummaryHtml(item) {
+      var topics = item && item.topics ? item.topics : [];
+      if (!topics.length) {
+        return '<span class="muted">Konu seçilmemiş</span>';
+      }
+
+      var html = '<div class="topic-summary">';
+      for (var i = 0; i < topics.length; i++) {
+        html += '<span class="topic-chip">' + escapeHtml(topics[i].name) + '</span>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function complaintSearchText(item) {
+      var values = [
+        item.no || "",
+        item.subject || "",
+        item.topicText || "",
+        item.detail || "",
+        item.address || ""
+      ];
+
+      return values.join(" ").toLowerCase();
+    }
+
+    async function loadComplaintTopics() {
+      try {
+        var response = await fetch("/api/complaint-topics");
+        if (!response.ok) throw new Error();
+        complaintTopicDefinitions = await response.json();
+        renderTopicChecklist("newTopics", []);
+        renderTopicChecklist("editTopics", []);
+      } catch (error) {
+        complaintTopicDefinitions = [];
+        renderTopicChecklist("newTopics", []);
+        renderTopicChecklist("editTopics", []);
+      }
+    }
+
     function formatFileSize(bytes) {
       var size = Number(bytes || 0);
       if (!size) return '0 KB';
@@ -6299,6 +6615,14 @@ app.get("/", (req, res) => {
     input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
     textarea { resize: vertical; min-height: 88px; }
     .table-panel { padding-bottom: 12px; }
+    .topic-checklist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 4px; }
+    .topic-option { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #ffffff; cursor: pointer; transition: 0.15s ease; min-height: 46px; }
+    .topic-option:hover { border-color: #b6c4d6; background: #f8fbff; }
+    .topic-option input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); flex: 0 0 auto; }
+    .topic-option span { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.35; }
+    .topic-help { color: var(--muted); font-size: 12px; margin-top: 8px; }
+    .topic-summary { display: flex; flex-wrap: wrap; gap: 6px; }
+    .topic-chip { display: inline-flex; align-items: center; padding: 5px 10px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 12px; font-weight: 700; line-height: 1.2; }
     .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
     .table-wrap table td:first-child { min-width: 230px; }
     table { width: 100%; border-collapse: collapse; min-width: 860px; background: #ffffff; }
@@ -6446,13 +6770,13 @@ app.get("/", (req, res) => {
           <input type="date" id="filterDate" />
           <select id="filterSource"><option value="">Tüm Kaynaklar</option><option value="CİMER">CİMER</option><option value="Şeffaf Masa">Şeffaf Masa</option><option value="Büro Telefonu">Büro Telefonu</option><option value="Vatandaş Talebi">Vatandaş Talebi</option></select>
           <select id="filterStatus"><option value="">Tüm Durumlar</option><option value="Açık">Açık</option><option value="İnceleniyor">İnceleniyor</option><option value="Süre Verildi">Süre Verildi</option><option value="Kapatıldı">Kapatıldı</option></select>
-          <input type="text" id="searchInput" placeholder="Şikayet No veya konu ara..." />
+          <input type="text" id="searchInput" placeholder="Şikayet No, başlık veya konu ara..." />
           <button class="btn btn-secondary" type="button" onclick="renderTable()">🔎 Filtrele</button>
         </div>
       </section>
       <section class="panel table-panel">
         <div class="panel-header"><div class="panel-title">Şikayet kayıtları</div></div>
-        <div class="table-wrap"><table><thead><tr><th>Şikayet No</th><th>Tarih</th><th>Konu</th><th>Kaynak</th><th>Durum</th><th>Yapılan İşlem</th><th>İşlemler</th></tr></thead><tbody id="complaintTableBody"></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>Şikayet No</th><th>Tarih</th><th>Başlık / Konular</th><th>Kaynak</th><th>Durum</th><th>Yapılan İşlem</th><th>İşlemler</th></tr></thead><tbody id="complaintTableBody"></tbody></table></div>
         <div id="emptyNote" class="empty-note" style="display:none;">Kayıt bulunamadı.</div>
       </section>
     </main>
@@ -6475,8 +6799,8 @@ app.get("/", (req, res) => {
             <input type="date" id="newDate" />
           </div>
           <div class="form-group">
-            <label>Şikayet Konusu *</label>
-            <input type="text" id="newSubject" placeholder="Örn: Gürültü, Çöp, vb." />
+            <label>Kısa Başlık / Özet</label>
+            <input type="text" id="newSubject" placeholder="Örn: İşyerinin kaldırımı işgal etmesi ve görüntü kirliliği oluşturması" />
           </div>
           <div class="form-group">
             <label>Şikayet Kaynağı *</label>
@@ -6487,6 +6811,11 @@ app.get("/", (req, res) => {
               <option value="Büro Telefonu">Büro Telefonu</option>
               <option value="Vatandaş Talebi">Vatandaş Talebi</option>
             </select>
+          </div>
+          <div class="form-group full">
+            <label>Şikayet Konuları *</label>
+            <div id="newTopics" class="topic-checklist"></div>
+            <div class="topic-help">Bir şikayet kaydına birden fazla konu seçebilirsiniz. İstatistiklerde her konu ayrı sayılır.</div>
           </div>
           <div class="form-group full">
             <label>Şikayet Adresi</label>
@@ -6599,7 +6928,7 @@ app.get("/", (req, res) => {
             <input type="date" id="editDate" />
           </div>
           <div class="form-group">
-            <label>Şikayet Konusu *</label>
+            <label>Kısa Başlık / Özet</label>
             <input type="text" id="editSubject" />
           </div>
           <div class="form-group">
@@ -6610,6 +6939,11 @@ app.get("/", (req, res) => {
               <option value="Büro Telefonu">Büro Telefonu</option>
               <option value="Vatandaş Talebi">Vatandaş Talebi</option>
             </select>
+          </div>
+          <div class="form-group full">
+            <label>Şikayet Konuları *</label>
+            <div id="editTopics" class="topic-checklist"></div>
+            <div class="topic-help">Birden fazla konu seçebilirsiniz. Faaliyet raporunda her konu ayrı yansır.</div>
           </div>
           <div class="form-group full">
             <label>Şikayet Adresi</label>
@@ -6667,6 +7001,7 @@ app.get("/", (req, res) => {
       photo: ["Öncesi", "Sonrası", "Genel Saha Fotoğrafı"],
       document: ["Tutanak", "Ceza", "Tebligat", "Savunma", "Diğer Belge"]
     };
+    var complaintTopicDefinitions = [];
 
     function toggleSidebar(forceOpen) {
       var shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !document.body.classList.contains("sidebar-open");
@@ -7080,8 +7415,7 @@ app.get("/", (req, res) => {
         var statusMatch = !filterStatus || item.status === filterStatus;
         var searchMatch =
           !searchText ||
-          item.no.toLowerCase().indexOf(searchText) > -1 ||
-          item.subject.toLowerCase().indexOf(searchText) > -1;
+          complaintSearchText(item).indexOf(searchText) > -1;
 
         return dateMatch && sourceMatch && statusMatch && searchMatch;
       });
@@ -7103,7 +7437,15 @@ app.get("/", (req, res) => {
         rows += "<tr>";
         rows += '<td class="complaint-no">' + escapeHtml(item.no) + "</td>";
         rows += "<td>" + escapeHtml(item.displayDate) + "</td>";
-        rows += "<td>" + escapeHtml(item.subject) + "</td>";
+        rows += "<td><div><strong>" + escapeHtml(item.subject || "-") + "</strong></div>";
+        if (item.topicText) {
+          rows += '<div class="topic-summary" style="margin-top:6px;">';
+          for (var topicIndex = 0; topicIndex < item.topics.length; topicIndex++) {
+            rows += '<span class="topic-chip">' + escapeHtml(item.topics[topicIndex].name) + '</span>';
+          }
+          rows += '</div>';
+        }
+        rows += "</td>";
         rows += "<td>" + sourceBadge(item.source) + "</td>";
         rows += "<td>" + getStatusBadge(item) + "</td>";
         rows += "<td>" + escapeHtml(item.action) + "</td>";
@@ -7122,6 +7464,7 @@ app.get("/", (req, res) => {
       document.getElementById("newNo").value = "Otomatik oluşturulacak";
       document.getElementById("newDate").value = todayInputDate();
       document.getElementById("newSubject").value = "";
+      renderTopicChecklist("newTopics", []);
       document.getElementById("newSource").value = "";
       document.getElementById("newAddress").value = "";
       document.getElementById("newDetail").value = "";
@@ -7139,11 +7482,15 @@ app.get("/", (req, res) => {
         detailComplaintId = null;
         complaintFiles = [];
       }
+      if (id === "editModal") {
+        editingId = null;
+      }
     }
 
     async function saveNewComplaint() {
       var date = document.getElementById("newDate").value;
       var subject = document.getElementById("newSubject").value.trim();
+      var topicIds = getSelectedTopicIds("newTopics");
       var source = document.getElementById("newSource").value;
       var address = document.getElementById("newAddress").value.trim();
       var detail = document.getElementById("newDetail").value.trim();
@@ -7152,8 +7499,8 @@ app.get("/", (req, res) => {
       var controlDate = document.getElementById("newControlDate").value;
       var note = document.getElementById("newNote").value.trim();
 
-      if (!date || !subject || !source) {
-        alert("Lütfen zorunlu alanları doldurun.");
+      if (!date || !source || (!subject && topicIds.length === 0)) {
+        alert("Tarih, kaynak ve en az bir konu bilgisi girmeniz gerekiyor.");
         return;
       }
 
@@ -7169,6 +7516,7 @@ app.get("/", (req, res) => {
           body: JSON.stringify({
             date: date,
             subject: subject,
+            topicIds: topicIds,
             source: source,
             address: address,
             detail: detail,
@@ -7200,7 +7548,8 @@ app.get("/", (req, res) => {
 
       var html = "";
       html += "<tr><th>Şikayet No</th><td>" + escapeHtml(item.no) + "</td></tr>";
-      html += "<tr><th>Konu</th><td><strong>" + escapeHtml(item.subject) + "</strong></td></tr>";
+      html += "<tr><th>Kısa Başlık / Özet</th><td><strong>" + escapeHtml(item.subject || "-") + "</strong></td></tr>";
+      html += "<tr><th>Şikayet Konuları</th><td>" + buildTopicSummaryHtml(item) + "</td></tr>";
       html += "<tr><th>Kaynak</th><td>" + escapeHtml(item.source) + "</td></tr>";
       html += "<tr><th>Adres</th><td>" + escapeHtml(item.address) + "</td></tr>";
       html += "<tr><th>Durum</th><td>" + getStatusBadge(item) + "</td></tr>";
@@ -7226,6 +7575,7 @@ app.get("/", (req, res) => {
       document.getElementById("editNo").value = item.no;
       document.getElementById("editDate").value = item.date;
       document.getElementById("editSubject").value = item.subject;
+      renderTopicChecklist("editTopics", (item.topics || []).map(function(topic) { return topic.id; }));
       document.getElementById("editSource").value = item.source;
       document.getElementById("editAddress").value = item.address;
       document.getElementById("editDetail").value = item.detail;
@@ -7242,6 +7592,13 @@ app.get("/", (req, res) => {
 
       var status = document.getElementById("editStatus").value;
       var controlDate = document.getElementById("editControlDate").value;
+      var subject = document.getElementById("editSubject").value.trim();
+      var topicIds = getSelectedTopicIds("editTopics");
+
+      if (!document.getElementById("editDate").value || !document.getElementById("editSource").value || (!subject && topicIds.length === 0)) {
+        alert("Tarih, kaynak ve en az bir konu bilgisi girmeniz gerekiyor.");
+        return;
+      }
 
       if (status === "Süre Verildi" && !controlDate) {
         alert("Süre Verildi durumunda Kontrol Tarihi girmeniz gerekiyor.");
@@ -7254,7 +7611,8 @@ app.get("/", (req, res) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             date: document.getElementById("editDate").value,
-            subject: document.getElementById("editSubject").value.trim(),
+            subject: subject,
+            topicIds: topicIds,
             source: document.getElementById("editSource").value,
             address: document.getElementById("editAddress").value.trim(),
             detail: document.getElementById("editDetail").value.trim(),
@@ -7294,9 +7652,10 @@ app.get("/", (req, res) => {
       }
     }
 
-    document.addEventListener("DOMContentLoaded", function() {
+    document.addEventListener("DOMContentLoaded", async function() {
       setTodayText();
-      loadComplaints();
+      await loadComplaintTopics();
+      await loadComplaints();
       document.getElementById("newStatus").addEventListener("change", toggleNewControlDate);
       document.getElementById("editStatus").addEventListener("change", toggleEditControlDate);
       document.getElementById("detailFileType").addEventListener("change", refreshCategoryOptions);
