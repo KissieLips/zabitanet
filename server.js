@@ -7401,25 +7401,25 @@ app.get("/", (req, res) => {
       }
 
       var html = '';
-      html += '<button class="topic-trigger" type="button" data-role="topic-trigger">';
-      html += '<span class="topic-trigger-text placeholder">Konu seçiniz...</span>';
-      html += '<span class="topic-caret">▾</span>';
+      html += '<button class="topic-trigger" type="button" data-role="topic-trigger" style="width:100%;min-height:48px;border:1px solid #cfd8e4;border-radius:12px;background:#ffffff;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;font-size:14px;color:#17202f;cursor:pointer;">';
+      html += '<span class="topic-trigger-text placeholder" style="flex:1;min-width:0;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#667085;">Konu seçiniz...</span>';
+      html += '<span class="topic-caret" style="color:#667085;font-size:12px;">▾</span>';
       html += '</button>';
-      html += '<div class="topic-dropdown">';
-      html += '<div class="topic-search"><input type="text" placeholder="Konu ara..." data-role="topic-search" /></div>';
-      html += '<div class="topic-picker-grid">';
+      html += '<div class="topic-dropdown" data-open="0" style="display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:250;background:#ffffff;border:1px solid #dbe3ef;border-radius:14px;box-shadow:0 14px 32px rgba(15,23,42,0.12);padding:10px;">';
+      html += '<div class="topic-search" style="margin-bottom:8px;"><input type="text" placeholder="Konu ara..." data-role="topic-search" style="width:100%;border:1px solid #cfd8e4;border-radius:10px;padding:10px 12px;font-size:13px;" /></div>';
+      html += '<div class="topic-picker-grid" style="max-height:220px;overflow:auto;display:grid;grid-template-columns:1fr;gap:6px;padding-right:4px;">';
       for (var j = 0; j < availableTopics.length; j++) {
         var topic = availableTopics[j];
         var checked = selectedMap[String(topic.id)] ? ' checked' : '';
         var passiveSuffix = topic.isActive ? '' : ' (pasif)';
-        html += '<label class="topic-check" data-topic-name="' + escapeHtml(String(topic.name || '').toLowerCase()) + '">';
-        html += '<input type="checkbox" value="' + String(topic.id) + '"' + checked + ' data-role="topic-checkbox" />';
+        html += '<label class="topic-check" data-topic-name="' + escapeHtml(String(topic.name || '').toLowerCase()) + '" style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#17202f;line-height:1.45;border-radius:10px;padding:8px 10px;cursor:pointer;">';
+        html += '<input type="checkbox" value="' + String(topic.id) + '"' + checked + ' data-role="topic-checkbox" style="width:16px;min-width:16px;height:16px;margin-top:2px;" />';
         html += '<span>' + escapeHtml(topic.name + passiveSuffix) + '</span>';
         html += '</label>';
       }
       html += '</div>';
       html += '</div>';
-      html += '<div class="topic-tags"></div>';
+      html += '<div class="topic-tags" style="display:flex;flex-wrap:wrap;gap:8px;"></div>';
       container.innerHTML = html;
 
       var trigger = container.querySelector('[data-role="topic-trigger"]');
@@ -7466,10 +7466,11 @@ app.get("/", (req, res) => {
       if (!container) return;
       var dropdown = container.querySelector('.topic-dropdown');
       if (!dropdown) return;
-      var isOpen = dropdown.classList.contains('open');
+      var isOpen = dropdown.getAttribute('data-open') === '1';
       closeAllTopicDropdowns(containerId);
       if (!isOpen) {
-        dropdown.classList.add('open');
+        dropdown.style.display = 'block';
+        dropdown.setAttribute('data-open', '1');
         var searchInput = container.querySelector('[data-role="topic-search"]');
         if (searchInput) searchInput.focus();
       }
@@ -7480,7 +7481,10 @@ app.get("/", (req, res) => {
       for (var i = 0; i < pickers.length; i++) {
         if (exceptId && pickers[i].id === exceptId) continue;
         var dropdown = pickers[i].querySelector('.topic-dropdown');
-        if (dropdown) dropdown.classList.remove('open');
+        if (dropdown) {
+          dropdown.style.display = 'none';
+          dropdown.setAttribute('data-open', '0');
+        }
       }
     }
 
@@ -7511,12 +7515,15 @@ app.get("/", (req, res) => {
         if (!names.length) {
           triggerText.textContent = 'Konu seçiniz...';
           triggerText.classList.add('placeholder');
+          triggerText.style.color = '#667085';
         } else if (names.length <= 2) {
           triggerText.textContent = names.join(', ');
           triggerText.classList.remove('placeholder');
+          triggerText.style.color = '#17202f';
         } else {
           triggerText.textContent = names.slice(0, 2).join(', ') + ' +' + String(names.length - 2);
           triggerText.classList.remove('placeholder');
+          triggerText.style.color = '#17202f';
         }
       }
       if (tags) {
