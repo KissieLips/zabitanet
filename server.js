@@ -3342,7 +3342,10 @@ app.get("/businesses", (req, res) => {
     input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
     .filters { display: grid; grid-template-columns: 220px 170px 170px minmax(220px, 1fr); gap: 10px; align-items: center; margin-bottom: 12px; }
     .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
-    .table-wrap table td:first-child { min-width: 230px; }
+    .fixed-list-wrap { max-height: 520px; overflow-x: auto; overflow-y: auto; }
+    .fixed-list-wrap table { min-width: 1020px; }
+    .fixed-list-wrap thead th { position: sticky; top: 0; z-index: 2; }
+    .business-wrap table td:first-child { min-width: 230px; }
     table { width: 100%; border-collapse: collapse; min-width: 1020px; background: #ffffff; }
     th { text-align: left; padding: 13px 12px; font-size: 12px; color: #475569; border-bottom: 1px solid var(--line); font-weight: 700; letter-spacing: 0.02em; background: #f8fafc; }
     td { padding: 13px 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; vertical-align: top; }
@@ -3510,7 +3513,7 @@ app.get("/businesses", (req, res) => {
           </select>
           <input type="text" id="searchInput" placeholder="Ünvan, sahip, telefon, mahalle / cadde ara" oninput="renderBusinessTable()" />
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap fixed-list-wrap business-wrap">
           <table>
             <thead>
               <tr>
