@@ -396,6 +396,8 @@ function mapComplaintTopic(row) {
   return {
     id: Number(row.id),
     name: row.name,
+    isActive: row.is_active !== false && row.is_active !== "f",
+    sortOrder: Number(row.sort_order || 0),
   };
 }
 
@@ -421,10 +423,13 @@ async function getComplaintTopicRowsByIds(topicIds, db = pool) {
 
   const result = await db.query(
     `
-      SELECT id, name
+      SELECT id, name, is_active, sort_order
       FROM complaint_topic_definitions
       WHERE id = ANY($1::int[])
-      ORDER BY name ASC
+      ORDER BY
+        CASE WHEN COALESCE(sort_order, 0) = 0 THEN 1 ELSE 0 END,
+        COALESCE(sort_order, 0) ASC,
+        name ASC
     `,
     [ids]
   );
@@ -443,11 +448,14 @@ async function getComplaintTopicsMapForComplaintIds(complaintIds, db = pool) {
 
   const result = await db.query(
     `
-      SELECT l.complaint_id, d.id, d.name
+      SELECT l.complaint_id, d.id, d.name, d.is_active, d.sort_order
       FROM complaint_topic_links l
       JOIN complaint_topic_definitions d ON d.id = l.topic_id
       WHERE l.complaint_id = ANY($1::int[])
-      ORDER BY d.name ASC
+      ORDER BY
+        CASE WHEN COALESCE(d.sort_order, 0) = 0 THEN 1 ELSE 0 END,
+        COALESCE(d.sort_order, 0) ASC,
+        d.name ASC
     `,
     [ids]
   );
@@ -479,10 +487,21 @@ async function replaceComplaintTopics(db, complaintId, topicIds) {
 }
 
 async function seedComplaintTopics() {
-  for (const topicName of DEFAULT_COMPLAINT_TOPICS) {
+  for (let index = 0; index < DEFAULT_COMPLAINT_TOPICS.length; index++) {
+    const topicName = DEFAULT_COMPLAINT_TOPICS[index];
+    const sortOrder = index + 1;
+
     await pool.query(
-      'INSERT INTO complaint_topic_definitions (name) VALUES ($1) ON CONFLICT (name) DO NOTHING',
-      [topicName]
+      `
+        INSERT INTO complaint_topic_definitions (name, is_active, sort_order)
+        VALUES ($1, TRUE, $2)
+        ON CONFLICT (name) DO UPDATE
+        SET sort_order = CASE
+          WHEN COALESCE(complaint_topic_definitions.sort_order, 0) = 0 THEN EXCLUDED.sort_order
+          ELSE complaint_topic_definitions.sort_order
+        END
+      `,
+      [topicName, sortOrder]
     );
   }
 }
@@ -1043,6 +1062,16 @@ async function initDb() {
   `);
 
   await pool.query(`
+    ALTER TABLE complaint_topic_definitions
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
+  `);
+
+  await pool.query(`
+    ALTER TABLE complaint_topic_definitions
+    ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS complaint_topic_links (
       complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
       topic_id INTEGER NOT NULL REFERENCES complaint_topic_definitions(id) ON DELETE CASCADE,
@@ -1432,12 +1461,86 @@ async function nextComplaintNo() {
 app.get("/api/complaint-topics", async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT id, name, created_at FROM complaint_topic_definitions ORDER BY name ASC"
+      `
+        SELECT id, name, is_active, sort_order, created_at
+        FROM complaint_topic_definitions
+        ORDER BY is_active DESC,
+          CASE WHEN COALESCE(sort_order, 0) = 0 THEN 1 ELSE 0 END,
+          COALESCE(sort_order, 0) ASC,
+          name ASC
+      `
     );
     res.json(result.rows.map(mapComplaintTopic));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Şikayet konuları alınamadı." });
+  }
+});
+
+app.post("/api/complaint-topics", async (req, res) => {
+  try {
+    const name = String(req.body.name || "").trim();
+    const sortOrder = Math.max(0, Number(req.body.sortOrder) || 0);
+
+    if (!name) {
+      return res.status(400).json({ error: "Konu başlığı boş bırakılamaz." });
+    }
+
+    const result = await pool.query(
+      `
+        INSERT INTO complaint_topic_definitions (name, is_active, sort_order)
+        VALUES ($1, TRUE, $2)
+        RETURNING id, name, is_active, sort_order, created_at
+      `,
+      [name, sortOrder]
+    );
+
+    res.json(mapComplaintTopic(result.rows[0]));
+  } catch (error) {
+    console.error(error);
+    if (error && error.code === "23505") {
+      return res.status(400).json({ error: "Bu konu başlığı zaten kayıtlı." });
+    }
+    res.status(500).json({ error: "Konu başlığı eklenemedi." });
+  }
+});
+
+app.put("/api/complaint-topics/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const name = String(req.body.name || "").trim();
+    const isActive = req.body.isActive !== false;
+    const sortOrder = Math.max(0, Number(req.body.sortOrder) || 0);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: "Geçersiz konu başlığı." });
+    }
+
+    if (!name) {
+      return res.status(400).json({ error: "Konu başlığı boş bırakılamaz." });
+    }
+
+    const result = await pool.query(
+      `
+        UPDATE complaint_topic_definitions
+        SET name = $1, is_active = $2, sort_order = $3
+        WHERE id = $4
+        RETURNING id, name, is_active, sort_order, created_at
+      `,
+      [name, isActive, sortOrder, id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Konu başlığı bulunamadı." });
+    }
+
+    res.json(mapComplaintTopic(result.rows[0]));
+  } catch (error) {
+    console.error(error);
+    if (error && error.code === "23505") {
+      return res.status(400).json({ error: "Bu konu başlığı zaten kayıtlı." });
+    }
+    res.status(500).json({ error: "Konu başlığı güncellenemedi." });
   }
 });
 
@@ -6526,6 +6629,40 @@ app.get("/", (req, res) => {
     .detail-title { text-align: center; font-size: 21px; font-weight: 700; margin-bottom: 18px; letter-spacing: 0.02em; }
     .detail-table td, .detail-table th { border: 1px solid var(--line); padding: 14px 12px; }
     .detail-table th { width: 220px; background: #f8fafc; font-weight: 800; }
+    .topic-picker { position: relative; }
+    .topic-select-trigger { width: 100%; border: 1px solid #cfd8e4; border-radius: 12px; padding: 12px 14px; background: #ffffff; display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; color: var(--text); cursor: pointer; font-size: 13px; box-shadow: none; }
+    .topic-select-trigger:hover { border-color: #94a3b8; }
+    .topic-picker.open .topic-select-trigger { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+    .topic-select-trigger-text { min-width: 0; }
+    .topic-select-trigger-title { font-weight: 700; color: #111827; }
+    .topic-select-trigger-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+    .topic-select-trigger-icon { flex-shrink: 0; color: var(--muted); font-size: 12px; }
+    .topic-select-dropdown { display: none; position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 25; background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 50px rgba(15, 23, 42, 0.12); padding: 12px; }
+    .topic-picker.open .topic-select-dropdown { display: block; }
+    .topic-search { margin-bottom: 10px; }
+    .topic-options { display: grid; gap: 8px; max-height: 240px; overflow: auto; }
+    .topic-option { display: flex; align-items: flex-start; gap: 10px; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; cursor: pointer; background: #ffffff; }
+    .topic-option:hover { border-color: #cbd5e1; background: #f8fafc; }
+    .topic-option input { width: 16px; min-width: 16px; height: 16px; padding: 0; margin-top: 2px; box-shadow: none; }
+    .topic-option-main { min-width: 0; }
+    .topic-option-title { font-size: 13px; font-weight: 700; color: #111827; line-height: 1.4; }
+    .topic-option-sub { font-size: 11.5px; color: var(--muted); line-height: 1.45; margin-top: 2px; }
+    .topic-empty { padding: 12px; border: 1px dashed #cbd5e1; border-radius: 12px; color: var(--muted); font-size: 12.5px; text-align: center; }
+    .topic-selected-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .topic-chip { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 8px 10px; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 700; border: 1px solid #bfdbfe; }
+    .topic-chip.passive { background: #f3f4f6; color: #4b5563; border-color: #e5e7eb; }
+    .topic-chip button { border: none; background: transparent; color: inherit; font-size: 14px; line-height: 1; cursor: pointer; padding: 0; }
+    .topic-help { margin-top: 8px; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+    .topic-manager-note { margin-bottom: 14px; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+    .topic-manager-create { display: grid; grid-template-columns: minmax(240px, 1fr) 120px 140px; gap: 10px; align-items: end; margin-bottom: 16px; }
+    .topic-manager-list { display: grid; gap: 10px; }
+    .topic-manager-row { display: grid; grid-template-columns: minmax(220px, 1fr) 110px 150px 110px; gap: 10px; align-items: end; border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: #ffffff; }
+    .topic-manager-row.passive { background: #f8fafc; }
+    .topic-manager-meta { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+    .topic-manager-id { color: var(--muted); font-size: 11px; }
+    .topic-manager-badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 10px; font-size: 11px; font-weight: 700; }
+    .topic-manager-badge.active { background: #dcfce7; color: #166534; }
+    .topic-manager-badge.passive { background: #e5e7eb; color: #4b5563; }
     .attachments-section { margin-top: 20px; border: 1px solid var(--line); border-radius: 14px; padding: 16px; background: var(--panel-soft); }
     .section-title { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
     .attachments-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
@@ -6566,7 +6703,7 @@ app.get("/", (req, res) => {
     .alert-item.today .alert-item-meta { color: #7c6030; }
     @media (max-width: 1280px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     .alert-item .btn { padding: 8px 10px; font-size: 12px; box-shadow: none; }
-    @media (max-width: 980px) { .main { padding: 16px; } .hero { padding: 14px; border-radius: 16px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; justify-content: space-between; flex-wrap: wrap; } .critical-grid, .stats-grid, .attachments-grid, .form-grid, .filters { grid-template-columns: 1fr; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .detail-table th { width: 150px; } }
+    @media (max-width: 980px) { .main { padding: 16px; } .hero { padding: 14px; border-radius: 16px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; justify-content: space-between; flex-wrap: wrap; } .critical-grid, .stats-grid, .attachments-grid, .form-grid, .filters, .topic-manager-create, .topic-manager-row { grid-template-columns: 1fr; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .detail-table th { width: 150px; } }
     @media (max-width: 640px) { .main { padding: 14px; } .hero-title { font-size: 22px; } .panel-title { font-size: 17px; } .card, .critical-card { padding: 14px; } .section-actions { width: 100%; } .section-actions .btn { flex: 1; } .attachment-card { grid-template-columns: 1fr; } .attachment-thumb, .attachment-thumb-doc { width: 100%; height: 180px; } table { min-width: 760px; } .date-card { min-width: 0; width: 100%; } }
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
@@ -6604,6 +6741,7 @@ app.get("/", (req, res) => {
           <div class="date-card"><span>Tarih</span><strong id="todayText"></strong></div>
           <div class="section-actions">
             <button class="btn btn-info" type="button">📊 İstatistikler</button>
+            <button class="btn btn-secondary" type="button" onclick="openTopicManager()">🏷 Konu Başlıkları</button>
             <button class="btn btn-primary" type="button" onclick="openNewModal()">＋ Yeni Şikayet</button>
           </div>
         </div>
@@ -6856,9 +6994,37 @@ app.get("/", (req, res) => {
     </div>
   </div>
 
+  <div class="modal-overlay" id="topicManagerModal">
+    <div class="modal" style="max-width: 900px;">
+      <div class="modal-header white">
+        <span>Şikayet Konu Başlıkları</span>
+        <button class="close-btn" onclick="closeModal('topicManagerModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="topic-manager-note">Şikayet konularını buradan ekleyebilir, sırasını belirleyebilir ve pasif yapabilirsiniz. Pasif yapılan başlıklar yeni şikayet seçiminde görünmez; eski kayıtlarda korunur.</div>
+        <div class="topic-manager-create">
+          <div class="form-group" style="margin:0;">
+            <label>Yeni Konu Başlığı</label>
+            <input type="text" id="newTopicDefinitionName" placeholder="Örn: Gürültü / Müzik Yayını" />
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Sıra No</label>
+            <input type="number" id="newTopicDefinitionOrder" min="0" step="1" />
+          </div>
+          <button class="btn btn-primary" type="button" onclick="saveNewTopicDefinition()">Kaydet</button>
+        </div>
+        <div id="topicManagerList" class="topic-manager-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('topicManagerModal')">Kapat</button>
+      </div>
+    </div>
+  </div>
+
   <script>
         var complaints = [];
     var complaintTopicDefinitions = [];
+    var topicPickerState = {};
     var editingId = null;
     var activeAlertType = "";
     var detailComplaintId = null;
@@ -7186,6 +7352,9 @@ app.get("/", (req, res) => {
     }
 
     async function loadComplaintTopics() {
+      var newSelected = getSelectedTopicIds("newTopics");
+      var editSelected = getSelectedTopicIds("editTopics");
+
       try {
         var response = await fetch("/api/complaint-topics");
         if (!response.ok) throw new Error();
@@ -7194,14 +7363,75 @@ app.get("/", (req, res) => {
         complaintTopicDefinitions = [];
       }
 
-      renderTopicPicker("newTopics", []);
-      renderTopicPicker("editTopics", []);
+      renderTopicPicker("newTopics", newSelected);
+      renderTopicPicker("editTopics", editSelected);
+      renderTopicManagerList();
+    }
+
+    function ensureTopicPickerState(containerId) {
+      if (!topicPickerState[containerId]) {
+        topicPickerState[containerId] = { search: "" };
+      }
+      return topicPickerState[containerId];
+    }
+
+    function closeAllTopicPickers(exceptId) {
+      var pickers = document.querySelectorAll('.topic-picker');
+      for (var i = 0; i < pickers.length; i++) {
+        if (exceptId && pickers[i].id === exceptId) continue;
+        pickers[i].classList.remove('open');
+      }
+    }
+
+    function toggleTopicDropdown(containerId) {
+      var container = document.getElementById(containerId);
+      if (!container) return;
+      var willOpen = !container.classList.contains('open');
+      closeAllTopicPickers(containerId);
+      container.classList.toggle('open', willOpen);
+      if (willOpen) {
+        var input = container.querySelector('.topic-search');
+        if (input) input.focus();
+      }
+    }
+
+    function filterTopicOptions(containerId, value) {
+      ensureTopicPickerState(containerId).search = String(value || '');
+      renderTopicPicker(containerId, getSelectedTopicIds(containerId));
+      var container = document.getElementById(containerId);
+      if (container) container.classList.add('open');
+    }
+
+    function handleTopicSelectionChange(containerId) {
+      renderTopicPicker(containerId, getSelectedTopicIds(containerId));
+      var container = document.getElementById(containerId);
+      if (container) container.classList.add('open');
+    }
+
+    function removeTopicSelection(containerId, topicId) {
+      var ids = getSelectedTopicIds(containerId).filter(function(id) {
+        return Number(id) !== Number(topicId);
+      });
+      renderTopicPicker(containerId, ids);
+    }
+
+    function getSortedTopicDefinitions() {
+      return complaintTopicDefinitions.slice().sort(function(a, b) {
+        if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+        var orderA = Number(a.sortOrder || 0);
+        var orderB = Number(b.sortOrder || 0);
+        if (orderA === 0 && orderB !== 0) return 1;
+        if (orderB === 0 && orderA !== 0) return -1;
+        if (orderA !== orderB) return orderA - orderB;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'tr');
+      });
     }
 
     function renderTopicPicker(containerId, selectedIds) {
       var container = document.getElementById(containerId);
       if (!container) return;
 
+      var state = ensureTopicPickerState(containerId);
       var selectedMap = {};
       var normalized = Array.isArray(selectedIds) ? selectedIds : [];
       for (var i = 0; i < normalized.length; i++) {
@@ -7213,13 +7443,60 @@ app.get("/", (req, res) => {
         return;
       }
 
-      var html = '<div class="topic-picker-grid">';
-      for (var j = 0; j < complaintTopicDefinitions.length; j++) {
-        var topic = complaintTopicDefinitions[j];
-        var checked = selectedMap[String(topic.id)] ? ' checked' : '';
-        html += '<label class="topic-check"><input type="checkbox" value="' + String(topic.id) + '"' + checked + ' /><span>' + escapeHtml(topic.name) + '</span></label>';
+      var searchText = String(state.search || '').toLocaleLowerCase('tr-TR').trim();
+      var allTopics = getSortedTopicDefinitions();
+      var selectedTopics = allTopics.filter(function(topic) {
+        return selectedMap[String(topic.id)];
+      });
+      var visibleTopics = allTopics.filter(function(topic) {
+        if (!topic.isActive && !selectedMap[String(topic.id)]) return false;
+        if (!searchText) return true;
+        return String(topic.name || '').toLocaleLowerCase('tr-TR').indexOf(searchText) > -1;
+      });
+      var summaryTitle = selectedTopics.length ? (selectedTopics.length + ' konu seçildi') : 'Konu seçiniz...';
+      var summarySub = selectedTopics.length ? selectedTopics.map(function(topic) { return topic.name; }).join(', ') : 'Açılır menüden bir veya birden fazla konu seçebilirsiniz.';
+
+      var html = '';
+      html += '<button class="topic-select-trigger" type="button" onclick="toggleTopicDropdown(\'' + containerId + '\')">';
+      html += '<span class="topic-select-trigger-text"><div class="topic-select-trigger-title">' + escapeHtml(summaryTitle) + '</div><div class="topic-select-trigger-sub">' + escapeHtml(summarySub) + '</div></span>';
+      html += '<span class="topic-select-trigger-icon">▾</span>';
+      html += '</button>';
+      html += '<div class="topic-select-dropdown" onclick="event.stopPropagation()">';
+      html += '<input type="text" class="topic-search" placeholder="Konu ara..." value="' + escapeHtml(state.search || '') + '" oninput="filterTopicOptions(\'' + containerId + '\', this.value)" />';
+      html += '<div class="topic-options">';
+
+      if (!visibleTopics.length) {
+        html += '<div class="topic-empty">Aradığınız kritere uygun konu bulunamadı.</div>';
+      } else {
+        for (var j = 0; j < visibleTopics.length; j++) {
+          var topic = visibleTopics[j];
+          var checked = selectedMap[String(topic.id)] ? ' checked' : '';
+          var subText = topic.isActive ? 'Yeni kayıtlarda kullanılabilir.' : 'Pasif başlık. Eski kayıtlarda korunur.';
+          html += '<label class="topic-option">';
+          html += '<input type="checkbox" value="' + String(topic.id) + '"' + checked + ' onchange="handleTopicSelectionChange(\'' + containerId + '\')" />';
+          html += '<span class="topic-option-main">';
+          html += '<span class="topic-option-title">' + escapeHtml(topic.name) + (topic.isActive ? '' : ' (Pasif)') + '</span>';
+          html += '<span class="topic-option-sub">' + escapeHtml(subText) + '</span>';
+          html += '</span>';
+          html += '</label>';
+        }
       }
+
       html += '</div>';
+      html += '</div>';
+
+      if (selectedTopics.length) {
+        html += '<div class="topic-selected-list">';
+        for (var k = 0; k < selectedTopics.length; k++) {
+          var selectedTopic = selectedTopics[k];
+          html += '<span class="topic-chip' + (selectedTopic.isActive ? '' : ' passive') + '">';
+          html += '<span>' + escapeHtml(selectedTopic.name) + (selectedTopic.isActive ? '' : ' (Pasif)') + '</span>';
+          html += '<button type="button" aria-label="Konuyu kaldır" onclick="removeTopicSelection(\'' + containerId + '\', ' + selectedTopic.id + ')">&times;</button>';
+          html += '</span>';
+        }
+        html += '</div>';
+      }
+
       container.innerHTML = html;
     }
 
@@ -7235,6 +7512,115 @@ app.get("/", (req, res) => {
         ids.push(value);
       }
       return ids;
+    }
+
+    function getNextTopicSortOrder() {
+      var maxOrder = 0;
+      for (var i = 0; i < complaintTopicDefinitions.length; i++) {
+        maxOrder = Math.max(maxOrder, Number(complaintTopicDefinitions[i].sortOrder || 0));
+      }
+      return maxOrder + 1;
+    }
+
+    function renderTopicManagerList() {
+      var target = document.getElementById('topicManagerList');
+      if (!target) return;
+
+      if (!complaintTopicDefinitions.length) {
+        target.innerHTML = '<div class="empty-note" style="padding:0;">Henüz konu başlığı bulunmuyor.</div>';
+      } else {
+        var html = '';
+        var topics = getSortedTopicDefinitions();
+        for (var i = 0; i < topics.length; i++) {
+          var topic = topics[i];
+          html += '<div class="topic-manager-row' + (topic.isActive ? '' : ' passive') + '">';
+          html += '<div class="form-group" style="margin:0;">';
+          html += '<label>Konu Başlığı</label>';
+          html += '<input type="text" id="topicName-' + topic.id + '" value="' + escapeHtml(topic.name) + '" />';
+          html += '<div class="topic-manager-meta"><span class="topic-manager-id">ID: ' + topic.id + '</span><span class="topic-manager-badge ' + (topic.isActive ? 'active' : 'passive') + '">' + (topic.isActive ? 'Aktif' : 'Pasif') + '</span></div>';
+          html += '</div>';
+          html += '<div class="form-group" style="margin:0;">';
+          html += '<label>Sıra No</label>';
+          html += '<input type="number" id="topicOrder-' + topic.id + '" min="0" step="1" value="' + escapeHtml(topic.sortOrder || 0) + '" />';
+          html += '</div>';
+          html += '<div class="form-group" style="margin:0;">';
+          html += '<label>Durum</label>';
+          html += '<select id="topicStatus-' + topic.id + '">';
+          html += '<option value="active"' + (topic.isActive ? ' selected' : '') + '>Aktif</option>';
+          html += '<option value="passive"' + (!topic.isActive ? ' selected' : '') + '>Pasif</option>';
+          html += '</select>';
+          html += '</div>';
+          html += '<button class="btn btn-warning" type="button" onclick="updateTopicDefinition(' + topic.id + ')">Güncelle</button>';
+          html += '</div>';
+        }
+        target.innerHTML = html;
+      }
+
+      var orderInput = document.getElementById('newTopicDefinitionOrder');
+      if (orderInput && !orderInput.value) {
+        orderInput.value = getNextTopicSortOrder();
+      }
+    }
+
+    function openTopicManager() {
+      document.getElementById('newTopicDefinitionName').value = '';
+      document.getElementById('newTopicDefinitionOrder').value = getNextTopicSortOrder();
+      renderTopicManagerList();
+      document.getElementById('topicManagerModal').classList.add('show');
+    }
+
+    async function saveNewTopicDefinition() {
+      var name = document.getElementById('newTopicDefinitionName').value.trim();
+      var sortOrder = Number(document.getElementById('newTopicDefinitionOrder').value || 0);
+
+      if (!name) {
+        alert('Konu başlığı boş bırakılamaz.');
+        return;
+      }
+
+      try {
+        var response = await fetch('/api/complaint-topics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name, sortOrder: sortOrder })
+        });
+        var result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Konu başlığı eklenemedi.');
+        document.getElementById('newTopicDefinitionName').value = '';
+        document.getElementById('newTopicDefinitionOrder').value = '';
+        await loadComplaintTopics();
+      } catch (error) {
+        alert(error.message || 'Konu başlığı eklenemedi.');
+      }
+    }
+
+    async function updateTopicDefinition(id) {
+      var nameInput = document.getElementById('topicName-' + id);
+      var orderInput = document.getElementById('topicOrder-' + id);
+      var statusInput = document.getElementById('topicStatus-' + id);
+      if (!nameInput || !orderInput || !statusInput) return;
+
+      var name = nameInput.value.trim();
+      var sortOrder = Number(orderInput.value || 0);
+      var isActive = statusInput.value === 'active';
+
+      if (!name) {
+        alert('Konu başlığı boş bırakılamaz.');
+        return;
+      }
+
+      try {
+        var response = await fetch('/api/complaint-topics/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name, sortOrder: sortOrder, isActive: isActive })
+        });
+        var result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Konu başlığı güncellenemedi.');
+        await loadComplaintTopics();
+      } catch (error) {
+        alert(error.message || 'Konu başlığı güncellenemedi.');
+      }
     }
 
     function getTopicNames(item) {
@@ -7408,6 +7794,7 @@ app.get("/", (req, res) => {
 
     function closeModal(id) {
       document.getElementById(id).classList.remove("show");
+      closeAllTopicPickers();
       if (id === "detailModal") {
         detailComplaintId = null;
         complaintFiles = [];
@@ -7595,6 +7982,12 @@ app.get("/", (req, res) => {
           if (event.target === this) closeModal(this.id);
         });
       }
+      document.addEventListener("click", function(event) {
+        var insidePicker = event.target.closest ? event.target.closest('.topic-picker') : null;
+        if (!insidePicker) {
+          closeAllTopicPickers();
+        }
+      });
       document.addEventListener("keydown", function(event) {
         if (event.key === "Escape") {
           if (document.body.classList.contains("sidebar-open")) {
