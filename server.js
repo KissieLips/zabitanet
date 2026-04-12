@@ -23,6 +23,20 @@ const uploadsRoot = path.join(__dirname, "uploads");
 const complaintUploadsRoot = path.join(uploadsRoot, "complaints");
 const businessUploadsRoot = path.join(uploadsRoot, "businesses");
 const businessInspectionUploadsRoot = path.join(uploadsRoot, "business-inspections");
+const complaintStreamClients = new Set();
+
+function sendComplaintStreamEvent(response, eventName, payload) {
+  try {
+    response.write("event: " + eventName + "\n");
+    response.write("data: " + JSON.stringify(payload || {}) + "\n\n");
+  } catch (error) {}
+}
+
+function broadcastComplaintStreamEvent(eventName, payload) {
+  complaintStreamClients.forEach(function(client) {
+    sendComplaintStreamEvent(client.response, eventName, payload);
+  });
+}
 
 const DEFAULT_COMPLAINT_TOPICS = [
   "Kaldırım İşgali",
@@ -1564,6 +1578,36 @@ app.put("/api/complaint-topics/:id", async (req, res) => {
   }
 });
 
+app.get("/api/complaints/stream", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+
+  if (typeof res.flushHeaders === "function") {
+    res.flushHeaders();
+  }
+
+  res.write("retry: 5000\n\n");
+
+  const client = {
+    response: res,
+    heartbeat: setInterval(function() {
+      try {
+        res.write(": keep-alive\n\n");
+      } catch (error) {}
+    }, 25000)
+  };
+
+  complaintStreamClients.add(client);
+  sendComplaintStreamEvent(res, "connected", { connectedAt: new Date().toISOString() });
+
+  req.on("close", function() {
+    clearInterval(client.heartbeat);
+    complaintStreamClients.delete(client);
+  });
+});
+
 app.get("/api/complaints", async (req, res) => {
 
   try {
@@ -1661,10 +1705,21 @@ app.post("/api/complaints", async (req, res) => {
     await replaceComplaintTopics(client, result.rows[0].id, topicRows.map(function(row) { return row.id; }));
     await client.query('COMMIT');
 
-    res.json(mapComplaint({
+    const createdComplaint = mapComplaint({
       ...result.rows[0],
       topics: topicRows
-    }));
+    });
+
+    broadcastComplaintStreamEvent("new_complaint", {
+      id: createdComplaint.id,
+      no: createdComplaint.no,
+      topicNames: createdComplaint.topicNames,
+      source: createdComplaint.source,
+      neighborhood: createdComplaint.neighborhood,
+      displayDate: createdComplaint.displayDate
+    });
+
+    res.json(createdComplaint);
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch (rollbackError) {}
     console.error(error);
@@ -1771,10 +1826,17 @@ app.put("/api/complaints/:id", async (req, res) => {
     await replaceComplaintTopics(client, id, topicRows.map(function(row) { return row.id; }));
     await client.query('COMMIT');
 
-    res.json(mapComplaint({
+    const updatedComplaint = mapComplaint({
       ...result.rows[0],
       topics: topicRows
-    }));
+    });
+
+    broadcastComplaintStreamEvent("complaints_refresh", {
+      reason: "updated",
+      id: updatedComplaint.id
+    });
+
+    res.json(updatedComplaint);
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch (rollbackError) {}
     console.error(error);
@@ -1790,6 +1852,11 @@ app.delete("/api/complaints/:id", async (req, res) => {
 
     const filesResult = await pool.query("SELECT file_path FROM complaint_files WHERE complaint_id = $1", [id]);
     await pool.query("DELETE FROM complaints WHERE id = $1", [id]);
+
+    broadcastComplaintStreamEvent("complaints_refresh", {
+      reason: "deleted",
+      id: Number(id)
+    });
 
     for (const row of filesResult.rows) {
       const absolutePath = path.join(__dirname, row.file_path.replace(/^\/uploads\//, "uploads/"));
@@ -3705,8 +3772,6 @@ app.get("/businesses", (req, res) => {
       </div>
     </div>
   </div>
-
-  <div class="live-toast-stack" id="liveToastStack"></div>
 
   <script>
     var categories = [];
@@ -6635,13 +6700,6 @@ app.get("/", (req, res) => {
     .date-card span { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; opacity: 1; }
     .date-card strong { font-size: 13px; line-height: 1.35; font-weight: 700; }
     .section-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-    .live-status-chip { display: inline-flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid #d8e3f0; background: #f8fbff; color: #17324f; font-size: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 6px 14px rgba(15, 23, 42, 0.04); }
-    .live-status-chip:hover { background: #f1f7ff; }
-    .live-status-dot { width: 10px; height: 10px; border-radius: 999px; background: #10b981; box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.12); flex-shrink: 0; }
-    .live-status-chip.has-alert { border-color: #f59e0b; background: #fff8e6; color: #7c4a03; }
-    .live-status-chip.has-alert .live-status-dot { background: #f59e0b; box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.14); }
-    .live-status-count { min-width: 22px; height: 22px; border-radius: 999px; padding: 0 7px; display: inline-flex; align-items: center; justify-content: center; background: #e2e8f0; color: #334155; font-size: 11px; font-weight: 800; }
-    .live-status-chip.has-alert .live-status-count { background: #f59e0b; color: #ffffff; }
     .btn { border: none; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease; box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06); }
     .btn:hover { transform: translateY(-1px); opacity: 0.96; }
     .btn-primary { background: var(--primary); color: #ffffff; }
@@ -6686,6 +6744,21 @@ app.get("/", (req, res) => {
     th { text-align: left; padding: 13px 12px; font-size: 12px; color: #475569; border-bottom: 1px solid var(--line); font-weight: 700; letter-spacing: 0.02em; }
     td { padding: 13px 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; vertical-align: middle; }
     tbody tr:hover { background: #f8fbff; }
+    .complaint-row-new { background: linear-gradient(90deg, #fff9db 0%, #fffef6 100%); }
+    .complaint-row-new:hover { background: linear-gradient(90deg, #fff4bf 0%, #fffbe8 100%); }
+    .new-badge { display: inline-flex; align-items: center; justify-content: center; margin-left: 8px; padding: 4px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+    .live-status-chip { display: inline-flex; align-items: center; gap: 8px; min-width: 170px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: #f8fafc; color: #334155; font-size: 12px; font-weight: 700; }
+    .live-status-dot { width: 10px; height: 10px; border-radius: 999px; background: #94a3b8; box-shadow: 0 0 0 4px rgba(148,163,184,0.16); }
+    .live-status-chip.live-on .live-status-dot { background: #10b981; box-shadow: 0 0 0 4px rgba(16,185,129,0.15); }
+    .live-status-chip.live-waiting .live-status-dot { background: #f59e0b; box-shadow: 0 0 0 4px rgba(245,158,11,0.15); }
+    .live-status-chip.live-off .live-status-dot { background: #ef4444; box-shadow: 0 0 0 4px rgba(239,68,68,0.12); }
+    .live-note { font-size: 11px; color: var(--muted); margin-top: 8px; }
+    .toast-area { position: fixed; top: 18px; right: 18px; display: grid; gap: 10px; z-index: 130; max-width: min(92vw, 380px); }
+    .live-toast { background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #2563eb; border-radius: 14px; box-shadow: 0 18px 40px rgba(15,23,42,0.16); padding: 12px 14px; display: grid; gap: 6px; }
+    .live-toast-title { font-size: 13px; font-weight: 800; color: #0f172a; }
+    .live-toast-text { font-size: 12px; color: #475569; line-height: 1.55; }
+    .live-toast-close { border: none; background: transparent; font-size: 20px; line-height: 1; color: #64748b; cursor: pointer; padding: 0; position: absolute; top: 8px; right: 10px; }
+    .live-toast-wrap { position: relative; }
     .complaint-no { font-weight: 700; color: #0f172a; }
     .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
     .badge-source { background: #e2e8f0; color: #334155; }
@@ -6758,11 +6831,6 @@ app.get("/", (req, res) => {
     .alert-item-meta { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
     .alert-item.overdue .alert-item-meta { color: #8a4a4a; }
     .alert-item.today .alert-item-meta { color: #7c6030; }
-    .live-toast-stack { position: fixed; right: 18px; bottom: 18px; z-index: 140; display: grid; gap: 10px; max-width: min(92vw, 360px); }
-    .live-toast { background: #0f172a; color: #ffffff; border-radius: 14px; padding: 14px 16px; box-shadow: 0 18px 36px rgba(15, 23, 42, 0.22); display: grid; gap: 4px; border: 1px solid rgba(255,255,255,0.08); }
-    .live-toast.warn { background: #7c4a03; }
-    .live-toast-title { font-size: 13px; font-weight: 800; }
-    .live-toast-text { font-size: 12px; line-height: 1.5; color: rgba(255,255,255,0.88); }
     @media (max-width: 1280px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     .alert-item .btn { padding: 8px 10px; font-size: 12px; box-shadow: none; }
     @media (max-width: 980px) { .main { padding: 16px; } .hero { padding: 14px; border-radius: 16px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; justify-content: space-between; flex-wrap: wrap; } .critical-grid, .stats-grid, .attachments-grid, .form-grid, .filters, .complaint-form-grid { grid-template-columns: 1fr; } .span-2, .span-4 { grid-column: 1 / -1; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .detail-table th { width: 150px; } }
@@ -6801,11 +6869,7 @@ app.get("/", (req, res) => {
         </div>
         <div class="hero-side">
           <div class="date-card"><span>Tarih</span><strong id="todayText"></strong></div>
-          <button class="live-status-chip" id="liveStatusChip" type="button" onclick="acknowledgeLiveNotifications()">
-            <span class="live-status-dot"></span>
-            <span id="liveStatusText">Canlı takip açık · 20 sn</span>
-            <span class="live-status-count" id="liveStatusCount">0</span>
-          </button>
+          <div class="live-status-chip live-waiting" id="liveStatusChip"><span class="live-status-dot"></span><span id="liveStatusText">Canlı takip hazırlanıyor</span></div>
           <div class="section-actions">
             <button class="btn btn-info" type="button">📊 İstatistikler</button>
             <button class="btn btn-secondary" type="button" onclick="openTopicManager()">🏷 Konu Başlıkları</button>
@@ -6846,10 +6910,11 @@ app.get("/", (req, res) => {
         </div>
       </section>
       <section class="panel table-panel">
-        <div class="panel-header"><div class="panel-title">Şikayet kayıtları</div></div>
+        <div class="panel-header"><div><div class="panel-title">Şikayet kayıtları</div><div class="live-note">Yeni kayıtlar, bu cihazda detayı açılana kadar vurgulu kalır.</div></div></div>
         <div class="table-wrap"><table><thead><tr><th>Şikayet No</th><th>Tarih</th><th>Konu</th><th>Kaynak</th><th>Durum</th><th>Yapılan İşlem</th><th>İşlemler</th></tr></thead><tbody id="complaintTableBody"></tbody></table></div>
         <div id="emptyNote" class="empty-note" style="display:none;">Kayıt bulunamadı.</div>
       </section>
+      <div class="toast-area" id="liveToastArea"></div>
     </main>
   </div>
 
@@ -7095,6 +7160,13 @@ app.get("/", (req, res) => {
 
   <script>
         var complaints = [];
+    var complaintStream = null;
+    var seenComplaintIds = {};
+    var seenComplaintsBootstrapped = false;
+    var audioUnlocked = false;
+    var audioContext = null;
+    var liveToastTimers = {};
+    var hasLoadedComplaintsOnce = false;
     var BUCakNeighborhoods = ["Alaattin", "Atilla", "Barbaros", "Camii", "Cumhuriyet", "Çamlıca", "Çavuşlar", "Çukur", "Fatih", "Karayvatlar", "Konak", "Mehmet Akif", "Mimar Sinan", "Oğuzhan", "Onaç", "Pazar", "Sanayi", "Yeni", "Yetmişevler", "Yunus Emre"];
     var complaintTopicDefinitions = [];
     var allComplaintTopicDefinitions = [];
@@ -7102,13 +7174,6 @@ app.get("/", (req, res) => {
     var activeAlertType = "";
     var detailComplaintId = null;
     var complaintFiles = [];
-    var liveRefreshIntervalMs = 20000;
-    var liveRefreshTimer = null;
-    var livePendingData = null;
-    var liveNotificationCount = 0;
-    var livePageBaseTitle = document.title;
-    var liveAudioUnlocked = false;
-    var liveLastSignature = "";
 
     var fileCategories = {
       photo: ["Öncesi", "Sonrası", "Genel Saha Fotoğrafı"],
@@ -7869,170 +7934,149 @@ function getTopicNames(item) {
       return item.topicNames || '';
     }
 
-    function updateLiveStatusChip() {
-      var chip = document.getElementById("liveStatusChip");
-      var text = document.getElementById("liveStatusText");
-      var count = document.getElementById("liveStatusCount");
-      if (!chip || !text || !count) return;
-
-      var hasAlert = liveNotificationCount > 0;
-      chip.classList.toggle("has-alert", hasAlert);
-      count.textContent = String(liveNotificationCount);
-      text.textContent = hasAlert
-        ? "Yeni kayıt var · görmek için tıklayın"
-        : "Canlı takip açık · 20 sn";
-      document.title = (hasAlert ? "(" + liveNotificationCount + ") " : "") + livePageBaseTitle;
-    }
-
-    function acknowledgeLiveNotifications() {
-      liveNotificationCount = 0;
-      updateLiveStatusChip();
-      if (livePendingData && !isAnyModalOpen()) {
-        applyComplaintsData(livePendingData, { silent: true });
-        livePendingData = null;
-      }
-    }
-
-    function isAnyModalOpen() {
-      return !!document.querySelector('.modal-overlay.show');
-    }
-
-    function showLiveToast(title, message, tone) {
-      var stack = document.getElementById('liveToastStack');
-      if (!stack) {
-        stack = document.createElement('div');
-        stack.id = 'liveToastStack';
-        stack.className = 'live-toast-stack';
-        document.body.appendChild(stack);
-      }
-      var toast = document.createElement('div');
-      toast.className = 'live-toast' + (tone === 'warn' ? ' warn' : '');
-      toast.innerHTML = '<div class="live-toast-title">' + escapeHtml(title) + '</div><div class="live-toast-text">' + escapeHtml(message) + '</div>';
-      stack.appendChild(toast);
-      window.setTimeout(function() {
-        if (toast && toast.parentNode) toast.parentNode.removeChild(toast);
-      }, 5200);
-    }
-
-    function buildComplaintSignature(data) {
-      var rows = Array.isArray(data) ? data : [];
-      return rows.map(function(item) {
-        return [item.id, item.no, item.status, item.action, item.processDate || '', item.closedDate || '', item.controlDate || ''].join('|');
-      }).join('||');
-    }
-
-    function getNewComplaintCount(previousRows, nextRows) {
-      var prevMap = {};
-      for (var i = 0; i < previousRows.length; i++) {
-        prevMap[String(previousRows[i].id)] = true;
-      }
-      var count = 0;
-      for (var j = 0; j < nextRows.length; j++) {
-        if (!prevMap[String(nextRows[j].id)]) count++;
-      }
-      return count;
-    }
-
-    function playLiveNotificationSound() {
-      if (!liveAudioUnlocked) return;
+    function loadSeenComplaintState() {
       try {
-        var AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (!AudioCtx) return;
-        var ctx = new AudioCtx();
-        var oscillator = ctx.createOscillator();
-        var gain = ctx.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.value = 880;
-        gain.gain.value = 0.0001;
-        oscillator.connect(gain);
-        gain.connect(ctx.destination);
-        oscillator.start();
-        gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.38);
-        oscillator.stop(ctx.currentTime + 0.4);
+        seenComplaintIds = JSON.parse(localStorage.getItem("complaintSeenIds_v1") || "{}") || {};
+      } catch (error) {
+        seenComplaintIds = {};
+      }
+
+      seenComplaintsBootstrapped = localStorage.getItem("complaintSeenBootstrap_v1") === "1";
+    }
+
+    function saveSeenComplaintState() {
+      try {
+        localStorage.setItem("complaintSeenIds_v1", JSON.stringify(seenComplaintIds || {}));
+        localStorage.setItem("complaintSeenBootstrap_v1", seenComplaintsBootstrapped ? "1" : "0");
       } catch (error) {}
     }
 
+    function bootstrapSeenComplaintsIfNeeded() {
+      if (seenComplaintsBootstrapped) return;
+      for (var i = 0; i < complaints.length; i++) {
+        seenComplaintIds[String(complaints[i].id)] = true;
+      }
+      seenComplaintsBootstrapped = true;
+      saveSeenComplaintState();
+    }
+
+    function isComplaintSeen(id) {
+      return !!seenComplaintIds[String(id)];
+    }
+
+    function markComplaintSeen(id) {
+      if (!id) return;
+      seenComplaintIds[String(id)] = true;
+      seenComplaintsBootstrapped = true;
+      saveSeenComplaintState();
+    }
+
+    function updateLiveStatus(mode, text) {
+      var chip = document.getElementById("liveStatusChip");
+      var label = document.getElementById("liveStatusText");
+      if (!chip || !label) return;
+      chip.classList.remove("live-on", "live-waiting", "live-off");
+      chip.classList.add(mode || "live-waiting");
+      label.textContent = text || "Canlı takip hazırlanıyor";
+    }
+
+    function showLiveToast(title, text) {
+      var area = document.getElementById("liveToastArea");
+      if (!area) return;
+      var toastId = "toast_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
+      var wrapper = document.createElement("div");
+      wrapper.className = "live-toast-wrap";
+      wrapper.id = toastId;
+      wrapper.innerHTML = '<div class="live-toast"><button class="live-toast-close" type="button" aria-label="Kapat">&times;</button><div class="live-toast-title"></div><div class="live-toast-text"></div></div>';
+      wrapper.querySelector(".live-toast-title").textContent = title || "Yeni bildirim";
+      wrapper.querySelector(".live-toast-text").textContent = text || "Yeni kayıt geldi.";
+      wrapper.querySelector(".live-toast-close").addEventListener("click", function() {
+        if (liveToastTimers[toastId]) {
+          clearTimeout(liveToastTimers[toastId]);
+          delete liveToastTimers[toastId];
+        }
+        wrapper.remove();
+      });
+      area.prepend(wrapper);
+      liveToastTimers[toastId] = setTimeout(function() {
+        wrapper.remove();
+        delete liveToastTimers[toastId];
+      }, 7000);
+    }
+
     function unlockLiveAudio() {
-      liveAudioUnlocked = true;
+      audioUnlocked = true;
     }
 
-    function applyComplaintsData(data, options) {
-      var opts = options || {};
-      complaints = Array.isArray(data) ? data : [];
-      liveLastSignature = buildComplaintSignature(complaints);
-      renderTable();
-      if (opts.resetNotifications) {
-        livePendingData = null;
-        liveNotificationCount = 0;
-        updateLiveStatusChip();
-      }
-    }
-
-    async function fetchComplaintsData() {
-      var response = await fetch("/api/complaints", { cache: "no-store" });
-      if (!response.ok) throw new Error();
-      return await response.json();
-    }
-
-    async function pollComplaintsSilently() {
+    function playLiveTone() {
+      if (!audioUnlocked) return;
       try {
-        var nextRows = await fetchComplaintsData();
-        var nextSignature = buildComplaintSignature(nextRows);
-        if (!liveLastSignature) {
-          applyComplaintsData(nextRows, { resetNotifications: true });
-          return;
-        }
-        if (nextSignature === liveLastSignature) return;
+        var AudioCtor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtor) return;
+        if (!audioContext) audioContext = new AudioCtor();
+        if (audioContext.state === "suspended") audioContext.resume();
+        var oscillator = audioContext.createOscillator();
+        var gainNode = audioContext.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.value = 880;
+        gainNode.gain.setValueAtTime(0.0001, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.06, audioContext.currentTime + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.35);
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 0.36);
+      } catch (error) {}
+    }
 
-        var newCount = getNewComplaintCount(complaints, nextRows);
-        var changedOnly = newCount === 0;
-
-        if (isAnyModalOpen()) {
-          livePendingData = nextRows;
-          liveNotificationCount += changedOnly ? 1 : newCount;
-          updateLiveStatusChip();
-          showLiveToast(
-            changedOnly ? 'Kayıt güncellendi' : 'Yeni şikayet geldi',
-            changedOnly
-              ? 'Açık pencere kapatılınca liste otomatik yenilenecek.'
-              : (String(newCount) + ' yeni kayıt geldi. Açık pencere kapatılınca liste yenilenecek.'),
-            'warn'
-          );
-          playLiveNotificationSound();
-          return;
-        }
-
-        applyComplaintsData(nextRows, { silent: true });
-        liveNotificationCount += changedOnly ? 1 : newCount;
-        updateLiveStatusChip();
-        showLiveToast(
-          changedOnly ? 'Kayıt güncellendi' : 'Yeni şikayet geldi',
-          changedOnly
-            ? 'Liste güncellendi.'
-            : (String(newCount) + ' yeni kayıt listeye eklendi.'),
-          changedOnly ? '' : 'warn'
-        );
-        playLiveNotificationSound();
-      } catch (error) {
+    function setupComplaintStream() {
+      if (!("EventSource" in window)) {
+        updateLiveStatus("live-off", "Canlı takip desteklenmiyor");
+        return;
       }
+
+      if (complaintStream) {
+        complaintStream.close();
+      }
+
+      updateLiveStatus("live-waiting", "Canlı bağlantı kuruluyor");
+      complaintStream = new EventSource("/api/complaints/stream");
+
+      complaintStream.addEventListener("connected", function() {
+        updateLiveStatus("live-on", "Canlı takip aktif");
+      });
+
+      complaintStream.addEventListener("new_complaint", async function(event) {
+        var payload = {};
+        try { payload = JSON.parse(event.data || "{}"); } catch (error) { payload = {}; }
+        var topicText = payload.topicNames || "Yeni kayıt";
+        var detailText = (payload.no ? payload.no + " • " : "") + topicText + (payload.neighborhood ? " • " + payload.neighborhood : "");
+        showLiveToast("Yeni şikayet eklendi", detailText);
+        playLiveTone();
+        await loadComplaints();
+      });
+
+      complaintStream.addEventListener("complaints_refresh", async function() {
+        await loadComplaints();
+      });
+
+      complaintStream.onerror = function() {
+        updateLiveStatus("live-waiting", "Canlı bağlantı yeniden kuruluyor");
+      };
     }
 
-    function startLiveComplaintPolling() {
-      if (liveRefreshTimer) window.clearInterval(liveRefreshTimer);
-      liveRefreshTimer = window.setInterval(pollComplaintsSilently, liveRefreshIntervalMs);
-      updateLiveStatusChip();
-    }
-
-    async function loadComplaints(options) {
-      var opts = options || {};
+    async function loadComplaints() {
       try {
-        var data = await fetchComplaintsData();
-        applyComplaintsData(data, { resetNotifications: !!opts.resetNotifications });
-      } catch (error) {
-        if (!opts.silent) {
-          alert("Kayıtlar yüklenemedi.");
+        var response = await fetch("/api/complaints");
+        if (!response.ok) throw new Error();
+        complaints = await response.json();
+        if (!hasLoadedComplaintsOnce) {
+          bootstrapSeenComplaintsIfNeeded();
+          hasLoadedComplaintsOnce = true;
         }
+        renderTable();
+      } catch (error) {
+        alert("Kayıtlar yüklenemedi.");
       }
     }
 
@@ -8146,8 +8190,9 @@ function getTopicNames(item) {
       var rows = "";
       for (var i = 0; i < filtered.length; i++) {
         var item = filtered[i];
-        rows += "<tr>";
-        rows += '<td class="complaint-no">' + escapeHtml(item.no) + "</td>";
+        var isNewComplaint = !isComplaintSeen(item.id);
+        rows += "<tr" + (isNewComplaint ? ' class="complaint-row-new"' : "") + ">";
+        rows += '<td class="complaint-no">' + escapeHtml(item.no) + (isNewComplaint ? '<span class="new-badge">Yeni</span>' : "") + "</td>";
         rows += "<td>" + escapeHtml(item.displayDate) + "</td>";
         var topicLabel = getTopicNames(item) || item.subject || "-";
         rows += "<td><div class='stack'><div class='cell-title compact'>" + escapeHtml(topicLabel) + "</div>";
@@ -8192,12 +8237,6 @@ function getTopicNames(item) {
       if (id === "detailModal") {
         detailComplaintId = null;
         complaintFiles = [];
-      }
-      if (!isAnyModalOpen() && livePendingData) {
-        applyComplaintsData(livePendingData, { silent: true });
-        livePendingData = null;
-        liveNotificationCount = 0;
-        updateLiveStatusChip();
       }
     }
 
@@ -8246,7 +8285,7 @@ function getTopicNames(item) {
         if (!response.ok) throw new Error();
 
         closeModal("newModal");
-        await loadComplaints({ resetNotifications: true });
+        await loadComplaints();
       } catch (error) {
         alert("Kayıt eklenemedi.");
       }
@@ -8256,6 +8295,8 @@ function getTopicNames(item) {
       var item = getComplaintById(id);
       if (!item) return;
 
+      markComplaintSeen(id);
+      renderTable();
       detailComplaintId = id;
       refreshCategoryOptions();
       document.getElementById("detailFileDescription").value = "";
@@ -8347,7 +8388,7 @@ function getTopicNames(item) {
         if (!response.ok) throw new Error();
 
         closeModal("editModal");
-        await loadComplaints({ resetNotifications: true });
+        await loadComplaints();
       } catch (error) {
         alert("Kayıt güncellenemedi.");
       }
@@ -8367,7 +8408,7 @@ function getTopicNames(item) {
 
         if (!response.ok) throw new Error();
 
-        await loadComplaints({ resetNotifications: true });
+        await loadComplaints();
       } catch (error) {
         alert("Kayıt silinemedi.");
       }
@@ -8375,22 +8416,11 @@ function getTopicNames(item) {
 
     document.addEventListener("DOMContentLoaded", async function() {
       setTodayText();
+      loadSeenComplaintState();
       populateComplaintNeighborhoodSelects("", "");
       await loadComplaintTopics();
-      await loadComplaints({ resetNotifications: true });
-      startLiveComplaintPolling();
-      document.addEventListener('click', unlockLiveAudio, { once: true });
-      document.addEventListener('keydown', unlockLiveAudio, { once: true });
-      window.addEventListener('focus', function() {
-        if (livePendingData && !isAnyModalOpen()) {
-          applyComplaintsData(livePendingData, { silent: true });
-          livePendingData = null;
-          liveNotificationCount = 0;
-          updateLiveStatusChip();
-        } else {
-          pollComplaintsSilently();
-        }
-      });
+      await loadComplaints();
+      setupComplaintStream();
       document.getElementById("newStatus").addEventListener("change", toggleNewControlDate);
       document.getElementById("editStatus").addEventListener("change", toggleEditControlDate);
       document.getElementById("detailFileType").addEventListener("change", refreshCategoryOptions);
@@ -8414,6 +8444,8 @@ function getTopicNames(item) {
           closeAllTopicDropdowns();
         }
       });
+      document.addEventListener("pointerdown", unlockLiveAudio, { once: true });
+      document.addEventListener("keydown", unlockLiveAudio, { once: true });
       document.addEventListener("keydown", function(event) {
         if (event.key === "Escape") {
           if (document.body.classList.contains("sidebar-open")) {
