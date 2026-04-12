@@ -578,10 +578,14 @@ function resolveComplaintFileCategory(fileType, fileStage, category) {
   if (normalizedCategory) return normalizedCategory;
 
   if (fileType === "photo") {
-    return fileStage === "closure" ? "Kapatma Fotoğrafı" : "Şikayet Fotoğrafı";
+    if (fileStage === "closure") return "Kapatma Fotoğrafı";
+    if (fileStage === "process") return "İşlem Fotoğrafı";
+    return "Şikayet Fotoğrafı";
   }
 
-  return fileStage === "closure" ? "Kapatma Belgesi" : "Belge";
+  if (fileStage === "closure") return "Kapatma Belgesi";
+  if (fileStage === "process") return "İşlem Belgesi";
+  return "Belge";
 }
 
 function mapBusinessCategory(row) {
@@ -1925,7 +1929,7 @@ app.post("/api/complaints/:id/files", upload.any(), async (req, res) => {
       return res.status(400).json({ error: "Dosya türü seçiniz." });
     }
 
-    const normalizedStage = ["initial", "closure", "general"].includes(String(fileStage || "").trim())
+    const normalizedStage = ["initial", "closure", "process", "general"].includes(String(fileStage || "").trim())
       ? String(fileStage || "").trim()
       : "general";
     const resolvedCategory = resolveComplaintFileCategory(fileType, normalizedStage, category);
@@ -7041,6 +7045,10 @@ app.get("/", (req, res) => {
         <table class="detail-table">
           <tbody id="detailTableBody"></tbody>
         </table>
+        <div class="attachments-section" style="margin-top:16px;">
+          <div class="section-title" style="margin-bottom:12px;">Fotoğraflar / İşlem Dosyaları</div>
+          <div id="detailFilesList"><div class="muted">Yüklenen fotoğraf veya belge bulunmuyor.</div></div>
+        </div>
 
       </div>
       <div class="modal-footer">
@@ -7124,7 +7132,7 @@ app.get("/", (req, res) => {
             <textarea id="editNote"></textarea>
           </div>
           <div class="form-group full hidden" id="editClosureWrap">
-            <label>Kapatma Ekleri</label>
+            <label>İşlem Ekleri</label>
             <div class="attachments-section" style="margin-top:0;">
               <div class="attachments-grid" style="margin-bottom:0;">
                 <div class="form-group">
@@ -7224,32 +7232,42 @@ app.get("/", (req, res) => {
       var typeElement = document.getElementById("editClosureFileType");
       var input = document.getElementById("editClosureFileInput");
       var help = document.getElementById("editClosureHelp");
+      var statusElement = document.getElementById("editStatus");
       if (!typeElement || !input || !help) return;
 
       var type = typeElement.value;
+      var status = statusElement ? statusElement.value : "";
+      var prefix = status === "Kapatıldı"
+        ? "Kapatma aşaması için "
+        : (status === "Süre Verildi" ? "Süre verildi işlemi için " : "");
       input.value = "";
 
       if (type === "photo") {
         input.multiple = true;
         input.setAttribute("accept", "image/*");
-        help.textContent = "Fotoğraf seçildiğinde aynı anda birden fazla dosya yükleyebilirsiniz.";
+        help.textContent = prefix + "aynı anda birden fazla fotoğraf yükleyebilirsiniz.";
       } else {
         input.multiple = false;
         input.setAttribute("accept", ".pdf,image/*");
-        help.textContent = "Belge seçildiğinde aynı anda 1 dosya yükleyebilirsiniz. PDF veya görsel ekleyebilirsiniz.";
+        help.textContent = prefix + "aynı anda 1 belge yükleyebilirsiniz. PDF veya görsel ekleyebilirsiniz.";
       }
     }
 
     function toggleEditClosureAttachments() {
       var status = document.getElementById("editStatus").value;
       var wrap = document.getElementById("editClosureWrap");
+      var label = wrap ? wrap.querySelector("label") : null;
 
-      if (status === "Kapatıldı") {
+      if (status === "Kapatıldı" || status === "Süre Verildi") {
         wrap.classList.remove("hidden");
+        if (label) {
+          label.textContent = status === "Kapatıldı" ? "Kapatma Ekleri" : "Süre Verildi Ekleri";
+        }
       } else {
         wrap.classList.add("hidden");
         document.getElementById("editClosureDescription").value = "";
         document.getElementById("editClosureFileInput").value = "";
+        if (label) label.textContent = "İşlem Ekleri";
       }
 
       updateEditClosureFileInputState();
@@ -7261,6 +7279,7 @@ app.get("/", (req, res) => {
       var fileType = options && options.fileType;
       var description = options && options.description;
       var fileStage = options && options.fileStage;
+      var category = options && options.category;
 
       if (!complaintId || !input || !fileType) return { uploadedCount: 0 };
 
@@ -7278,6 +7297,7 @@ app.get("/", (req, res) => {
       formData.append("fileType", fileType);
       formData.append("description", description || "");
       formData.append("fileStage", fileStage || "general");
+      formData.append("category", category || "");
 
       var response = await fetch("/api/complaints/" + complaintId + "/files", {
         method: "POST",
@@ -7367,16 +7387,24 @@ app.get("/", (req, res) => {
       if (!target) return;
 
       if (!complaintFiles.length) {
-        target.innerHTML = '<div class="muted">Henüz ek bulunmuyor.</div>';
+        target.innerHTML = '<div class="muted">Henüz fotoğraf veya belge yüklenmemiş.</div>';
         return;
       }
 
-      var photoFiles = complaintFiles.filter(function(file) { return file.fileType === "photo"; });
-      var documentFiles = complaintFiles.filter(function(file) { return file.fileType === "document"; });
+      var initialPhotos = complaintFiles.filter(function(file) { return file.fileType === "photo" && file.fileStage === "initial"; });
+      var processFiles = complaintFiles.filter(function(file) { return file.fileStage === "process"; });
+      var closureFiles = complaintFiles.filter(function(file) { return file.fileStage === "closure"; });
+      var otherFiles = complaintFiles.filter(function(file) {
+        return file.fileStage !== "initial" && file.fileStage !== "process" && file.fileStage !== "closure";
+      });
 
       var html = '<div class="attachment-groups">';
-      html += renderAttachmentGroup('Fotoğraflar', photoFiles, 'Henüz fotoğraf eklenmemiş.');
-      html += renderAttachmentGroup('Evraklar', documentFiles, 'Henüz evrak eklenmemiş.');
+      html += renderAttachmentGroup('Şikayet Açılış Fotoğrafları', initialPhotos, 'Açılış aşamasında fotoğraf eklenmemiş.');
+      html += renderAttachmentGroup('Süre / İşlem Ekleri', processFiles, 'Süre verildi veya işlem aşamasında ek yüklenmemiş.');
+      html += renderAttachmentGroup('Kapatma Ekleri', closureFiles, 'Kapatma aşamasında ek yüklenmemiş.');
+      if (otherFiles.length) {
+        html += renderAttachmentGroup('Diğer Dosyalar', otherFiles, 'Ek dosya bulunmuyor.');
+      }
       html += '</div>';
 
       target.innerHTML = html;
@@ -7405,6 +7433,17 @@ app.get("/", (req, res) => {
       }).join('');
     }
 
+    function buildComplaintPhotoPrintGrid(files) {
+      if (!files.length) return '';
+
+      return '<div class="section"><h2 class="section-title">Fotoğraf Galerisi</h2><div class="photo-grid">' + files.map(function(file) {
+        return '<div class="photo-card">' +
+          '<div class="photo-image-wrap"><img class="print-photo" src="' + encodeURI(file.url) + '" alt="' + escapeHtml(file.originalName || 'Fotoğraf') + '" /></div>' +
+          '<div class="photo-meta"><div class="photo-name">' + escapeHtml(file.originalName || '-') + '</div><div class="photo-sub">' + escapeHtml(file.category || '-') + ' • ' + escapeHtml(file.createdAt || '-') + '</div>' + (file.description ? '<div class="photo-sub">' + escapeHtml(file.description) + '</div>' : '') + '</div>' +
+        '</div>';
+      }).join('') + '</div></div>';
+    }
+
     function printComplaintDetailReport() {
       if (!detailComplaintId) {
         alert('Önce bir şikayet detayı açılmalıdır.');
@@ -7423,6 +7462,7 @@ app.get("/", (req, res) => {
       var nowText = new Date().toLocaleString('tr-TR');
       var topicNames = getTopicNames(item) || '-';
       var attachmentRows = buildComplaintAttachmentRows(complaintFiles);
+      var photoPrintGrid = buildComplaintPhotoPrintGrid(photoFiles);
       var timelineRows = [
         { label: 'Kayıt Tarihi', value: item.displayDate || '-' },
         { label: 'İşlem Tarihi', value: item.processDateText || '-' },
@@ -7442,10 +7482,11 @@ app.get("/", (req, res) => {
         '.summary-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;opacity:.8;} .summary-value{font-size:24px;font-weight:800;margin-top:8px;line-height:1.25;} ' +
         '.meta-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;margin:0 0 20px;} .meta-card{border:1px solid #dbe3ee;border-radius:14px;padding:12px;background:#f8fafc;} .meta-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#667085;margin-bottom:6px;} .meta-value{font-size:14px;font-weight:600;color:#111827;line-height:1.5;word-break:break-word;} ' +
         '.section{margin-top:18px;} .section-title{font-size:17px;font-weight:800;margin:0 0 10px;} .content-card{border:1px solid #dbe3ee;border-radius:14px;padding:14px;background:#fff;margin-bottom:10px;} .content-label{font-size:12px;font-weight:800;color:#475569;margin-bottom:6px;} .content-value{font-size:13px;line-height:1.7;color:#17202f;white-space:pre-wrap;word-break:break-word;} ' +
+        '.photo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;} .photo-card{border:1px solid #dbe3ee;border-radius:14px;padding:10px;background:#fff;break-inside:avoid;page-break-inside:avoid;} .photo-image-wrap{display:flex;align-items:center;justify-content:center;background:#f8fafc;border-radius:12px;overflow:hidden;min-height:220px;} .print-photo{display:block;max-width:100%;max-height:320px;object-fit:contain;} .photo-meta{padding-top:10px;} .photo-name{font-size:13px;font-weight:800;color:#111827;word-break:break-word;} .photo-sub{font-size:11px;color:#64748b;line-height:1.5;margin-top:4px;word-break:break-word;} ' +
         'table{width:100%;border-collapse:collapse;table-layout:fixed;} th,td{border:1px solid #dbe3ee;padding:10px 12px;font-size:12px;vertical-align:top;word-break:break-word;} th{background:#f8fafc;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#667085;} .sub{font-size:11px;color:#64748b;margin-top:4px;} ' +
         '@page{size:A4 portrait;margin:12mm;} @media print{body{padding:0;} .report{max-width:none;}}' +
         '</style></head><body><div class="report">' +
-        '<div class="top"><div><h1 class="title">Şikayet Detay Raporu</h1><div class="subtitle">Seçili şikayet kaydının özet bilgileri, işlem durumu ve ekleri bu raporda düzenli şekilde gösterilir.</div></div><div class="meta"><div><strong>Şikayet No:</strong> ' + escapeHtml(item.no || '-') + '</div><div><strong>Rapor Tarihi:</strong> ' + escapeHtml(nowText) + '</div><div><strong>Kayıt Tarihi:</strong> ' + escapeHtml(item.displayDate || '-') + '</div></div></div>' +
+        '<div class="top"><div><h1 class="title">Şikayet Detay Raporu</h1><div class="subtitle">Seçili şikayet kaydının özet bilgileri, işlem durumu ve fotoğrafları bu raporda düzenli şekilde gösterilir.</div></div><div class="meta"><div><strong>Şikayet No:</strong> ' + escapeHtml(item.no || '-') + '</div><div><strong>Rapor Tarihi:</strong> ' + escapeHtml(nowText) + '</div><div><strong>Kayıt Tarihi:</strong> ' + escapeHtml(item.displayDate || '-') + '</div></div></div>' +
         '<div class="summary-grid">' +
           '<div class="summary-card ' + statusTone + '"><div class="summary-label">Durum</div><div class="summary-value">' + escapeHtml(item.status || '-') + '</div></div>' +
           '<div class="summary-card neutral"><div class="summary-label">Yapılan İşlem</div><div class="summary-value">' + escapeHtml(item.action || '-') + '</div></div>' +
@@ -7466,7 +7507,8 @@ app.get("/", (req, res) => {
           '<div class="content-card"><div class="content-label">İşlem Açıklaması / Notlar</div><div class="content-value">' + escapeHtml(item.note || '-') + '</div></div>' +
         '</div>' +
         '<div class="section"><h2 class="section-title">Tarihçe</h2><div class="meta-grid">' + timelineRows + '</div></div>' +
-        '<div class="section"><h2 class="section-title">Ekler Özeti</h2><table><thead><tr><th style="width:6%">#</th><th style="width:29%">Dosya</th><th style="width:14%">Tür</th><th style="width:20%">Kategori / Tarih</th><th style="width:31%">Açıklama</th></tr></thead><tbody>' + attachmentRows + '</tbody></table></div>' +
+        photoPrintGrid +
+        '<div class="section"><h2 class="section-title">Dosya Özeti</h2><table><thead><tr><th style="width:6%">#</th><th style="width:29%">Dosya</th><th style="width:14%">Tür</th><th style="width:20%">Kategori / Tarih</th><th style="width:31%">Açıklama</th></tr></thead><tbody>' + attachmentRows + '</tbody></table></div>' +
         '</div></body></html>';
 
       var printWindow = window.open('', '_blank', 'width=1200,height=900');
@@ -7479,7 +7521,9 @@ app.get("/", (req, res) => {
       printWindow.document.close();
       printWindow.focus();
       printWindow.onload = function() {
-        printWindow.print();
+        setTimeout(function() {
+          printWindow.print();
+        }, 400);
       };
     }
 
@@ -8438,19 +8482,25 @@ function getTopicNames(item) {
           throw new Error((result && result.error) || "Kayıt güncellenemedi.");
         }
 
-        if (status === "Kapatıldı") {
+        if (status === "Kapatıldı" || status === "Süre Verildi") {
           try {
+            var currentFileType = document.getElementById("editClosureFileType").value;
+            var currentStage = status === "Kapatıldı" ? "closure" : "process";
+            var currentCategory = status === "Kapatıldı"
+              ? (currentFileType === "photo" ? "Kapatma Fotoğrafı" : "Kapatma Belgesi")
+              : (currentFileType === "photo" ? "İşlem Fotoğrafı" : "İşlem Belgesi");
             await uploadComplaintFiles({
               complaintId: result.id,
               input: document.getElementById("editClosureFileInput"),
-              fileType: document.getElementById("editClosureFileType").value,
+              fileType: currentFileType,
               description: document.getElementById("editClosureDescription").value.trim(),
-              fileStage: "closure"
+              fileStage: currentStage,
+              category: currentCategory
             });
           } catch (uploadError) {
             closeModal("editModal");
             await loadComplaints();
-            alert("Şikayet durumu güncellendi; ancak kapatma eki yüklenemedi. " + uploadError.message);
+            alert("Şikayet durumu güncellendi; ancak işlem eki yüklenemedi. " + uploadError.message);
             return;
           }
         }
