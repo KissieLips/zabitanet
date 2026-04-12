@@ -6700,8 +6700,12 @@ app.get("/", (req, res) => {
     .close-btn { border: none; background: transparent; font-size: 34px; line-height: 1; cursor: pointer; color: #475569; }
     .modal-body { padding: 18px; max-height: 76vh; overflow: auto; background: #ffffff; }
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+    .complaint-form-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .span-2 { grid-column: span 2; }
+    .span-4 { grid-column: span 4; }
     .full { grid-column: 1 / -1; }
     .form-group label { display: block; margin-bottom: 7px; font-weight: 700; font-size: 13px; color: #334155; }
+    .field-soft-note { margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: #f8fafc; border: 1px solid #e5edf5; color: #475569; font-size: 12px; line-height: 1.5; }
     .hidden { display: none !important; }
     .modal-footer { padding: 14px 18px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); background: #ffffff; }
     .detail-title { text-align: center; font-size: 21px; font-weight: 700; margin-bottom: 18px; letter-spacing: 0.02em; }
@@ -6747,7 +6751,7 @@ app.get("/", (req, res) => {
     .alert-item.today .alert-item-meta { color: #7c6030; }
     @media (max-width: 1280px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     .alert-item .btn { padding: 8px 10px; font-size: 12px; box-shadow: none; }
-    @media (max-width: 980px) { .main { padding: 16px; } .hero { padding: 14px; border-radius: 16px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; justify-content: space-between; flex-wrap: wrap; } .critical-grid, .stats-grid, .attachments-grid, .form-grid, .filters { grid-template-columns: 1fr; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .detail-table th { width: 150px; } }
+    @media (max-width: 980px) { .main { padding: 16px; } .hero { padding: 14px; border-radius: 16px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; justify-content: space-between; flex-wrap: wrap; } .critical-grid, .stats-grid, .attachments-grid, .form-grid, .filters, .complaint-form-grid { grid-template-columns: 1fr; } .span-2, .span-4 { grid-column: 1 / -1; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .detail-table th { width: 150px; } }
     @media (max-width: 640px) { .main { padding: 14px; } .hero-title { font-size: 22px; } .panel-title { font-size: 17px; } .card, .critical-card { padding: 14px; } .section-actions { width: 100%; } .section-actions .btn { flex: 1; } .attachment-card { grid-template-columns: 1fr; } .attachment-thumb, .attachment-thumb-doc { width: 100%; height: 180px; } table { min-width: 760px; } .date-card { min-width: 0; width: 100%; } }
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
@@ -6837,17 +6841,17 @@ app.get("/", (req, res) => {
         <button class="close-btn" onclick="closeModal('newModal')">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="form-grid">
-          <div class="form-group">
+        <div class="form-grid complaint-form-grid">
+          <div class="form-group span-2">
             <label>Şikayet No</label>
             <input type="text" id="newNo" placeholder="Otomatik oluşturulacak" disabled />
           </div>
-          <div class="form-group">
+          <div class="form-group span-2">
             <label>Tarih *</label>
             <input type="date" id="newDate" />
           </div>
           <input type="hidden" id="newSubject" value="" />
-          <div class="form-group">
+          <div class="form-group span-2">
             <label>Şikayet Kaynağı *</label>
             <select id="newSource">
               <option value="">Seçiniz</option>
@@ -6857,12 +6861,12 @@ app.get("/", (req, res) => {
               <option value="Vatandaş Talebi">Vatandaş Talebi</option>
             </select>
           </div>
-          <div class="form-group full">
+          <div class="form-group span-4">
             <label>Şikayet Konuları *</label>
             <div class="topic-picker" id="newTopics"></div>
-            <div class="topic-help">Bir şikayet içinde birden fazla konu seçebilirsiniz. İstatistikler bu seçimlere göre hesaplanacaktır.</div>
+            <div class="field-soft-note">Bir şikayet içinde birden fazla konu seçebilirsiniz. İstatistikler bu seçimlere göre hesaplanacaktır.</div>
           </div>
-          <div class="form-group">
+          <div class="form-group span-2">
             <label>Şikayete Konu Mahalle</label>
             <select id="newNeighborhood">
               <option value="">Mahalle seçiniz</option>
@@ -6969,17 +6973,17 @@ app.get("/", (req, res) => {
         <button class="close-btn" onclick="closeModal('editModal')">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="form-grid">
-          <div class="form-group">
+        <div class="form-grid complaint-form-grid">
+          <div class="form-group span-2">
             <label>Şikayet No</label>
             <input type="text" id="editNo" disabled />
           </div>
-          <div class="form-group">
+          <div class="form-group span-2">
             <label>Tarih *</label>
             <input type="date" id="editDate" />
           </div>
           <input type="hidden" id="editSubject" value="" />
-          <div class="form-group">
+          <div class="form-group span-2">
             <label>Şikayet Kaynağı *</label>
             <select id="editSource">
               <option value="CİMER">CİMER</option>
@@ -6988,12 +6992,12 @@ app.get("/", (req, res) => {
               <option value="Vatandaş Talebi">Vatandaş Talebi</option>
             </select>
           </div>
-          <div class="form-group full">
+          <div class="form-group span-4">
             <label>Şikayet Konuları *</label>
             <div class="topic-picker" id="editTopics"></div>
-            <div class="topic-help">İstatistik ve faaliyet raporları için en az bir konu seçin.</div>
+            <div class="field-soft-note">İstatistik ve faaliyet raporları için en az bir konu seçin.</div>
           </div>
-          <div class="form-group">
+          <div class="form-group span-2">
             <label>Şikayete Konu Mahalle</label>
             <select id="editNeighborhood">
               <option value="">Mahalle seçiniz</option>
