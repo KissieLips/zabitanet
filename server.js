@@ -561,6 +561,7 @@ function mapComplaintFile(row) {
     id: row.id,
     complaintId: row.complaint_id,
     fileType: row.file_type,
+    fileStage: row.file_stage || "general",
     category: row.category,
     description: row.description || "",
     originalName: row.original_name,
@@ -570,6 +571,17 @@ function mapComplaintFile(row) {
     createdAt: formatDateTime(row.created_at),
     isImage: (row.mime_type || "").indexOf("image/") === 0
   };
+}
+
+function resolveComplaintFileCategory(fileType, fileStage, category) {
+  const normalizedCategory = String(category || "").trim();
+  if (normalizedCategory) return normalizedCategory;
+
+  if (fileType === "photo") {
+    return fileStage === "closure" ? "Kapatma Fotoğrafı" : "Şikayet Fotoğrafı";
+  }
+
+  return fileStage === "closure" ? "Kapatma Belgesi" : "Belge";
 }
 
 function mapBusinessCategory(row) {
@@ -1063,6 +1075,7 @@ async function initDb() {
       id SERIAL PRIMARY KEY,
       complaint_id INTEGER NOT NULL REFERENCES complaints(id) ON DELETE CASCADE,
       file_type VARCHAR(20) NOT NULL,
+      file_stage VARCHAR(30) NOT NULL DEFAULT 'general',
       category VARCHAR(100) NOT NULL,
       description TEXT,
       original_name VARCHAR(255) NOT NULL,
@@ -1072,6 +1085,11 @@ async function initDb() {
       file_size BIGINT NOT NULL DEFAULT 0,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE complaint_files
+    ADD COLUMN IF NOT EXISTS file_stage VARCHAR(30) NOT NULL DEFAULT 'general'
   `);
 
   await pool.query(`
@@ -1895,17 +1913,22 @@ app.get("/api/complaints/:id/files", async (req, res) => {
 app.post("/api/complaints/:id/files", upload.any(), async (req, res) => {
   try {
     const { id } = req.params;
-    const { fileType, category, description } = req.body;
+    const { fileType, category, description, fileStage } = req.body;
     const uploadedFiles = Array.isArray(req.files) ? req.files : (req.file ? [req.file] : []);
 
     if (!uploadedFiles.length) {
       return res.status(400).json({ error: "Dosya seçiniz." });
     }
 
-    if (!fileType || !category) {
+    if (!fileType) {
       uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
-      return res.status(400).json({ error: "Dosya türü ve kategori seçiniz." });
+      return res.status(400).json({ error: "Dosya türü seçiniz." });
     }
+
+    const normalizedStage = ["initial", "closure", "general"].includes(String(fileStage || "").trim())
+      ? String(fileStage || "").trim()
+      : "general";
+    const resolvedCategory = resolveComplaintFileCategory(fileType, normalizedStage, category);
 
     if (fileType === "document" && uploadedFiles.length > 1) {
       uploadedFiles.forEach(function(file) { if (file && file.path) safeUnlink(file.path); });
@@ -1926,15 +1949,16 @@ app.post("/api/complaints/:id/files", upload.any(), async (req, res) => {
       const result = await pool.query(
         `
           INSERT INTO complaint_files
-            (complaint_id, file_type, category, description, original_name, stored_name, file_path, mime_type, file_size)
+            (complaint_id, file_type, file_stage, category, description, original_name, stored_name, file_path, mime_type, file_size)
           VALUES
-            ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
           RETURNING *
         `,
         [
           id,
           fileType,
-          category,
+          normalizedStage,
+          resolvedCategory,
           normalizeStoredText(description || ""),
           decodeUploadFilename(uploadedFile.originalname),
           uploadedFile.filename,
@@ -6992,6 +7016,11 @@ app.get("/", (req, res) => {
             <label>İşlem Açıklaması / Notlar</label>
             <textarea id="newNote" placeholder="Yapılan işlemle ilgili ek notlar..."></textarea>
           </div>
+          <div class="form-group full">
+            <label>Şikayet Fotoğrafları</label>
+            <input type="file" id="newPhotoInput" accept="image/*" multiple />
+            <div class="field-soft-note">İsteğe bağlıdır. Yeni kayıt açılırken bir veya birden fazla fotoğraf ekleyebilirsiniz.</div>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -7013,35 +7042,6 @@ app.get("/", (req, res) => {
           <tbody id="detailTableBody"></tbody>
         </table>
 
-        <div class="attachments-section">
-          <div class="section-title">Ekler / Belgeler</div>
-          <div class="attachments-grid">
-            <div class="form-group">
-              <label>Dosya Türü</label>
-              <select id="detailFileType">
-                <option value="photo">Fotoğraf</option>
-                <option value="document">Evrak</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Kategori</label>
-              <select id="detailCategory"></select>
-            </div>
-            <div class="form-group full">
-              <label>Açıklama</label>
-              <input type="text" id="detailFileDescription" placeholder="Örn: İlk tespit fotoğrafı / Tutanak örneği" />
-            </div>
-            <div class="form-group full">
-              <label>Dosya Seç</label>
-              <input type="file" id="detailFileInput" />
-              <div class="muted" id="detailFileHelp" style="margin-top:8px;">Fotoğraf seçildiğinde aynı anda birden fazla dosya yükleyebilirsiniz.</div>
-            </div>
-          </div>
-          <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
-            <button class="btn btn-primary" onclick="uploadDetailFile()">Dosya Yükle</button>
-          </div>
-          <div id="detailFilesList" class="muted">Henüz ek bulunmuyor.</div>
-        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('detailModal')">Kapat</button>
@@ -7123,6 +7123,29 @@ app.get("/", (req, res) => {
             <label>İşlem Açıklaması / Notlar</label>
             <textarea id="editNote"></textarea>
           </div>
+          <div class="form-group full hidden" id="editClosureWrap">
+            <label>Kapatma Ekleri</label>
+            <div class="attachments-section" style="margin-top:0;">
+              <div class="attachments-grid" style="margin-bottom:0;">
+                <div class="form-group">
+                  <label>Dosya Türü</label>
+                  <select id="editClosureFileType">
+                    <option value="photo">Fotoğraf</option>
+                    <option value="document">Belge / Evrak</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Açıklama</label>
+                  <input type="text" id="editClosureDescription" placeholder="İsteğe bağlı kısa not" />
+                </div>
+                <div class="form-group full">
+                  <label>Dosya Seç</label>
+                  <input type="file" id="editClosureFileInput" accept="image/*" multiple />
+                  <div class="field-soft-note" id="editClosureHelp">Fotoğraf seçildiğinde aynı anda birden fazla dosya yükleyebilirsiniz.</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -7175,11 +7198,6 @@ app.get("/", (req, res) => {
     var detailComplaintId = null;
     var complaintFiles = [];
 
-    var fileCategories = {
-      photo: ["Öncesi", "Sonrası", "Genel Saha Fotoğrafı"],
-      document: ["Tutanak", "Ceza", "Tebligat", "Savunma", "Diğer Belge"]
-    };
-
     function toggleSidebar(forceOpen) {
       var shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !document.body.classList.contains("sidebar-open");
       document.body.classList.toggle("sidebar-open", shouldOpen);
@@ -7202,35 +7220,77 @@ app.get("/", (req, res) => {
       return (size / (1024 * 1024)).toFixed(1) + " MB";
     }
 
-    function refreshCategoryOptions() {
-      var type = document.getElementById("detailFileType").value;
-      var categories = fileCategories[type] || [];
-      var html = "";
-      var input = document.getElementById("detailFileInput");
-      var help = document.getElementById("detailFileHelp");
+    function updateEditClosureFileInputState() {
+      var typeElement = document.getElementById("editClosureFileType");
+      var input = document.getElementById("editClosureFileInput");
+      var help = document.getElementById("editClosureHelp");
+      if (!typeElement || !input || !help) return;
 
-      for (var i = 0; i < categories.length; i++) {
-        html += '<option value="' + escapeHtml(categories[i]) + '">' + escapeHtml(categories[i]) + '</option>';
+      var type = typeElement.value;
+      input.value = "";
+
+      if (type === "photo") {
+        input.multiple = true;
+        input.setAttribute("accept", "image/*");
+        help.textContent = "Fotoğraf seçildiğinde aynı anda birden fazla dosya yükleyebilirsiniz.";
+      } else {
+        input.multiple = false;
+        input.setAttribute("accept", ".pdf,image/*");
+        help.textContent = "Belge seçildiğinde aynı anda 1 dosya yükleyebilirsiniz. PDF veya görsel ekleyebilirsiniz.";
+      }
+    }
+
+    function toggleEditClosureAttachments() {
+      var status = document.getElementById("editStatus").value;
+      var wrap = document.getElementById("editClosureWrap");
+
+      if (status === "Kapatıldı") {
+        wrap.classList.remove("hidden");
+      } else {
+        wrap.classList.add("hidden");
+        document.getElementById("editClosureDescription").value = "";
+        document.getElementById("editClosureFileInput").value = "";
       }
 
-      document.getElementById("detailCategory").innerHTML = html;
+      updateEditClosureFileInputState();
+    }
 
-      if (input) {
-        input.value = "";
-        if (type === "photo") {
-          input.multiple = true;
-          input.setAttribute("accept", "image/*");
-        } else {
-          input.multiple = false;
-          input.setAttribute("accept", ".pdf,image/*");
-        }
+    async function uploadComplaintFiles(options) {
+      var complaintId = options && options.complaintId;
+      var input = options && options.input;
+      var fileType = options && options.fileType;
+      var description = options && options.description;
+      var fileStage = options && options.fileStage;
+
+      if (!complaintId || !input || !fileType) return { uploadedCount: 0 };
+
+      var selectedFiles = input.files ? Array.from(input.files) : [];
+      if (!selectedFiles.length) return { uploadedCount: 0 };
+
+      if (fileType === "document" && selectedFiles.length > 1) {
+        throw new Error("Belge yüklemede aynı anda sadece 1 dosya seçebilirsiniz.");
       }
 
-      if (help) {
-        help.textContent = type === "photo"
-          ? "Fotoğraf seçildiğinde aynı anda birden fazla dosya yükleyebilirsiniz."
-          : "Evrak yüklemede aynı anda 1 dosya seçebilirsiniz. PDF veya görsel yükleyebilirsiniz.";
+      var formData = new FormData();
+      for (var i = 0; i < selectedFiles.length; i++) {
+        formData.append("files", selectedFiles[i]);
       }
+      formData.append("fileType", fileType);
+      formData.append("description", description || "");
+      formData.append("fileStage", fileStage || "general");
+
+      var response = await fetch("/api/complaints/" + complaintId + "/files", {
+        method: "POST",
+        body: formData
+      });
+
+      var result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Dosya yüklenemedi.");
+      }
+
+      input.value = "";
+      return result;
     }
 
     async function loadComplaintFiles(complaintId) {
@@ -7240,7 +7300,8 @@ app.get("/", (req, res) => {
         complaintFiles = await response.json();
         renderComplaintFiles();
       } catch (error) {
-        document.getElementById("detailFilesList").innerHTML = '<div class="muted">Ekler yüklenemedi.</div>';
+        var detailFilesList = document.getElementById("detailFilesList");
+        if (detailFilesList) detailFilesList.innerHTML = '<div class="muted">Ekler yüklenemedi.</div>';
       }
     }
 
@@ -7422,50 +7483,6 @@ app.get("/", (req, res) => {
       };
     }
 
-    async function uploadDetailFile() {
-      if (!detailComplaintId) return;
-
-      var fileInput = document.getElementById("detailFileInput");
-      var fileType = document.getElementById("detailFileType").value;
-      var selectedFiles = fileInput.files ? Array.from(fileInput.files) : [];
-
-      if (!selectedFiles.length) {
-        alert("Lütfen dosya seçin.");
-        return;
-      }
-
-      if (fileType === "document" && selectedFiles.length > 1) {
-        alert("Evrak yüklemede aynı anda sadece 1 dosya seçebilirsiniz.");
-        return;
-      }
-
-      var formData = new FormData();
-      for (var i = 0; i < selectedFiles.length; i++) {
-        formData.append("files", selectedFiles[i]);
-      }
-      formData.append("fileType", fileType);
-      formData.append("category", document.getElementById("detailCategory").value);
-      formData.append("description", document.getElementById("detailFileDescription").value.trim());
-
-      try {
-        var response = await fetch("/api/complaints/" + detailComplaintId + "/files", {
-          method: "POST",
-          body: formData
-        });
-
-        var result = await response.json();
-        if (!response.ok) {
-          throw new Error(result.error || "Dosya yüklenemedi.");
-        }
-
-        document.getElementById("detailFileInput").value = "";
-        document.getElementById("detailFileDescription").value = "";
-        await loadComplaintFiles(detailComplaintId);
-      } catch (error) {
-        alert(error.message || "Dosya yüklenemedi.");
-      }
-    }
-
     async function deleteComplaintFile(fileId) {
       var ok = confirm("Bu eki silmek istiyor musunuz?");
       if (!ok) return;
@@ -7627,6 +7644,8 @@ app.get("/", (req, res) => {
         wrap.classList.add("hidden");
         document.getElementById("editControlDate").value = "";
       }
+
+      toggleEditClosureAttachments();
     }
 
     async function loadComplaintTopics() {
@@ -8227,6 +8246,7 @@ function getTopicNames(item) {
       document.getElementById("newStatus").value = "Açık";
       document.getElementById("newControlDate").value = "";
       document.getElementById("newNote").value = "";
+      document.getElementById("newPhotoInput").value = "";
       toggleNewControlDate();
       document.getElementById("newModal").classList.add("show");
       await fillNextComplaintNoPreview();
@@ -8237,6 +8257,16 @@ function getTopicNames(item) {
       if (id === "detailModal") {
         detailComplaintId = null;
         complaintFiles = [];
+      }
+      if (id === "newModal") {
+        var newPhotoInput = document.getElementById("newPhotoInput");
+        if (newPhotoInput) newPhotoInput.value = "";
+      }
+      if (id === "editModal") {
+        var closureDescription = document.getElementById("editClosureDescription");
+        var closureInput = document.getElementById("editClosureFileInput");
+        if (closureDescription) closureDescription.value = "";
+        if (closureInput) closureInput.value = "";
       }
     }
 
@@ -8282,12 +8312,30 @@ function getTopicNames(item) {
           })
         });
 
-        if (!response.ok) throw new Error();
+        var result = await response.json();
+        if (!response.ok) {
+          throw new Error((result && result.error) || "Kayıt eklenemedi.");
+        }
+
+        try {
+          await uploadComplaintFiles({
+            complaintId: result.id,
+            input: document.getElementById("newPhotoInput"),
+            fileType: "photo",
+            description: "Şikayet açılış fotoğrafı",
+            fileStage: "initial"
+          });
+        } catch (uploadError) {
+          closeModal("newModal");
+          await loadComplaints();
+          alert("Şikayet kaydı oluşturuldu; ancak fotoğraflar yüklenemedi. " + uploadError.message);
+          return;
+        }
 
         closeModal("newModal");
         await loadComplaints();
       } catch (error) {
-        alert("Kayıt eklenemedi.");
+        alert(error.message || "Kayıt eklenemedi.");
       }
     }
 
@@ -8298,10 +8346,6 @@ function getTopicNames(item) {
       markComplaintSeen(id);
       renderTable();
       detailComplaintId = id;
-      refreshCategoryOptions();
-      document.getElementById("detailFileDescription").value = "";
-      document.getElementById("detailFileInput").value = "";
-      document.getElementById("detailFilesList").innerHTML = '<div class="muted">Ekler yükleniyor...</div>';
 
       var html = "";
       html += "<tr><th>Şikayet No</th><td>" + escapeHtml(item.no) + "</td></tr>";
@@ -8344,7 +8388,11 @@ function getTopicNames(item) {
       document.getElementById("editStatus").value = item.status;
       document.getElementById("editControlDate").value = item.controlDate || "";
       document.getElementById("editNote").value = item.note;
+      document.getElementById("editClosureDescription").value = "";
+      document.getElementById("editClosureFileInput").value = "";
+      document.getElementById("editClosureFileType").value = "photo";
       toggleEditControlDate();
+      toggleEditClosureAttachments();
       document.getElementById("editModal").classList.add("show");
     }
 
@@ -8385,12 +8433,32 @@ function getTopicNames(item) {
           })
         });
 
-        if (!response.ok) throw new Error();
+        var result = await response.json();
+        if (!response.ok) {
+          throw new Error((result && result.error) || "Kayıt güncellenemedi.");
+        }
+
+        if (status === "Kapatıldı") {
+          try {
+            await uploadComplaintFiles({
+              complaintId: result.id,
+              input: document.getElementById("editClosureFileInput"),
+              fileType: document.getElementById("editClosureFileType").value,
+              description: document.getElementById("editClosureDescription").value.trim(),
+              fileStage: "closure"
+            });
+          } catch (uploadError) {
+            closeModal("editModal");
+            await loadComplaints();
+            alert("Şikayet durumu güncellendi; ancak kapatma eki yüklenemedi. " + uploadError.message);
+            return;
+          }
+        }
 
         closeModal("editModal");
         await loadComplaints();
       } catch (error) {
-        alert("Kayıt güncellenemedi.");
+        alert(error.message || "Kayıt güncellenemedi.");
       }
     }
 
@@ -8423,7 +8491,7 @@ function getTopicNames(item) {
       setupComplaintStream();
       document.getElementById("newStatus").addEventListener("change", toggleNewControlDate);
       document.getElementById("editStatus").addEventListener("change", toggleEditControlDate);
-      document.getElementById("detailFileType").addEventListener("change", refreshCategoryOptions);
+      document.getElementById("editClosureFileType").addEventListener("change", updateEditClosureFileInputState);
       document.getElementById("filterDate").addEventListener("change", renderTable);
       document.getElementById("filterSource").addEventListener("change", renderTable);
       document.getElementById("filterStatus").addEventListener("change", renderTable);
@@ -8459,7 +8527,6 @@ function getTopicNames(item) {
       window.addEventListener("resize", function() {
         if (window.innerWidth > 980) toggleSidebar(false);
       });
-      refreshCategoryOptions();
     });
   </script>
 </body>
