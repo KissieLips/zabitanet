@@ -6,13 +6,7 @@ const path = require("path");
 const https = require("https");
 const crypto = require("crypto");
 const XLSX = require("xlsx");
-
-let webpush = null;
-try {
-  webpush = require("web-push");
-} catch (error) {
-  console.warn("web-push paketi yüklenemedi, telefon bildirimi devre dışı kalacak.");
-}
+const webpush = require("web-push");
 const { initMarketModuleDb, registerMarketModule } = require("./market-module");
 
 const app = express();
@@ -47,6 +41,10 @@ const DEFAULT_COMPLAINT_TOPICS = [
   "Diğer"
 ];
 
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "BHKx5i9wjwluhsiCc2LVzW20obJQSyL53Yj8Mqc_OlyBdfTPVYuz6aifw4GlTc61vsN8YLsQI7MWcRwE0A069wY";
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "G1tIpzQBORpdnoVdvrqIhjYbwxSm3C_6_4rGXfrT43c";
+const VAPID_CONTACT = process.env.VAPID_CONTACT || "mailto:destek@zabitanet.local";
+
 const BUCAK_NEIGHBORHOODS = [
   "Alaattin",
   "Atilla",
@@ -70,22 +68,156 @@ const BUCAK_NEIGHBORHOODS = [
   "Yunus Emre"
 ];
 
-const NOTIFICATION_SETTING_KEYS = {
-  vapidPublicKey: "web_push_vapid_public_key",
-  vapidPrivateKey: "web_push_vapid_private_key"
-};
-
-const notificationState = {
-  enabled: !!webpush,
-  ready: false,
-  vapidPublicKey: "",
-  vapidPrivateKey: "",
-  subject: process.env.WEB_PUSH_SUBJECT || "mailto:destek@zabitanet.local"
-};
-
 fs.mkdirSync(complaintUploadsRoot, { recursive: true });
 fs.mkdirSync(businessUploadsRoot, { recursive: true });
 fs.mkdirSync(businessInspectionUploadsRoot, { recursive: true });
+
+webpush.setVapidDetails(VAPID_CONTACT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+
+function sha256Text(value) {
+  return crypto.createHash("sha256").update(String(value || "")).digest("hex");
+}
+
+function sanitizeNotificationPayload(payload) {
+  const data = payload && typeof payload === "object" ? payload : {};
+  return {
+    title: String(data.title || "Zabıta Yönetim Sistemi"),
+    body: String(data.body || "Yeni bildirim"),
+    tag: String(data.tag || "zabitanet-notification"),
+    url: String(data.url || "/"),
+    data: data.data && typeof data.data === "object" ? data.data : {}
+  };
+}
+
+function parseSubscriptionRecord(row) {
+  if (!row) return null;
+  const raw = row.subscription_json || row.subscription;
+  if (!raw) return null;
+  if (typeof raw === "object" && raw.endpoint) return raw;
+  try {
+    const parsed = JSON.parse(String(raw));
+    return parsed && parsed.endpoint ? parsed : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function saveNotificationSubscription(subscription, meta = {}) {
+  if (!subscription || !subscription.endpoint) {
+    throw new Error("Geçerli abonelik bilgisi bulunamadı.");
+  }
+
+  const endpoint = String(subscription.endpoint);
+  const endpointHash = sha256Text(endpoint);
+  const subscriptionText = JSON.stringify(subscription);
+
+  const updated = await pool.query(`
+    UPDATE notification_subscriptions
+    SET
+      endpoint = $1,
+      endpoint_hash = $2,
+      subscription_json = $3::jsonb,
+      subscription = $4,
+      user_agent = $5,
+      platform = $6,
+      is_active = TRUE,
+      last_error = NULL,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE endpoint = $1 OR endpoint_hash = $2
+    RETURNING id
+  `, [
+    endpoint,
+    endpointHash,
+    subscriptionText,
+    subscriptionText,
+    meta.userAgent || "",
+    meta.platform || ""
+  ]);
+
+  if (updated.rows.length) return;
+
+  await pool.query(`
+    INSERT INTO notification_subscriptions
+      (endpoint, endpoint_hash, subscription_json, subscription, user_agent, platform, is_active, last_error, updated_at)
+    VALUES
+      ($1, $2, $3::jsonb, $4, $5, $6, TRUE, NULL, CURRENT_TIMESTAMP)
+  `, [
+    endpoint,
+    endpointHash,
+    subscriptionText,
+    subscriptionText,
+    meta.userAgent || "",
+    meta.platform || ""
+  ]);
+}
+
+async function deactivateNotificationSubscription(subscription) {
+  if (!subscription || !subscription.endpoint) return;
+  const endpoint = String(subscription.endpoint);
+  await pool.query(
+    `UPDATE notification_subscriptions SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE endpoint = $1 OR endpoint_hash = $2`,
+    [endpoint, sha256Text(endpoint)]
+  );
+}
+
+async function countActiveNotificationSubscriptions() {
+  const result = await pool.query(`SELECT COUNT(*)::int AS count FROM notification_subscriptions WHERE COALESCE(is_active, TRUE) = TRUE`);
+  return result.rows[0] ? Number(result.rows[0].count || 0) : 0;
+}
+
+async function sendNotificationToSubscription(subscription, payload) {
+  const safePayload = sanitizeNotificationPayload(payload);
+  return webpush.sendNotification(subscription, JSON.stringify(safePayload), { TTL: 60 });
+}
+
+async function sendNotificationToAllDevices(payload) {
+  const result = await pool.query(`
+    SELECT id, endpoint_hash, subscription_json::text AS subscription_json_text, subscription
+    FROM notification_subscriptions
+    WHERE COALESCE(is_active, TRUE) = TRUE
+  `);
+
+  let successCount = 0;
+  for (const row of result.rows) {
+    const subscription = parseSubscriptionRecord({ subscription_json: row.subscription_json_text, subscription: row.subscription });
+    if (!subscription) {
+      await pool.query(`UPDATE notification_subscriptions SET is_active = FALSE, last_error = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [row.id, "Abonelik verisi okunamadı"]);
+      continue;
+    }
+
+    try {
+      await sendNotificationToSubscription(subscription, payload);
+      successCount += 1;
+      await pool.query(`UPDATE notification_subscriptions SET last_success_at = CURRENT_TIMESTAMP, last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [row.id]);
+    } catch (error) {
+      const statusCode = Number(error && error.statusCode);
+      const message = error && error.message ? String(error.message) : "Bildirim gönderilemedi";
+      if (statusCode === 404 || statusCode === 410) {
+        await pool.query(`UPDATE notification_subscriptions SET is_active = FALSE, last_error = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [row.id, message]);
+      } else {
+        await pool.query(`UPDATE notification_subscriptions SET last_error = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [row.id, message]);
+      }
+    }
+  }
+
+  return { successCount, totalCount: result.rows.length };
+}
+
+function buildComplaintNotificationPayload(item) {
+  const topicText = item && Array.isArray(item.topics) && item.topics.length
+    ? item.topics.map(function(topic) { return topic.name; }).join(", ")
+    : (item && item.subject ? item.subject : "Şikayet kaydı");
+
+  const areaText = item && item.neighborhood ? item.neighborhood + " Mah." : (item && item.source ? item.source : "Yeni kayıt");
+
+  return sanitizeNotificationPayload({
+    title: "Yeni Şikayet",
+    body: (item && item.no ? item.no + " • " : "") + areaText + " • " + topicText,
+    tag: item && item.id ? "complaint-" + item.id : "complaint-new",
+    url: item && item.id ? "/?complaintId=" + encodeURIComponent(String(item.id)) : "/",
+    data: { complaintId: item && item.id ? item.id : null }
+  });
+}
 
 function normalizeStoredText(value) {
   if (value === null || value === undefined) return "";
@@ -1024,141 +1156,6 @@ function safeUnlink(filePath) {
   }
 }
 
-async function getAppSetting(settingKey, db = pool) {
-  const result = await db.query(`SELECT setting_value FROM app_settings WHERE setting_key = $1 LIMIT 1`, [settingKey]);
-  return result.rows.length ? String(result.rows[0].setting_value || "") : "";
-}
-
-async function upsertAppSetting(settingKey, settingValue, db = pool) {
-  await db.query(
-    `
-      INSERT INTO app_settings (setting_key, setting_value, updated_at)
-      VALUES ($1, $2, CURRENT_TIMESTAMP)
-      ON CONFLICT (setting_key)
-      DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = CURRENT_TIMESTAMP
-    `,
-    [settingKey, settingValue]
-  );
-}
-
-async function initNotificationConfig() {
-  if (!webpush) {
-    notificationState.enabled = false;
-    notificationState.ready = false;
-    return;
-  }
-
-  let publicKey = process.env.VAPID_PUBLIC_KEY || "";
-  let privateKey = process.env.VAPID_PRIVATE_KEY || "";
-
-  if (!publicKey || !privateKey) {
-    publicKey = await getAppSetting(NOTIFICATION_SETTING_KEYS.vapidPublicKey);
-    privateKey = await getAppSetting(NOTIFICATION_SETTING_KEYS.vapidPrivateKey);
-  }
-
-  if (!publicKey || !privateKey) {
-    const generated = webpush.generateVAPIDKeys();
-    publicKey = generated.publicKey;
-    privateKey = generated.privateKey;
-    await upsertAppSetting(NOTIFICATION_SETTING_KEYS.vapidPublicKey, publicKey);
-    await upsertAppSetting(NOTIFICATION_SETTING_KEYS.vapidPrivateKey, privateKey);
-  }
-
-  webpush.setVapidDetails(notificationState.subject, publicKey, privateKey);
-  notificationState.vapidPublicKey = publicKey;
-  notificationState.vapidPrivateKey = privateKey;
-  notificationState.enabled = true;
-  notificationState.ready = true;
-}
-
-function normalizeNotificationSubscription(input) {
-  if (!input || typeof input !== "object") return null;
-  const endpoint = String(input.endpoint || "").trim();
-  const keys = input.keys && typeof input.keys === "object" ? input.keys : {};
-  if (!endpoint || !keys.p256dh || !keys.auth) return null;
-  return {
-    endpoint,
-    expirationTime: input.expirationTime || null,
-    keys: { p256dh: String(keys.p256dh), auth: String(keys.auth) }
-  };
-}
-
-async function saveNotificationSubscription(subscription, metadata = {}) {
-  const normalized = normalizeNotificationSubscription(subscription);
-  if (!normalized) throw new Error("Geçersiz bildirim aboneliği.");
-  const endpointHash = crypto.createHash("sha256").update(normalized.endpoint).digest("hex");
-  await pool.query(
-    `
-      INSERT INTO notification_subscriptions
-        (endpoint, endpoint_hash, subscription, user_agent, platform, device_label, is_active, updated_at, last_error)
-      VALUES
-        ($1, $2, $3::jsonb, $4, $5, $6, TRUE, CURRENT_TIMESTAMP, NULL)
-      ON CONFLICT (endpoint)
-      DO UPDATE SET
-        endpoint_hash = EXCLUDED.endpoint_hash,
-        subscription = EXCLUDED.subscription,
-        user_agent = EXCLUDED.user_agent,
-        platform = EXCLUDED.platform,
-        device_label = EXCLUDED.device_label,
-        is_active = TRUE,
-        updated_at = CURRENT_TIMESTAMP,
-        last_error = NULL
-    `,
-    [normalized.endpoint, endpointHash, JSON.stringify(normalized), String(metadata.userAgent || ""), String(metadata.platform || ""), String(metadata.deviceLabel || "")]
-  );
-  return normalized;
-}
-
-async function deactivateNotificationSubscription(endpoint) {
-  const normalizedEndpoint = String(endpoint || "").trim();
-  if (!normalizedEndpoint) return;
-  await pool.query(`UPDATE notification_subscriptions SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE endpoint = $1`, [normalizedEndpoint]);
-}
-
-async function getNotificationDeviceSummary() {
-  const result = await pool.query(`SELECT COUNT(*)::int AS total FROM notification_subscriptions WHERE COALESCE(is_active, TRUE) = TRUE`);
-  return Number(result.rows[0] && result.rows[0].total ? result.rows[0].total : 0);
-}
-
-function buildComplaintNotificationPayload(item) {
-  const topicNames = Array.isArray(item && item.topics) ? item.topics.map(function(topic) { return topic && topic.name ? topic.name : ""; }).filter(Boolean) : [];
-  const primaryTopic = topicNames.length ? topicNames.slice(0, 2).join(", ") : (item && item.subject ? item.subject : "Yeni şikayet");
-  const extras = [];
-  if (item && item.neighborhood) extras.push(item.neighborhood + " Mah.");
-  if (item && item.source) extras.push(item.source);
-  return {
-    title: "Yeni Şikayet",
-    body: [item && item.no ? item.no : "Şikayet", primaryTopic, extras.join(" • ")].filter(Boolean).join(" • "),
-    url: "/?complaint=" + encodeURIComponent(String(item && item.id ? item.id : "")),
-    tag: item && item.no ? "complaint-" + String(item.no) : "complaint-new",
-    data: { complaintId: item && item.id ? item.id : null }
-  };
-}
-
-async function sendNotificationToSingleSubscription(subscription, payload, options = {}) {
-  if (!notificationState.ready || !webpush) throw new Error("Telefon bildirimi altyapısı hazır değil.");
-  const normalized = normalizeNotificationSubscription(subscription);
-  if (!normalized) throw new Error("Geçersiz abonelik verisi.");
-  try {
-    await webpush.sendNotification(normalized, JSON.stringify(payload));
-    if (options.markSuccess !== false) {
-      await pool.query(`UPDATE notification_subscriptions SET last_success_at = CURRENT_TIMESTAMP, last_test_at = CURRENT_TIMESTAMP, last_error = NULL, is_active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE endpoint = $1`, [normalized.endpoint]);
-    }
-  } catch (error) {
-    const isGone = error && (error.statusCode === 404 || error.statusCode === 410);
-    await pool.query(`UPDATE notification_subscriptions SET is_active = CASE WHEN $2 THEN FALSE ELSE COALESCE(is_active, TRUE) END, last_error = $3, updated_at = CURRENT_TIMESTAMP WHERE endpoint = $1`, [normalized.endpoint, isGone, String((error && error.message) || "Bilinmeyen bildirim hatası").slice(0, 1000)]);
-    throw error;
-  }
-}
-
-async function sendNotificationToAllDevices(payload) {
-  if (!notificationState.ready || !webpush) return;
-  const result = await pool.query(`SELECT subscription FROM notification_subscriptions WHERE COALESCE(is_active, TRUE) = TRUE ORDER BY id DESC`);
-  await Promise.allSettled((result.rows || []).map(function(row) {
-    return sendNotificationToSingleSubscription(row.subscription, payload, { markSuccess: false });
-  }));
-}
-
 async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS complaints (
@@ -1248,27 +1245,16 @@ async function initDb() {
     ON complaint_topic_links(topic_id)
   `);
 
-  await seedComplaintTopics();
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS app_settings (
-      setting_key VARCHAR(120) PRIMARY KEY,
-      setting_value TEXT NOT NULL,
-      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
   await pool.query(`
     CREATE TABLE IF NOT EXISTS notification_subscriptions (
       id SERIAL PRIMARY KEY,
-      endpoint TEXT UNIQUE NOT NULL,
-      endpoint_hash VARCHAR(64) NOT NULL,
-      subscription JSONB NOT NULL,
+      endpoint TEXT,
+      endpoint_hash VARCHAR(128),
+      subscription_json JSONB,
+      subscription TEXT,
       user_agent TEXT,
-      platform VARCHAR(50),
-      device_label VARCHAR(120),
+      platform VARCHAR(40),
       is_active BOOLEAN NOT NULL DEFAULT TRUE,
-      last_test_at TIMESTAMP,
       last_success_at TIMESTAMP,
       last_error TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1276,9 +1262,36 @@ async function initDb() {
     )
   `);
 
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_notification_subscriptions_active ON notification_subscriptions(is_active)`);
+  await pool.query(`ALTER TABLE notification_subscriptions ADD COLUMN IF NOT EXISTS endpoint TEXT`);
+  await pool.query(`ALTER TABLE notification_subscriptions ADD COLUMN IF NOT EXISTS endpoint_hash VARCHAR(128)`);
+  await pool.query(`ALTER TABLE notification_subscriptions ADD COLUMN IF NOT EXISTS subscription_json JSONB`);
+  await pool.query(`ALTER TABLE notification_subscriptions ADD COLUMN IF NOT EXISTS subscription TEXT`);
+  await pool.query(`ALTER TABLE notification_subscriptions ADD COLUMN IF NOT EXISTS user_agent TEXT`);
+  await pool.query(`ALTER TABLE notification_subscriptions ADD COLUMN IF NOT EXISTS platform VARCHAR(40)`);
+  await pool.query(`ALTER TABLE notification_subscriptions ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`);
+  await pool.query(`ALTER TABLE notification_subscriptions ADD COLUMN IF NOT EXISTS last_success_at TIMESTAMP`);
+  await pool.query(`ALTER TABLE notification_subscriptions ADD COLUMN IF NOT EXISTS last_error TEXT`);
+  await pool.query(`ALTER TABLE notification_subscriptions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`);
+  await pool.query(`ALTER TABLE notification_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`);
 
-  await initNotificationConfig();
+  await pool.query(`
+    UPDATE notification_subscriptions
+    SET endpoint = COALESCE(endpoint, subscription_json->>'endpoint')
+    WHERE endpoint IS NULL AND subscription_json IS NOT NULL
+  `);
+
+  await pool.query(`
+    UPDATE notification_subscriptions
+    SET endpoint_hash = md5(endpoint)
+    WHERE endpoint_hash IS NULL AND endpoint IS NOT NULL
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_subscriptions_endpoint_hash
+    ON notification_subscriptions(endpoint_hash)
+  `);
+
+  await seedComplaintTopics();
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS business_categories (
@@ -1750,84 +1763,6 @@ app.put("/api/complaint-topics/:id", async (req, res) => {
   }
 });
 
-app.get("/service-worker.js", (req, res) => {
-  res.type("application/javascript").send(`self.addEventListener("install", function() { self.skipWaiting(); });
-self.addEventListener("activate", function(event) { event.waitUntil(self.clients.claim()); });
-self.addEventListener("push", function(event) {
-  var data = {};
-  try { data = event.data ? event.data.json() : {}; } catch (error) { data = {}; }
-  var title = data.title || "Zabıta Yönetim Sistemi";
-  var options = { body: data.body || "Yeni bildirim", tag: data.tag || "zabitanet-notification", renotify: true, data: { url: data.url || "/" } };
-  event.waitUntil(self.registration.showNotification(title, options));
-});
-self.addEventListener("notificationclick", function(event) {
-  event.notification.close();
-  var targetUrl = (event.notification && event.notification.data && event.notification.data.url) || "/";
-  event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function(clientList) {
-      for (var i = 0; i < clientList.length; i++) {
-        var client = clientList[i];
-        if ("focus" in client) {
-          if ("navigate" in client) client.navigate(targetUrl);
-          return client.focus();
-        }
-      }
-      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
-      return null;
-    })
-  );
-});`);
-});
-
-app.get("/manifest.webmanifest", (req, res) => {
-  res.type("application/manifest+json").json({ name: "Zabıta Yönetim Sistemi", short_name: "ZabıtaNet", start_url: "/", display: "standalone", background_color: "#f3f4f6", theme_color: "#1d4ed8", description: "Şikayet ve saha takibi için mobil kullanım manifest dosyası" });
-});
-
-app.get("/api/notifications/config", async (req, res) => {
-  try {
-    const activeDeviceCount = await getNotificationDeviceSummary();
-    res.json({ enabled: !!notificationState.enabled, ready: !!notificationState.ready, vapidPublicKey: notificationState.vapidPublicKey || "", activeDeviceCount });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Bildirim ayarları alınamadı." });
-  }
-});
-
-app.post("/api/notifications/subscribe", async (req, res) => {
-  try {
-    const saved = await saveNotificationSubscription(req.body && req.body.subscription, { userAgent: req.headers["user-agent"] || "", platform: req.body && req.body.platform, deviceLabel: req.body && req.body.deviceLabel });
-    const activeDeviceCount = await getNotificationDeviceSummary();
-    res.json({ ok: true, endpoint: saved.endpoint, activeDeviceCount });
-  } catch (error) {
-    console.error(error);
-    res.status(400).json({ error: "Bildirim aboneliği kaydedilemedi." });
-  }
-});
-
-app.post("/api/notifications/unsubscribe", async (req, res) => {
-  try {
-    await deactivateNotificationSubscription(req.body && req.body.endpoint);
-    const activeDeviceCount = await getNotificationDeviceSummary();
-    res.json({ ok: true, activeDeviceCount });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Bildirim aboneliği kapatılamadı." });
-  }
-});
-
-app.post("/api/notifications/test", async (req, res) => {
-  try {
-    const subscription = normalizeNotificationSubscription(req.body && req.body.subscription);
-    if (!subscription) return res.status(400).json({ error: "Test için aktif cihaz aboneliği bulunamadı." });
-    await saveNotificationSubscription(subscription, { userAgent: req.headers["user-agent"] || "", platform: req.body && req.body.platform, deviceLabel: req.body && req.body.deviceLabel });
-    await sendNotificationToSingleSubscription(subscription, { title: "Test Bildirimi", body: "Telefon bildirimi bu cihaza ulaştıysa kurulum tamamdır.", url: "/", tag: "zabitanet-test" });
-    res.json({ ok: true });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Test bildirimi gönderilemedi." });
-  }
-});
-
 app.get("/api/complaints", async (req, res) => {
 
   try {
@@ -1930,13 +1865,13 @@ app.post("/api/complaints", async (req, res) => {
       topics: topicRows
     });
 
-    res.json(createdComplaint);
+    try {
+      await sendNotificationToAllDevices(buildComplaintNotificationPayload(createdComplaint));
+    } catch (notifyError) {
+      console.error("Şikayet bildirimi gönderilemedi:", notifyError);
+    }
 
-    setImmediate(function() {
-      sendNotificationToAllDevices(buildComplaintNotificationPayload(createdComplaint)).catch(function(notificationError) {
-        console.error("Şikayet bildirimi gönderilemedi:", notificationError);
-      });
-    });
+    res.json(createdComplaint);
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch (rollbackError) {}
     console.error(error);
@@ -2187,6 +2122,124 @@ app.delete("/api/complaint-files/:fileId", async (req, res) => {
   }
 });
 
+
+app.get("/api/notifications/vapid-public-key", (req, res) => {
+  res.json({ publicKey: VAPID_PUBLIC_KEY });
+});
+
+app.get("/api/notifications/status", async (req, res) => {
+  try {
+    const activeCount = await countActiveNotificationSubscriptions();
+    res.json({
+      activeCount,
+      vapidReady: Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY)
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Bildirim durumu alınamadı." });
+  }
+});
+
+app.post("/api/notifications/subscribe", async (req, res) => {
+  try {
+    const subscription = req.body ? req.body.subscription : null;
+    await saveNotificationSubscription(subscription, {
+      userAgent: req.headers["user-agent"] || "",
+      platform: req.body && req.body.platform ? req.body.platform : "web"
+    });
+    const activeCount = await countActiveNotificationSubscriptions();
+    res.json({ ok: true, activeCount });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message || "Abonelik kaydedilemedi." });
+  }
+});
+
+app.post("/api/notifications/unsubscribe", async (req, res) => {
+  try {
+    const subscription = req.body ? req.body.subscription : null;
+    await deactivateNotificationSubscription(subscription);
+    const activeCount = await countActiveNotificationSubscriptions();
+    res.json({ ok: true, activeCount });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Abonelik kaldırılamadı." });
+  }
+});
+
+app.post("/api/notifications/test", async (req, res) => {
+  try {
+    const subscription = req.body ? req.body.subscription : null;
+    if (!subscription || !subscription.endpoint) {
+      return res.status(400).json({ error: "Test için cihaz aboneliği bulunamadı." });
+    }
+
+    await saveNotificationSubscription(subscription, {
+      userAgent: req.headers["user-agent"] || "",
+      platform: req.body && req.body.platform ? req.body.platform : "web"
+    });
+
+    await sendNotificationToSubscription(subscription, {
+      title: "Test Bildirimi",
+      body: "Zabıta Yönetim Sistemi bildirim testi başarılı.",
+      tag: "test-notification",
+      url: "/"
+    });
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message || "Test bildirimi gönderilemedi." });
+  }
+});
+
+app.get("/manifest.webmanifest", (req, res) => {
+  res.type("application/manifest+json");
+  res.send(JSON.stringify({
+    name: "Zabıta Yönetim Sistemi",
+    short_name: "ZabıtaNet",
+    start_url: "/",
+    display: "standalone",
+    background_color: "#f4f7fb",
+    theme_color: "#163a63"
+  }));
+});
+
+app.get("/sw.js", (req, res) => {
+  res.type("application/javascript");
+  res.send(`self.addEventListener("install", function(event) { self.skipWaiting(); });
+self.addEventListener("activate", function(event) { event.waitUntil(self.clients.claim()); });
+self.addEventListener("push", function(event) {
+  var data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (error) {}
+  var title = data.title || "Zabıta Yönetim Sistemi";
+  var options = {
+    body: data.body || "Yeni bildirim",
+    tag: data.tag || "zabitanet-notification",
+    data: { url: data.url || "/", complaintId: data.data && data.data.complaintId ? data.data.complaintId : null },
+    renotify: true
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+self.addEventListener("notificationclick", function(event) {
+  event.notification.close();
+  var targetUrl = event.notification && event.notification.data && event.notification.data.url ? event.notification.data.url : "/";
+  event.waitUntil((async function() {
+    var allClients = await clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (var i = 0; i < allClients.length; i++) {
+      var client = allClients[i];
+      if (client && "focus" in client) {
+        try {
+          await client.focus();
+          if ("navigate" in client) await client.navigate(targetUrl);
+          return;
+        } catch (error) {}
+      }
+    }
+    if (clients.openWindow) return clients.openWindow(targetUrl);
+  })());
+});`);
+});
 
 app.get("/api/business-categories", async (req, res) => {
   try {
@@ -3545,6 +3598,9 @@ app.get("/businesses", (req, res) => {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#163a63" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <title>Zabıta Yönetim Sistemi - Firma Listesi</title>
   <style>
     :root {
@@ -3974,6 +4030,41 @@ app.get("/businesses", (req, res) => {
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('topicModal')">Kapat</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="notificationModal">
+    <div class="modal">
+      <div class="modal-header white">
+        <span>Bildirimler</span>
+        <button class="close-btn" onclick="closeModal('notificationModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Destek Durumu</label>
+            <div id="notificationSupportStatus" class="field-soft-note">Kontrol ediliyor...</div>
+          </div>
+          <div class="form-group">
+            <label>İzin Durumu</label>
+            <div id="notificationPermissionStatus" class="field-soft-note">Kontrol ediliyor...</div>
+          </div>
+          <div class="form-group">
+            <label>Kayıtlı Cihaz</label>
+            <div id="notificationDeviceCount" class="field-soft-note">Kontrol ediliyor...</div>
+          </div>
+          <div class="form-group full">
+            <label>Cihaz Notu</label>
+            <div id="notificationHint" class="field-soft-note">Telefonunuzda sistem bildirimi almak için bu cihazı kaydetmeniz gerekir.</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" type="button" onclick="refreshNotificationStatus()">Yenile</button>
+        <button class="btn btn-secondary" type="button" onclick="unsubscribeCurrentDevice()">Bu Cihazda Kapat</button>
+        <button class="btn btn-info" type="button" onclick="sendTestNotification()">Test Bildirimi Gönder</button>
+        <button class="btn btn-primary" type="button" onclick="enableNotifications()">Bildirimleri Aç</button>
       </div>
     </div>
   </div>
@@ -6850,7 +6941,6 @@ app.get("/", (req, res) => {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Zabıta Yönetim Sistemi - Şikayet Takip Sistemi</title>
-  <link rel="manifest" href="/manifest.webmanifest" />
   <style>
 
     :root {
@@ -7024,16 +7114,6 @@ app.get("/", (req, res) => {
     .alert-item.today .alert-item-meta { color: #7c6030; }
     @media (max-width: 1280px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     .alert-item .btn { padding: 8px 10px; font-size: 12px; box-shadow: none; }
-    .notification-chip { display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; font-weight:700; font-size:13px; }
-    .notification-chip.warn { background:#fff7ed; border-color:#fdba74; color:#c2410c; }
-    .notification-status-box { border:1px solid #dbe7f3; border-radius:16px; background:#f8fafc; padding:14px 16px; display:grid; gap:8px; }
-    .notification-status-title { font-size:14px; font-weight:700; color:#0f172a; }
-    .notification-status-text { font-size:13px; color:#475569; line-height:1.5; }
-    .notification-hint-list { margin:0; padding-left:18px; color:#475569; font-size:13px; line-height:1.6; }
-    .notification-hint-list li + li { margin-top:4px; }
-    .notification-actions { display:flex; flex-wrap:wrap; gap:10px; }
-    .notification-mini { font-size:12px; color:#64748b; }
-    @media (max-width: 980px) { .notification-actions { flex-direction:column; } }
     @media (max-width: 980px) { .main { padding: 16px; } .hero { padding: 14px; border-radius: 16px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; justify-content: space-between; flex-wrap: wrap; } .critical-grid, .stats-grid, .attachments-grid, .form-grid, .filters, .complaint-form-grid { grid-template-columns: 1fr; } .span-2, .span-4 { grid-column: 1 / -1; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .detail-table th { width: 150px; } }
     @media (max-width: 640px) { .main { padding: 14px; } .hero-title { font-size: 22px; } .panel-title { font-size: 17px; } .card, .critical-card { padding: 14px; } .section-actions { width: 100%; } .section-actions .btn { flex: 1; } .attachment-card { grid-template-columns: 1fr; } .attachment-thumb, .attachment-thumb-doc { width: 100%; height: 180px; } table { min-width: 760px; } .date-card { min-width: 0; width: 100%; } }
   </style>
@@ -7073,10 +7153,9 @@ app.get("/", (req, res) => {
           <div class="section-actions">
             <button class="btn btn-info" type="button">📊 İstatistikler</button>
             <button class="btn btn-secondary" type="button" onclick="openTopicManager()">🏷 Konu Başlıkları</button>
-            <button class="btn btn-secondary" type="button" onclick="openNotificationModal()">🔔 Bildirimler</button>
+            <button class="btn btn-secondary" type="button" onclick="openNotificationManager()">🔔 Bildirimler</button>
             <button class="btn btn-primary" type="button" onclick="openNewModal()">＋ Yeni Şikayet</button>
           </div>
-          <div id="notificationChip" class="notification-chip">🔔 Bildirim durumu hazırlanıyor...</div>
         </div>
       </section>
       <section class="critical-grid">
@@ -7359,40 +7438,6 @@ app.get("/", (req, res) => {
     </div>
   </div>
 
-  <div class="modal-overlay" id="notificationModal">
-    <div class="modal">
-      <div class="modal-header">
-        <div class="modal-title-wrap">
-          <div class="modal-icon">🔔</div>
-          <span>Telefon Bildirimi Durumu</span>
-        </div>
-        <button class="close-btn" type="button" onclick="closeModal('notificationModal')">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="notification-status-box">
-          <div class="notification-status-title" id="notificationModalTitle">Durum kontrol ediliyor...</div>
-          <div class="notification-status-text" id="notificationModalText">Bu cihazın telefon bildirimi desteği ve kayıt durumu birazdan burada görünecek.</div>
-          <div class="notification-mini" id="notificationMetaText">-</div>
-        </div>
-        <div class="notification-actions" style="margin-top:14px;">
-          <button class="btn btn-secondary" type="button" onclick="refreshNotificationStatus()">↻ Durumu Yenile</button>
-          <button class="btn btn-primary" type="button" id="enableNotificationsBtn" onclick="enableNotifications()">Bildirimleri Aç</button>
-          <button class="btn btn-secondary" type="button" id="testNotificationBtn" onclick="sendNotificationTest()">Test Bildirimi Gönder</button>
-          <button class="btn btn-danger" type="button" id="disableNotificationsBtn" onclick="disableNotifications()">Bu Cihazda Kapat</button>
-        </div>
-        <div class="field-soft-note" style="margin-top:14px;">Telefon bildirimi için cihazın bu siteye izin vermesi gerekir. Android tarafında Chrome ve site bildirimleri açık olmalı. iPhone tarafında en sağlıklı kullanım Safari ile <strong>Ana Ekrana Ekle</strong> yapıldıktan sonradır.</div>
-        <ul class="notification-hint-list" id="notificationHintList" style="margin-top:12px;">
-          <li>Android: Siteyi Chrome üzerinden açıp bildirim iznini verin.</li>
-          <li>iPhone: Safari ile açın, Paylaş → Ana Ekrana Ekle yapın, sonra ana ekrandan açın.</li>
-          <li>Test bildirimi butonu çalışıyorsa gerçek şikayet bildirimi de aynı cihaza düşer.</li>
-        </ul>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" type="button" onclick="closeModal('notificationModal')">Kapat</button>
-      </div>
-    </div>
-  </div>
-
   <script>
         var complaints = [];
     var BUCakNeighborhoods = ["Alaattin", "Atilla", "Barbaros", "Camii", "Cumhuriyet", "Çamlıca", "Çavuşlar", "Çukur", "Fatih", "Karayvatlar", "Konak", "Mehmet Akif", "Mimar Sinan", "Oğuzhan", "Onaç", "Pazar", "Sanayi", "Yeni", "Yetmişevler", "Yunus Emre"];
@@ -7402,249 +7447,12 @@ app.get("/", (req, res) => {
     var activeAlertType = "";
     var detailComplaintId = null;
     var complaintFiles = [];
-    var notificationClientState = {
-      serverEnabled: false,
-      serverReady: false,
-      vapidPublicKey: "",
-      activeDeviceCount: 0,
-      permission: "default",
-      platform: "",
-      standalone: false,
-      serviceWorkerSupported: false,
-      pushSupported: false,
-      registered: false,
-      endpoint: ""
-    };
+    var notificationRegistration = null;
 
     var fileCategories = {
       photo: ["Öncesi", "Sonrası", "Genel Saha Fotoğrafı"],
       document: ["Tutanak", "Ceza", "Tebligat", "Savunma", "Diğer Belge"]
     };
-
-    function detectNotificationPlatform() {
-      var ua = (navigator.userAgent || '').toLowerCase();
-      if (/iphone|ipad|ipod/.test(ua)) return 'ios';
-      if (/android/.test(ua)) return 'android';
-      return 'desktop';
-    }
-
-    function isStandaloneMode() {
-      return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-    }
-
-    function urlBase64ToUint8Array(base64String) {
-      var padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-      var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-      var rawData = window.atob(base64);
-      var outputArray = new Uint8Array(rawData.length);
-      for (var i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
-      return outputArray;
-    }
-
-    async function getNotificationServerConfig() {
-      var response = await fetch('/api/notifications/config');
-      if (!response.ok) throw new Error();
-      return response.json();
-    }
-
-    async function ensureNotificationServiceWorker() {
-      if (!('serviceWorker' in navigator)) return null;
-      return navigator.serviceWorker.register('/service-worker.js');
-    }
-
-    function getCurrentDeviceLabel() {
-      var platform = detectNotificationPlatform();
-      if (platform === 'ios') return 'iPhone / iPad';
-      if (platform === 'android') return 'Android Telefon';
-      return 'Web Tarayıcı';
-    }
-
-    async function getCurrentPushSubscription() {
-      if (!('serviceWorker' in navigator)) return null;
-      var registration = await ensureNotificationServiceWorker();
-      if (!registration || !registration.pushManager) return null;
-      return registration.pushManager.getSubscription();
-    }
-
-    function updateNotificationHintList() {
-      var list = document.getElementById('notificationHintList');
-      if (!list) return;
-      var html = '';
-      if (notificationClientState.platform === 'ios') {
-        html += '<li>iPhone için Safari kullanın ve bu siteyi <strong>Ana Ekrana Ekle</strong> ile ekleyin.</li>';
-        html += '<li>Sonra ana ekrandan açıp <strong>Bildirimleri Aç</strong> butonuna basın.</li>';
-      } else if (notificationClientState.platform === 'android') {
-        html += '<li>Android için Chrome kullanın ve site bildirim iznini açık tutun.</li>';
-        html += '<li>Telefon ayarlarında Chrome bildirimleri kapalıysa test bildirimi görünmez.</li>';
-      } else {
-        html += '<li>Bu cihaz destekliyorsa test bildirimi sistem düzeyinde görünür.</li>';
-      }
-      html += '<li>Test bildirimi çalışıyorsa yeni şikayet bildirimi de aynı cihaza düşer.</li>';
-      list.innerHTML = html;
-    }
-
-    function renderNotificationState() {
-      var chip = document.getElementById('notificationChip');
-      var title = document.getElementById('notificationModalTitle');
-      var text = document.getElementById('notificationModalText');
-      var meta = document.getElementById('notificationMetaText');
-      var enableBtn = document.getElementById('enableNotificationsBtn');
-      var testBtn = document.getElementById('testNotificationBtn');
-      var disableBtn = document.getElementById('disableNotificationsBtn');
-      if (!chip || !title || !text || !meta || !enableBtn || !testBtn || !disableBtn) return;
-
-      var stateText = 'Bildirim durumu belirsiz';
-      var detailText = 'Bu cihaz için bildirim desteği kontrol ediliyor.';
-      chip.className = 'notification-chip';
-
-      if (!notificationClientState.serverEnabled || !notificationClientState.serverReady) {
-        stateText = 'Telefon bildirimi sunucuda hazır değil';
-        detailText = 'Sunucu tarafındaki push ayarı hazır olmadığı için sadece tarayıcı içi uyarı çalışır.';
-        chip.classList.add('warn');
-      } else if (!notificationClientState.serviceWorkerSupported || !notificationClientState.pushSupported || !('Notification' in window)) {
-        stateText = 'Bu cihaz web push desteklemiyor';
-        detailText = 'Tarayıcı veya cihaz bu özelliği desteklemediği için sistem bildirimi alınamaz.';
-        chip.classList.add('warn');
-      } else if (notificationClientState.permission !== 'granted') {
-        stateText = 'Bildirim izni bekleniyor';
-        detailText = notificationClientState.platform === 'ios' && !notificationClientState.standalone
-          ? 'iPhone için önce siteyi Ana Ekrana Ekle, sonra ana ekrandan açıp izin ver.'
-          : 'Bu cihaz bildirim izni vermediği için yeni şikayetler telefona düşmez.';
-        chip.classList.add('warn');
-      } else if (notificationClientState.registered) {
-        stateText = 'Telefon bildirimi aktif';
-        detailText = 'Bu cihaz kayıtlı. Yeni şikayetler sistem bildirimi olarak düşebilir.';
-      } else {
-        stateText = 'İzin var ama cihaz kayıtlı değil';
-        detailText = 'İzin verilmiş görünüyor. Bildirimleri Aç butonuna basıp cihaz aboneliğini tamamlayın.';
-        chip.classList.add('warn');
-      }
-
-      chip.textContent = '🔔 ' + stateText;
-      title.textContent = stateText;
-      text.innerHTML = detailText;
-      meta.textContent = 'Cihaz: ' + getCurrentDeviceLabel() + ' • Kayıtlı cihaz: ' + String(notificationClientState.activeDeviceCount || 0) + ' • İzin: ' + String(notificationClientState.permission || 'default');
-      enableBtn.disabled = !notificationClientState.serverReady || (notificationClientState.permission === 'granted' && notificationClientState.registered);
-      testBtn.disabled = !(notificationClientState.serverReady && notificationClientState.permission === 'granted' && notificationClientState.registered);
-      disableBtn.disabled = !notificationClientState.registered;
-      updateNotificationHintList();
-    }
-
-    async function refreshNotificationStatus() {
-      notificationClientState.platform = detectNotificationPlatform();
-      notificationClientState.standalone = isStandaloneMode();
-      notificationClientState.serviceWorkerSupported = 'serviceWorker' in navigator;
-      notificationClientState.pushSupported = 'PushManager' in window;
-      notificationClientState.permission = 'Notification' in window ? Notification.permission : 'unsupported';
-      try {
-        var config = await getNotificationServerConfig();
-        notificationClientState.serverEnabled = !!config.enabled;
-        notificationClientState.serverReady = !!config.ready;
-        notificationClientState.vapidPublicKey = config.vapidPublicKey || '';
-        notificationClientState.activeDeviceCount = Number(config.activeDeviceCount || 0);
-      } catch (error) {
-        notificationClientState.serverEnabled = false;
-        notificationClientState.serverReady = false;
-        notificationClientState.vapidPublicKey = '';
-      }
-      try {
-        var subscription = await getCurrentPushSubscription();
-        notificationClientState.registered = !!subscription;
-        notificationClientState.endpoint = subscription && subscription.endpoint ? subscription.endpoint : '';
-      } catch (error) {
-        notificationClientState.registered = false;
-        notificationClientState.endpoint = '';
-      }
-      renderNotificationState();
-    }
-
-    function openNotificationModal() {
-      document.getElementById('notificationModal').classList.add('show');
-      refreshNotificationStatus();
-    }
-
-    async function enableNotifications() {
-      try {
-        await refreshNotificationStatus();
-        if (!notificationClientState.serverReady) return alert('Sunucu tarafındaki telefon bildirimi henüz hazır değil.');
-        if (!('Notification' in window)) return alert('Bu cihaz bildirim API desteği vermiyor.');
-        if (notificationClientState.platform === 'ios' && !notificationClientState.standalone) {
-          return alert('iPhone için önce Safari ile siteyi açıp Ana Ekrana Ekle yapın, sonra ana ekrandan tekrar girin.');
-        }
-        var permission = await Notification.requestPermission();
-        if (permission !== 'granted') {
-          await refreshNotificationStatus();
-          return alert('Bildirim izni verilmedi.');
-        }
-        var registration = await ensureNotificationServiceWorker();
-        if (!registration || !registration.pushManager) throw new Error('Push Manager hazır değil');
-        var subscription = await registration.pushManager.getSubscription();
-        if (!subscription) {
-          subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(notificationClientState.vapidPublicKey) });
-        }
-        var response = await fetch('/api/notifications/subscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subscription: subscription, platform: notificationClientState.platform, deviceLabel: getCurrentDeviceLabel() })
-        });
-        if (!response.ok) throw new Error();
-        showToast('Bu cihaz için telefon bildirimi açıldı.');
-        await refreshNotificationStatus();
-      } catch (error) {
-        console.error(error);
-        alert('Bildirim açılırken hata oluştu.');
-      }
-    }
-
-    async function sendNotificationTest() {
-      try {
-        var subscription = await getCurrentPushSubscription();
-        if (!subscription) return alert('Bu cihaz için aktif bildirim aboneliği bulunamadı.');
-        var response = await fetch('/api/notifications/test', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subscription: subscription, platform: notificationClientState.platform, deviceLabel: getCurrentDeviceLabel() })
-        });
-        var result = await response.json().catch(function() { return {}; });
-        if (!response.ok) throw new Error(result && result.error ? result.error : 'Test bildirimi gönderilemedi.');
-        showToast('Test bildirimi gönderildi. Telefon ekranını kontrol edin.');
-      } catch (error) {
-        console.error(error);
-        alert(error && error.message ? error.message : 'Test bildirimi gönderilemedi.');
-      }
-    }
-
-    async function disableNotifications() {
-      try {
-        var registration = await ensureNotificationServiceWorker();
-        var subscription = registration && registration.pushManager ? await registration.pushManager.getSubscription() : null;
-        var endpoint = subscription && subscription.endpoint ? subscription.endpoint : '';
-        if (subscription) await subscription.unsubscribe();
-        if (endpoint) {
-          await fetch('/api/notifications/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: endpoint }) });
-        }
-        showToast('Bu cihazdaki bildirim aboneliği kapatıldı.');
-        await refreshNotificationStatus();
-      } catch (error) {
-        console.error(error);
-        alert('Bildirim kapatılırken hata oluştu.');
-      }
-    }
-
-    function openComplaintFromUrlIfNeeded() {
-      try {
-        var params = new URLSearchParams(window.location.search || '');
-        var complaintId = Number(params.get('complaint'));
-        if (!Number.isInteger(complaintId) || complaintId <= 0) return;
-        var item = getComplaintById(complaintId);
-        if (!item) return;
-        openDetail(complaintId);
-        params.delete('complaint');
-        var nextSearch = params.toString();
-        var nextUrl = window.location.pathname + (nextSearch ? '?' + nextSearch : '') + window.location.hash;
-        window.history.replaceState({}, '', nextUrl);
-      } catch (error) {}
-    }
 
     function toggleSidebar(forceOpen) {
       var shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !document.body.classList.contains("sidebar-open");
@@ -7946,6 +7754,183 @@ app.get("/", (req, res) => {
       } catch (error) {
         alert("Ek silinemedi.");
       }
+    }
+
+    function isNotificationSupported() {
+      return !!(window.isSecureContext && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window);
+    }
+
+    function urlBase64ToUint8Array(base64String) {
+      var padding = '='.repeat((4 - base64String.length % 4) % 4);
+      var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      var rawData = window.atob(base64);
+      var outputArray = new Uint8Array(rawData.length);
+      for (var i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+      return outputArray;
+    }
+
+    function getPlatformName() {
+      var ua = navigator.userAgent || '';
+      if (/iphone|ipad|ipod/i.test(ua)) return 'ios';
+      if (/android/i.test(ua)) return 'android';
+      return 'web';
+    }
+
+    function getNotificationHintText() {
+      var platform = getPlatformName();
+      var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      if (platform === 'ios') {
+        if (!standalone) return 'iPhone için Safari > Paylaş > Ana Ekrana Ekle yapın. Sonra ana ekrandan açıp Bildirimleri Aç deyin.';
+        return 'iPhone için uygulamayı ana ekrandan açıp bildirim izni vermeniz gerekir.';
+      }
+      if (platform === 'android') {
+        return 'Android için Chrome site bildirimlerini ve telefon uygulama bildirimlerini açık tutun.';
+      }
+      return 'Bu cihazda tarayıcı bildirim izni verildiğinde yeni şikayetler sistem bildirimi olarak düşer.';
+    }
+
+    async function getServiceWorkerRegistration() {
+      if (!isNotificationSupported()) throw new Error('Bu cihazda web push desteklenmiyor.');
+      if (notificationRegistration) return notificationRegistration;
+      notificationRegistration = await navigator.serviceWorker.register('/sw.js');
+      return notificationRegistration;
+    }
+
+    async function getCurrentPushSubscription() {
+      var registration = await getServiceWorkerRegistration();
+      return registration.pushManager.getSubscription();
+    }
+
+    async function refreshNotificationStatus() {
+      var supportEl = document.getElementById('notificationSupportStatus');
+      var permissionEl = document.getElementById('notificationPermissionStatus');
+      var countEl = document.getElementById('notificationDeviceCount');
+      var hintEl = document.getElementById('notificationHint');
+      if (hintEl) hintEl.textContent = getNotificationHintText();
+
+      if (!supportEl || !permissionEl || !countEl) return;
+
+      supportEl.textContent = isNotificationSupported() ? 'Destekleniyor' : 'Bu cihazda desteklenmiyor';
+      permissionEl.textContent = Notification.permission === 'granted' ? 'İzin verildi' : (Notification.permission === 'denied' ? 'Engellendi' : 'Henüz izin verilmedi');
+      countEl.textContent = 'Yükleniyor...';
+
+      try {
+        var response = await fetch('/api/notifications/status');
+        var result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Durum alınamadı');
+        var subscription = null;
+        try { subscription = await getCurrentPushSubscription(); } catch (error) {}
+        countEl.textContent = String(result.activeCount || 0) + ' kayıtlı cihaz' + (subscription ? ' • Bu cihaz kayıtlı' : ' • Bu cihaz kayıtlı değil');
+      } catch (error) {
+        countEl.textContent = 'Durum alınamadı';
+      }
+    }
+
+    function openNotificationManager() {
+      openModal('notificationModal');
+      refreshNotificationStatus();
+    }
+
+    async function syncExistingNotificationSubscription() {
+      if (!isNotificationSupported() || Notification.permission !== 'granted') return;
+      try {
+        var subscription = await getCurrentPushSubscription();
+        if (!subscription) return;
+        await fetch('/api/notifications/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subscription: subscription, platform: getPlatformName() })
+        });
+      } catch (error) {}
+    }
+
+    async function enableNotifications() {
+      try {
+        if (!isNotificationSupported()) throw new Error('Bu cihazda web push desteklenmiyor.');
+        var permission = await Notification.requestPermission();
+        if (permission !== 'granted') throw new Error('Bildirim izni verilmedi.');
+        var registration = await getServiceWorkerRegistration();
+        var subscription = await registration.pushManager.getSubscription();
+        if (!subscription) {
+          var vapidResponse = await fetch('/api/notifications/vapid-public-key');
+          var vapidResult = await vapidResponse.json();
+          if (!vapidResponse.ok || !vapidResult.publicKey) throw new Error(vapidResult.error || 'Push anahtarı alınamadı.');
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidResult.publicKey)
+          });
+        }
+
+        var response = await fetch('/api/notifications/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subscription: subscription, platform: getPlatformName() })
+        });
+        var result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Cihaz kaydedilemedi.');
+        await refreshNotificationStatus();
+        alert('Bu cihaz bildirim almak için kaydedildi.');
+      } catch (error) {
+        alert(error.message || 'Bildirimler açılamadı.');
+      }
+    }
+
+    async function unsubscribeCurrentDevice() {
+      try {
+        if (!isNotificationSupported()) throw new Error('Bu cihazda web push desteklenmiyor.');
+        var registration = await getServiceWorkerRegistration();
+        var subscription = await registration.pushManager.getSubscription();
+        if (!subscription) {
+          await refreshNotificationStatus();
+          alert('Bu cihazda aktif bildirim aboneliği bulunmuyor.');
+          return;
+        }
+
+        await fetch('/api/notifications/unsubscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subscription: subscription })
+        });
+        await subscription.unsubscribe();
+        await refreshNotificationStatus();
+        alert('Bu cihaz için bildirimler kapatıldı.');
+      } catch (error) {
+        alert(error.message || 'Bildirim kapatılamadı.');
+      }
+    }
+
+    async function sendTestNotification() {
+      try {
+        if (!isNotificationSupported()) throw new Error('Bu cihazda web push desteklenmiyor.');
+        var subscription = await getCurrentPushSubscription();
+        if (!subscription) throw new Error('Önce Bildirimleri Aç ile bu cihazı kaydetmeniz gerekiyor.');
+        var response = await fetch('/api/notifications/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subscription: subscription, platform: getPlatformName() })
+        });
+        var result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Test bildirimi gönderilemedi.');
+        await refreshNotificationStatus();
+        alert('Test bildirimi gönderildi. Telefon ekranını kontrol edin.');
+      } catch (error) {
+        alert(error.message || 'Test bildirimi gönderilemedi.');
+      }
+    }
+
+    async function openComplaintFromQuery() {
+      try {
+        var params = new URLSearchParams(window.location.search || '');
+        var complaintId = Number(params.get('complaintId'));
+        if (!Number.isInteger(complaintId) || complaintId <= 0) return;
+        var item = getComplaintById(complaintId);
+        if (!item) return;
+        await openDetail(complaintId);
+        params.delete('complaintId');
+        var nextQuery = params.toString();
+        var nextUrl = window.location.pathname + (nextQuery ? '?' + nextQuery : '') + window.location.hash;
+        window.history.replaceState({}, document.title, nextUrl);
+      } catch (error) {}
     }
 
     function todayInputDate() {
@@ -8406,7 +8391,6 @@ function getTopicNames(item) {
         if (!response.ok) throw new Error();
         complaints = await response.json();
         renderTable();
-        openComplaintFromUrlIfNeeded();
       } catch (error) {
         alert("Kayıtlar yüklenemedi.");
       }
@@ -8748,6 +8732,8 @@ function getTopicNames(item) {
       populateComplaintNeighborhoodSelects("", "");
       await loadComplaintTopics();
       await loadComplaints();
+      await openComplaintFromQuery();
+      await syncExistingNotificationSubscription();
       await refreshNotificationStatus();
       document.getElementById("newStatus").addEventListener("change", toggleNewControlDate);
       document.getElementById("editStatus").addEventListener("change", toggleEditControlDate);
