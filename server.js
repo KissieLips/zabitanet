@@ -20,6 +20,7 @@ const pool = new Pool({
 registerMarketModule({ app, pool });
 
 const uploadsRoot = path.join(__dirname, "uploads");
+const assetsRoot = path.join(__dirname, "assets");
 const complaintUploadsRoot = path.join(uploadsRoot, "complaints");
 const businessUploadsRoot = path.join(uploadsRoot, "businesses");
 const businessInspectionUploadsRoot = path.join(uploadsRoot, "business-inspections");
@@ -379,6 +380,7 @@ function buildReverseGeocodeText(payload) {
 
 
 app.use("/uploads", express.static(uploadsRoot));
+app.use("/assets", express.static(assetsRoot));
 
 function toInputDate(value) {
   if (!value) return "";
@@ -3392,7 +3394,7 @@ app.get("/businesses", (req, res) => {
     body.sidebar-open { overflow: hidden; }
     body.sidebar-open .sidebar { transform: translateX(0); }
     .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-    .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.16); }
+    .brand-mark { width: 52px; height: 52px; border-radius: 14px; object-fit: cover; flex-shrink: 0; background: #ffffff; border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2); }
     .brand { font-size: 14px; font-weight: 700; line-height: 1.3; }
     .brand-sub { font-size: 10.5px; color: rgba(255,255,255,0.62); line-height: 1.45; }
     .nav-section-title { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.42); margin-top: 6px; padding: 0 2px; font-weight: 700; }
@@ -3524,7 +3526,7 @@ app.get("/businesses", (req, res) => {
   <div class="app">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-top">
-        <div class="brand-mark">ZB</div>
+        <img src="/assets/bucak-zabita-logo.jpg" alt="Bucak Belediyesi Zabıta Logosu" class="brand-mark" />
         <div>
           <div class="brand">Zabıta Yönetim Sistemi</div>
           <div class="brand-sub">Kurumsal takip ve saha yönetimi</div>
@@ -5065,7 +5067,7 @@ app.get("/businesses/:id", (req, res) => {
   <div class="app">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-top">
-        <div class="brand-mark">ZB</div>
+        <img src="/assets/bucak-zabita-logo.jpg" alt="Bucak Belediyesi Zabıta Logosu" class="brand-mark" />
         <div>
           <div class="brand">Zabıta Yönetim Sistemi</div>
           <div class="brand-sub">Kurumsal takip ve saha yönetimi</div>
@@ -6489,7 +6491,7 @@ app.get("/inspections", (req, res) => {
   <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
   <div class="app">
     <aside class="sidebar" id="sidebar">
-      <div class="sidebar-top"><div class="brand-mark">ZB</div><div><div class="brand">Zabıta Yönetim Sistemi</div><div class="brand-sub">Kurumsal takip ve saha yönetimi</div></div></div>
+      <div class="sidebar-top"><img src="/assets/bucak-zabita-logo.jpg" alt="Bucak Belediyesi Zabıta Logosu" class="brand-mark" /><div><div class="brand">Zabıta Yönetim Sistemi</div><div class="brand-sub">Kurumsal takip ve saha yönetimi</div></div></div>
       <div class="nav-section-title">Genel</div>
       <nav class="menu">
         <a href="/dashboard" class="menu-item"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
@@ -6677,7 +6679,1031 @@ app.get("/", (req, res) => {
 });
 
 app.get("/dashboard", (req, res) => {
-  res.send(`<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Zabıta Yönetim Sistemi - Ana Sayfa</title><style>:root {--bg:#f3f6fa;--panel:#fff;--panel-soft:#f8fafc;--line:#dbe3ee;--text:#17202f;--muted:#667085;--shadow:0 8px 24px rgba(15, 23, 42, 0.06);}*{box-sizing:border-box;}body{margin:0;font-family:Inter,"Segoe UI",Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;}a{text-decoration:none;color:inherit}.app{min-height:100vh;display:block}.sidebar{background:linear-gradient(180deg,#17324f 0%,#12283f 100%);color:#fff;padding:16px 12px;display:flex;flex-direction:column;gap:14px;position:fixed;left:0;top:0;bottom:0;width:min(84vw,320px);height:100vh;border-right:1px solid rgba(255,255,255,.06);z-index:60;transform:translateX(-100%);transition:transform .22s ease;box-shadow:0 20px 48px rgba(15,23,42,.18);overflow-y:auto}body.sidebar-open{overflow:hidden}body.sidebar-open .sidebar{transform:translateX(0)}.sidebar-top{display:flex;align-items:center;gap:9px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.1)}.brand-mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,rgba(245,179,1,1) 0%,rgba(255,217,102,1) 100%);color:#0f172a;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;box-shadow:0 8px 18px rgba(245,179,1,.16)}.brand{font-size:14px;font-weight:700;line-height:1.3;margin-bottom:2px;letter-spacing:-.01em}.brand-sub{font-size:10.5px;color:rgba(255,255,255,.62);line-height:1.45}.nav-section-title{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.42);margin-top:6px;margin-bottom:2px;padding:0 2px;font-weight:700}.menu{display:flex;flex-direction:column;gap:4px}.menu-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border-radius:10px;font-size:12.5px;color:rgba(255,255,255,.84);transition:.18s ease;border:1px solid transparent;font-weight:500}.menu-item:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.08)}.menu-item.active{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.1);font-weight:600}.menu-left{display:inline-flex;align-items:center;gap:8px;min-width:0}.sidebar-toggle{display:inline-flex;align-items:center;gap:8px;margin-bottom:14px;border:1px solid var(--line);background:#fff;color:var(--text);border-radius:12px;padding:12px 14px;font-size:14px;font-weight:700;box-shadow:var(--shadow);cursor:pointer}.sidebar-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);opacity:0;pointer-events:none;transition:opacity .18s ease;z-index:50}body.sidebar-open .sidebar-backdrop{opacity:1;pointer-events:auto}.main{padding:18px 20px;min-width:0}.hero,.panel,.stat-card{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}.hero{padding:18px;display:grid;grid-template-columns:minmax(0,1.45fr) minmax(280px,.9fr);gap:16px;margin-bottom:14px}.hero-copy{display:flex;flex-direction:column;gap:8px}.hero-badge{display:inline-flex;align-items:center;gap:8px;width:fit-content;background:#eef4ff;color:#1d4ed8;border:1px solid #dbe7ff;padding:7px 10px;border-radius:999px;font-size:11px;font-weight:700}.hero-title{margin:0;font-size:30px;line-height:1.1;letter-spacing:-.02em;font-weight:800}.hero-text{margin:0;color:var(--muted);font-size:13px;line-height:1.7;max-width:760px}.quick-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;padding:0 14px;border-radius:12px;border:1px solid transparent;cursor:pointer;font-size:13px;font-weight:700;transition:.18s ease}.btn-primary{background:#1d4ed8;color:#fff;border-color:#1d4ed8}.btn-secondary{background:#fff;color:#0f172a;border-color:var(--line)}.hero-side{display:grid;gap:12px;align-content:start}.info-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;display:grid;gap:10px}.info-top{display:flex;align-items:center;justify-content:space-between;gap:10px}.info-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700}.info-value{font-size:19px;font-weight:800;color:#0f172a}.status-row{display:flex;flex-wrap:wrap;gap:8px}.status-pill,.badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid transparent}.status-pill.blue,.badge.blue{background:#eef4ff;color:#1d4ed8;border-color:#dbe7ff}.status-pill.green,.badge.green{background:#dcfce7;color:#166534;border-color:#bbf7d0}.badge.red{background:#fee2e2;color:#b91c1c;border-color:#fecaca}.badge.yellow{background:#fef3c7;color:#92400e;border-color:#fde68a}.badge.gray{background:#e5e7eb;color:#374151;border-color:#d1d5db}.stats-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:14px}.stat-card{padding:14px;display:grid;gap:8px;min-height:132px}.stat-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.stat-icon{width:38px;height:38px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center;font-size:18px}.stat-icon.blue{background:#eef4ff}.stat-icon.yellow{background:#fff7d6}.stat-icon.red{background:#fee2e2}.stat-icon.green{background:#dcfce7}.stat-icon.gray{background:#f1f5f9}.stat-label{font-size:12px;color:var(--muted);font-weight:700}.stat-value{font-size:28px;font-weight:800;letter-spacing:-.03em}.stat-sub,.panel-note,.summary-text,.tiny-muted,.footer-note{font-size:12px;color:var(--muted);line-height:1.55}.layout-grid{display:grid;grid-template-columns:1.3fr .9fr;gap:14px;margin-bottom:14px}.panel{padding:16px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.panel-title{margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em}.module-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.module-card{border:1px solid var(--line);border-radius:16px;padding:14px;background:linear-gradient(180deg,#fff 0%,#fbfdff 100%);display:grid;gap:8px;transition:.18s ease}.module-top{display:flex;align-items:center;justify-content:space-between;gap:10px}.module-icon{width:40px;height:40px;border-radius:13px;background:#eef4ff;display:inline-flex;align-items:center;justify-content:center;font-size:18px}.module-name,.summary-title{font-size:13px;font-weight:800}.module-text{font-size:12.5px;line-height:1.65;color:var(--muted);min-height:58px}.module-link{font-size:12px;font-weight:700;color:#1d4ed8}.table-shell{overflow:auto;border:1px solid var(--line);border-radius:14px}table{width:100%;border-collapse:collapse;min-width:560px}th,td{padding:11px 12px;border-bottom:1px solid #edf2f7;font-size:12.5px;text-align:left;vertical-align:top}th{background:#f8fafc;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}.list-stack{display:grid;gap:10px}.alert-item,.summary-item{border:1px solid var(--line);border-radius:14px;padding:12px;background:#fbfdff;display:grid;gap:6px}.alert-item.warn{border-color:#fed7aa;background:#fffaf5}.alert-item.danger{border-color:#fecaca;background:#fff7f7}.alert-item.ok{border-color:#bbf7d0;background:#f6fff8}.summary-metric{font-size:24px;font-weight:800;letter-spacing:-.03em}.empty-state{border:1px dashed var(--line);border-radius:14px;padding:20px;text-align:center;color:var(--muted);background:#fafcff;font-size:12.5px}@media (max-width:1280px){.stats-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.hero{grid-template-columns:1fr}}@media (max-width:980px){.layout-grid{grid-template-columns:1fr}.module-grid{grid-template-columns:1fr}}@media (max-width:760px){.main{padding:14px}.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero-title{font-size:24px}table{min-width:0}}@media (max-width:560px){.stats-grid{grid-template-columns:1fr}.quick-actions{display:grid;grid-template-columns:1fr}.btn{width:100%}}</style></head><body><div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(false)"></div><div class="app"><aside class="sidebar" id="sidebar"><div class="sidebar-top"><div class="brand-mark">ZY</div><div><div class="brand">Zabıta Yönetim Sistemi</div><div class="brand-sub">Kurumsal takip ve saha yönetimi</div></div></div><nav class="menu"><div class="nav-section-title">Genel</div><a href="/dashboard" class="menu-item active"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a><div class="nav-section-title">Modüller</div><a href="/complaints" class="menu-item"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span></a><a href="/businesses" class="menu-item"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a><a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a><a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a><a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a></nav></aside><main class="main"><button class="sidebar-toggle" type="button" onclick="toggleSidebar()">☰ Menü</button><section class="hero"><div class="hero-copy"><div class="hero-badge">🏛️ Ana Yönetim Paneli</div><h1 class="hero-title">Zabıta Yönetim Sistemi Ana Sayfa</h1><p class="hero-text">Şikayetler, firmalar, denetimler, ruhsat işlemleri ve pazar yönetimine ilişkin özet bilgiler bu ekranda bir araya getirilir. Bekleyen işler, son hareketler ve modül kısayolları üzerinden günlük işlemler tek noktadan takip edilir.</p><div class="quick-actions"><a href="/complaints" class="btn btn-primary">💬 Şikayet Yönetimini Aç</a><a href="/businesses" class="btn btn-secondary">🏪 Firma Listesi</a><a href="/inspections" class="btn btn-secondary">🧾 Denetimler</a><a href="/licenses" class="btn btn-secondary">📜 Ruhsatlar</a><a href="/markets" class="btn btn-secondary">🧺 Pazar Yönetimi</a></div></div><div class="hero-side"><div class="info-card"><div class="info-top"><div><div class="info-label">Bugün</div><div class="info-value" id="todayText">-</div></div><span class="badge blue">Canlı özet</span></div><div class="status-row"><span class="status-pill blue" id="systemStatus">Sistem aktif</span><span class="status-pill green" id="recordStatus">Kayıtlar yükleniyor</span></div></div><div class="info-card"><div class="info-label">Günlük Odak</div><div class="summary-title" id="focusTitle">Bugünkü kontrol ve bekleyen işler</div><div class="summary-text" id="focusText">Veriler yüklenirken günlük özet hazırlanıyor.</div></div></div></section><section class="stats-grid"><div class="stat-card"><div class="stat-head"><div class="stat-label">Açık Şikayet</div><div class="stat-icon blue">💬</div></div><div class="stat-value" id="statOpenComplaints">0</div><div class="stat-sub">Kapatılmamış ve işlem bekleyen şikayet kayıtları</div></div><div class="stat-card"><div class="stat-head"><div class="stat-label">Bugün Kontrol</div><div class="stat-icon yellow">📅</div></div><div class="stat-value" id="statTodayControls">0</div><div class="stat-sub">Bugün kontrol veya takip günü olan kayıtlar</div></div><div class="stat-card"><div class="stat-head"><div class="stat-label">Geciken İş</div><div class="stat-icon red">⏰</div></div><div class="stat-value" id="statDelayed">0</div><div class="stat-sub">Süresi geçmiş kontrol veya sonuç bekleyen kayıtlar</div></div><div class="stat-card"><div class="stat-head"><div class="stat-label">Toplam Firma</div><div class="stat-icon green">🏪</div></div><div class="stat-value" id="statBusinesses">0</div><div class="stat-sub">Sistemde kayıtlı işyeri / firma sayısı</div></div><div class="stat-card"><div class="stat-head"><div class="stat-label">Bu Ay Denetim</div><div class="stat-icon blue">🧾</div></div><div class="stat-value" id="statMonthlyInspections">0</div><div class="stat-sub">Bu ay sisteme eklenen denetim sayısı</div></div><div class="stat-card"><div class="stat-head"><div class="stat-label">Aktif Ruhsat</div><div class="stat-icon gray">📜</div></div><div class="stat-value" id="statActiveLicenses">0</div><div class="stat-sub">Aktif durumda görünen ruhsat kayıtları</div></div></section><section class="layout-grid"><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Modüller</h2><p class="panel-note">Doğrudan erişim ve kısa açıklamalar</p></div></div><div class="module-grid"><a class="module-card" href="/complaints"><div class="module-top"><div class="module-icon">💬</div><span class="badge blue">Takip</span></div><div class="module-name">Şikayet Yönetimi</div><div class="module-text">Vatandaş başvuruları, konu başlıkları, mahalle bilgileri ve süreç durumları tek ekranda izlenir.</div><div class="module-link">Modülü aç →</div></a><a class="module-card" href="/businesses"><div class="module-top"><div class="module-icon">🏪</div><span class="badge green">Kayıt</span></div><div class="module-name">Firma Listesi</div><div class="module-text">İşyeri bilgileri, adres, konum, kategori ve firma durum kayıtları bu modülde tutulur.</div><div class="module-link">Modülü aç →</div></a><a class="module-card" href="/inspections"><div class="module-top"><div class="module-icon">🧾</div><span class="badge yellow">Saha</span></div><div class="module-name">Tüm Denetimler</div><div class="module-text">Yapılan denetimler, sonuçlar, süre verilen kayıtlar ve geçmiş denetim hareketleri görüntülenir.</div><div class="module-link">Modülü aç →</div></a><a class="module-card" href="/licenses"><div class="module-top"><div class="module-icon">📜</div><span class="badge gray">Ruhsat</span></div><div class="module-name">Ruhsat Yönetimi</div><div class="module-text">Ruhsat kayıtları, başvuru süreci, aktif kayıtlar ve firma eşleştirme işlemleri bu alanda yönetilir.</div><div class="module-link">Modülü aç →</div></a><a class="module-card" href="/markets"><div class="module-top"><div class="module-icon">🧺</div><span class="badge blue">Pazar</span></div><div class="module-name">Pazar Yönetimi</div><div class="module-text">Pazar yerleri, satıcı sayıları, bölümler ve günlük yoklama süreçleri için hızlı erişim sağlar.</div><div class="module-link">Modülü aç →</div></a><div class="module-card"><div class="module-top"><div class="module-icon">📌</div><span class="badge green">Özet</span></div><div class="module-name">Günlük Durum Özeti</div><div class="module-text">Son kayıtlar, kritik uyarılar ve modüller arası genel görünüm buradan takip edilir.</div><div class="module-link">Ana sayfa görünümü aktif</div></div></div></section><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Bekleyen İşler ve Uyarılar</h2><p class="panel-note">Öncelikli takip gerektiren kalemler</p></div></div><div class="list-stack" id="alertsList"><div class="empty-state">Uyarılar hazırlanıyor.</div></div><div class="footer-note">Not: Uyarılar mevcut kayıtlardaki tarih ve durum bilgilerine göre otomatik derlenir.</div></section></section><section class="layout-grid"><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Son Şikayetler</h2><p class="panel-note">Son eklenen şikayet kayıtları</p></div><a href="/complaints" class="badge blue">Tümünü Aç</a></div><div class="table-shell"><table><thead><tr><th>Şikayet No</th><th>Konu</th><th>Mahalle</th><th>Durum</th></tr></thead><tbody id="complaintTableBody"><tr><td colspan="4" class="tiny-muted">Veriler yükleniyor.</td></tr></tbody></table></div></section><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Pazar Özeti</h2><p class="panel-note">Aktif pazar ve satıcı durumu</p></div></div><div class="list-stack"><div class="summary-item"><div class="summary-title">Aktif pazar sayısı</div><div class="summary-metric" id="marketActiveCount">0</div><div class="summary-text">Sistemde aktif olarak işaretlenen pazarlar</div></div><div class="summary-item"><div class="summary-title">Toplam satıcı</div><div class="summary-metric" id="marketVendorCount">0</div><div class="summary-text">Pazar modülündeki atanmamış yerler hariç toplam satıcı kaydı</div></div><div class="summary-item"><div class="summary-title">Dolu bölüm yoğunluğu</div><div class="summary-text" id="marketDensityText">Veri yükleniyor.</div></div></div></section></section><section class="layout-grid"><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Son Denetimler</h2><p class="panel-note">En son eklenen denetim hareketleri</p></div><a href="/inspections" class="badge blue">Denetimleri Aç</a></div><div class="table-shell"><table><thead><tr><th>Firma</th><th>Denetim Tarihi</th><th>Sonuç</th><th>Durum</th></tr></thead><tbody id="inspectionTableBody"><tr><td colspan="4" class="tiny-muted">Veriler yükleniyor.</td></tr></tbody></table></div></section><section class="panel"><div class="panel-head"><div><h2 class="panel-title">Son Firmalar</h2><p class="panel-note">Listeye en son eklenen işyerleri</p></div><a href="/businesses" class="badge blue">Firmaları Aç</a></div><div class="table-shell"><table><thead><tr><th>Firma</th><th>Mahalle</th><th>Kategori</th></tr></thead><tbody id="businessTableBody"><tr><td colspan="3" class="tiny-muted">Veriler yükleniyor.</td></tr></tbody></table></div></section></section></main></div><script>var complaints=[];var businesses=[];var inspections=[];var licenses=[];var markets=[];var marketVendors=[];function toggleSidebar(forceOpen){var shouldOpen=typeof forceOpen==='boolean'?forceOpen:!document.body.classList.contains('sidebar-open');document.body.classList.toggle('sidebar-open',shouldOpen)}function formatTodayText(){return new Date().toLocaleDateString('tr-TR',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}function normalizeDateValue(value){if(!value)return '';return String(value).slice(0,10)}function getTodayIso(){var now=new Date();return now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0')}function getMonthPrefix(){var now=new Date();return now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')}function escapeHtml(value){return String(value||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}function getStatusBadge(status){var text=String(status||'');if(text==='Kapatıldı'||text==='Tamamlandı'||text==='Uygun')return '<span class="badge green">'+escapeHtml(text||'Tamamlandı')+'</span>';if(text==='Süre Verildi'||text==='Takipte')return '<span class="badge yellow">'+escapeHtml(text)+'</span>';if(text==='Uygunsuz'||text==='Gecikti')return '<span class="badge red">'+escapeHtml(text)+'</span>';return '<span class="badge blue">'+escapeHtml(text||'Açık')+'</span>'}function setCardValue(id,value){var node=document.getElementById(id);if(node)node.textContent=String(value)}function renderComplaintTable(){var body=document.getElementById('complaintTableBody');if(!body)return;if(!complaints.length){body.innerHTML='<tr><td colspan="4"><div class="empty-state">Henüz şikayet kaydı bulunmuyor.</div></td></tr>';return}body.innerHTML=complaints.slice(0,5).map(function(item){var subject=item.topicNames||item.subject||'-';return '<tr><td><strong>'+escapeHtml(item.no||'-')+'</strong><div class="tiny-muted">'+escapeHtml(item.displayDate||'')+'</div></td><td>'+escapeHtml(subject)+'</td><td>'+escapeHtml(item.neighborhood||'-')+'</td><td>'+getStatusBadge(item.status)+'</td></tr>'}).join('')}function renderInspectionTable(){var body=document.getElementById('inspectionTableBody');if(!body)return;if(!inspections.length){body.innerHTML='<tr><td colspan="4"><div class="empty-state">Henüz denetim kaydı bulunmuyor.</div></td></tr>';return}body.innerHTML=inspections.slice(0,5).map(function(item){return '<tr><td><strong>'+escapeHtml(item.tradeName||'-')+'</strong><div class="tiny-muted">'+escapeHtml(item.categoryName||'')+'</div></td><td>'+escapeHtml(item.inspectionDateText||'-')+'</td><td>'+escapeHtml(item.resultStatus||'-')+'</td><td>'+getStatusBadge(item.currentStatus||item.resultStatus||'Beklemede')+'</td></tr>'}).join('')}function renderBusinessTable(){var body=document.getElementById('businessTableBody');if(!body)return;if(!businesses.length){body.innerHTML='<tr><td colspan="3"><div class="empty-state">Henüz firma kaydı bulunmuyor.</div></td></tr>';return}body.innerHTML=businesses.slice(0,5).map(function(item){return '<tr><td><strong>'+escapeHtml(item.tradeName||'-')+'</strong><div class="tiny-muted">'+escapeHtml(item.ownerName||'')+'</div></td><td>'+escapeHtml(item.neighborhood||'-')+'</td><td>'+escapeHtml(item.categoryName||'-')+'</td></tr>'}).join('')}function renderAlerts(openComplaints,todayControls,delayedCount){var alerts=[];if(todayControls>0)alerts.push('<div class="alert-item warn"><div class="summary-title">Bugün kontrol gerektiren kayıtlar var</div><div class="summary-text">Bugün takip veya kontrol günü olan toplam <strong>'+todayControls+'</strong> kayıt bulundu.</div></div>');if(delayedCount>0)alerts.push('<div class="alert-item danger"><div class="summary-title">Geciken işlem bulundu</div><div class="summary-text">Kontrol tarihi geçmiş veya sonuçlandırılması gecikmiş toplam <strong>'+delayedCount+'</strong> kayıt tespit edildi.</div></div>');if(licenses.length){var pendingLicenses=licenses.filter(function(item){return String(item.processStatus||'')!=='Ruhsat Verildi'||String(item.recordStatus||'')!=='Aktif'}).length;if(pendingLicenses>0)alerts.push('<div class="alert-item warn"><div class="summary-title">Ruhsat süreci bekleyen kayıtlar var</div><div class="summary-text">Başvuru veya pasif durumda görünen toplam <strong>'+pendingLicenses+'</strong> ruhsat kaydı bulundu.</div></div>')}if(!alerts.length)alerts.push('<div class="alert-item ok"><div class="summary-title">Kritik uyarı bulunmuyor</div><div class="summary-text">Şu an ana göstergelerde acil müdahale gerektiren ek bir uyarı görünmüyor.</div></div>');var node=document.getElementById('alertsList');if(node)node.innerHTML=alerts.join('')}function updateFocusText(openComplaints,todayControls,delayedCount,monthlyInspections){var title=document.getElementById('focusTitle');var text=document.getElementById('focusText');if(!title||!text)return;if(delayedCount>0){title.textContent='Öncelikli olarak geciken kayıtlar kontrol edilmeli';text.textContent='Bugün '+todayControls+' kontrol kaydı ve '+delayedCount+' geciken iş görünüyor. Bu ay eklenen denetim sayısı '+monthlyInspections+'.'}else if(todayControls>0){title.textContent='Bugünkü kontrol listesi hazır';text.textContent='Bugün takip edilmesi gereken '+todayControls+' kayıt bulunuyor. Açık şikayet toplamı '+openComplaints+'.'}else{title.textContent='Genel görünüm dengeli';text.textContent='Açık şikayet toplamı '+openComplaints+', bu ay yapılan denetim sayısı '+monthlyInspections+'. Uyarı gerektiren kritik gecikme görünmüyor.'}}function updateMarketSummary(){var activeMarkets=markets.filter(function(item){return !!item.isActive}).length;var vendors=marketVendors.filter(function(item){return !item.isUnassigned}).length;var totalCapacity=0;var totalFilled=0;markets.forEach(function(market){(market.sections||[]).forEach(function(section){totalCapacity+=Number(section.capacity||0);totalFilled+=Number(section.vendorCount||0)})});var densityText='Tanımlı bölüm doluluk oranı hesaplanamadı.';if(totalCapacity>0)densityText='Toplam kapasite '+totalCapacity+' yer, dolu yer '+totalFilled+' adet. Doluluk oranı yaklaşık %'+Math.round(totalFilled/totalCapacity*100)+'.';setCardValue('marketActiveCount',activeMarkets);setCardValue('marketVendorCount',vendors);var densityNode=document.getElementById('marketDensityText');if(densityNode)densityNode.textContent=densityText}async function loadDashboardData(){var today=getTodayIso();var monthPrefix=getMonthPrefix();var responses=await Promise.all([fetch('/api/complaints'),fetch('/api/businesses'),fetch('/api/inspections'),fetch('/api/licenses'),fetch('/api/markets'),fetch('/api/markets/vendors')]);for(var i=0;i<responses.length;i++){if(!responses[i].ok)throw new Error('Ana sayfa verileri yüklenemedi.')}var results=await Promise.all(responses.map(function(response){return response.json()}));complaints=Array.isArray(results[0])?results[0]:[];businesses=Array.isArray(results[1])?results[1]:[];inspections=Array.isArray(results[2])?results[2]:[];licenses=Array.isArray(results[3])?results[3]:[];markets=Array.isArray(results[4])?results[4]:[];marketVendors=Array.isArray(results[5])?results[5]:[];var openComplaints=complaints.filter(function(item){return String(item.status||'').trim()!=='Kapatıldı'}).length;var complaintControlsToday=complaints.filter(function(item){return normalizeDateValue(item.controlDate)===today&&String(item.status||'').trim()!=='Kapatıldı'}).length;var inspectionControlsToday=inspections.filter(function(item){return normalizeDateValue(item.controlDate)===today&&String(item.currentStatus||'').trim()!=='Tamamlandı'}).length;var todayControls=complaintControlsToday+inspectionControlsToday;var delayedComplaints=complaints.filter(function(item){var controlDate=normalizeDateValue(item.controlDate);return controlDate&&controlDate<today&&String(item.status||'').trim()!=='Kapatıldı'}).length;var delayedInspections=inspections.filter(function(item){var controlDate=normalizeDateValue(item.controlDate);return controlDate&&controlDate<today&&String(item.currentStatus||'').trim()!=='Tamamlandı'}).length;var delayedCount=delayedComplaints+delayedInspections;var monthlyInspections=inspections.filter(function(item){return normalizeDateValue(item.inspectionDate).indexOf(monthPrefix)===0}).length;var activeLicenses=licenses.filter(function(item){return String(item.recordStatus||'')==='Aktif'&&String(item.processStatus||'')==='Ruhsat Verildi'}).length;setCardValue('statOpenComplaints',openComplaints);setCardValue('statTodayControls',todayControls);setCardValue('statDelayed',delayedCount);setCardValue('statBusinesses',businesses.length);setCardValue('statMonthlyInspections',monthlyInspections);setCardValue('statActiveLicenses',activeLicenses);var recordStatus=document.getElementById('recordStatus');if(recordStatus)recordStatus.textContent=(complaints.length+businesses.length+inspections.length+licenses.length)+' kayıt kalemi okundu';renderComplaintTable();renderInspectionTable();renderBusinessTable();renderAlerts(openComplaints,todayControls,delayedCount);updateFocusText(openComplaints,todayControls,delayedCount,monthlyInspections);updateMarketSummary()}document.addEventListener('DOMContentLoaded',async function(){document.getElementById('todayText').textContent=formatTodayText();document.addEventListener('keydown',function(event){if(event.key==='Escape'&&document.body.classList.contains('sidebar-open'))toggleSidebar(false)});try{await loadDashboardData()}catch(error){var focusTitle=document.getElementById('focusTitle');var focusText=document.getElementById('focusText');if(focusTitle)focusTitle.textContent='Veri yükleme hatası';if(focusText)focusText.textContent=error.message||'Ana sayfa verileri alınamadı.';var alerts=document.getElementById('alertsList');if(alerts)alerts.innerHTML='<div class="alert-item danger"><div class="summary-title">Ana sayfa verileri yüklenemedi</div><div class="summary-text">'+escapeHtml(error.message||'Bir hata oluştu.')+'</div></div>'}})</script></body></html>`);
+  res.send(`<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zabıta Yönetim Sistemi - Ana Sayfa</title>
+  <style>
+    :root {
+      --bg: #eff4fb;
+      --panel: #ffffff;
+      --line: #dbe4ef;
+      --text: #18212f;
+      --muted: #667085;
+      --navy: #143453;
+      --navy-2: #1f4c81;
+      --sky: #1b9ad7;
+      --sky-soft: #ebf8ff;
+      --orange: #f97316;
+      --green: #16a34a;
+      --yellow: #d97706;
+      --red: #dc2626;
+      --shadow: 0 12px 34px rgba(15, 23, 42, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, "Segoe UI", Arial, Helvetica, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(27,154,215,0.10), transparent 26%),
+        radial-gradient(circle at top right, rgba(249,115,22,0.08), transparent 22%),
+        var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    .app { min-height: 100vh; display: block; }
+    .sidebar {
+      background: linear-gradient(180deg, #17324f 0%, #12283f 100%);
+      color: #ffffff;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: min(84vw, 320px);
+      height: 100vh;
+      border-right: 1px solid rgba(255,255,255,0.06);
+      z-index: 60;
+      transform: translateX(-100%);
+      transition: transform 0.22s ease;
+      box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18);
+      overflow-y: auto;
+    }
+    body.sidebar-open { overflow: hidden; }
+    body.sidebar-open .sidebar { transform: translateX(0); }
+    .sidebar-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+      z-index: 50;
+    }
+    body.sidebar-open .sidebar-backdrop { opacity: 1; pointer-events: auto; }
+    .sidebar-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.10);
+    }
+    .brand-mark {
+      width: 56px;
+      height: 56px;
+      border-radius: 15px;
+      object-fit: cover;
+      flex-shrink: 0;
+      background: #ffffff;
+      border: 1px solid rgba(255,255,255,0.18);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2);
+    }
+    .brand { font-size: 14px; font-weight: 800; line-height: 1.3; margin-bottom: 2px; letter-spacing: -0.01em; }
+    .brand-sub { font-size: 10.5px; color: rgba(255,255,255,0.70); line-height: 1.45; }
+    .nav-section-title {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.42);
+      margin-top: 6px;
+      margin-bottom: 2px;
+      padding: 0 2px;
+      font-weight: 700;
+    }
+    .menu { display: flex; flex-direction: column; gap: 4px; }
+    .menu-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 11px;
+      border-radius: 11px;
+      font-size: 12.5px;
+      color: rgba(255,255,255,0.84);
+      transition: 0.18s ease;
+      border: 1px solid transparent;
+      font-weight: 500;
+    }
+    .menu-item:hover, .menu-item.active {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.10);
+      color: #ffffff;
+    }
+    .menu-left { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+    .sidebar-foot {
+      margin-top: auto;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 12px;
+      color: rgba(255,255,255,0.82);
+      font-size: 11.5px;
+      line-height: 1.6;
+    }
+    .sidebar-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      border: 1px solid var(--line);
+      background: #ffffff;
+      color: var(--text);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+    }
+    .main { padding: 18px 20px 24px; min-width: 0; }
+    .hero {
+      background: linear-gradient(135deg, rgba(20,52,83,0.98) 0%, rgba(31,76,129,0.98) 56%, rgba(27,154,215,0.95) 100%);
+      color: #ffffff;
+      border-radius: 24px;
+      padding: 22px;
+      box-shadow: 0 18px 44px rgba(20, 52, 83, 0.22);
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.95fr);
+      gap: 18px;
+      margin-bottom: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero:before {
+      content: "";
+      position: absolute;
+      width: 340px;
+      height: 340px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+      right: -110px;
+      top: -140px;
+    }
+    .hero-copy, .hero-side { position: relative; z-index: 1; }
+    .hero-copy { display: flex; flex-direction: column; gap: 12px; }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      background: rgba(255,255,255,0.14);
+      color: #ffffff;
+      border: 1px solid rgba(255,255,255,0.18);
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .hero-title {
+      margin: 0;
+      font-size: 34px;
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      font-weight: 800;
+      max-width: 760px;
+    }
+    .hero-text {
+      margin: 0;
+      color: rgba(255,255,255,0.86);
+      font-size: 13.5px;
+      line-height: 1.8;
+      max-width: 760px;
+    }
+    .hero-chip-row, .quick-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    .hero-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.14);
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 0 15px;
+      border-radius: 13px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      transition: 0.18s ease;
+    }
+    .btn-primary { background: #ffffff; color: #143453; }
+    .btn-soft { background: rgba(255,255,255,0.12); color: #ffffff; border-color: rgba(255,255,255,0.16); }
+    .hero-side { display: grid; gap: 14px; align-content: start; }
+    .logo-shell {
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 20px;
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+    .logo-row {
+      display: grid;
+      grid-template-columns: 120px minmax(0,1fr);
+      gap: 14px;
+      align-items: center;
+    }
+    .logo-main {
+      width: 120px;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 22px;
+      background: rgba(255,255,255,0.92);
+      box-shadow: 0 14px 34px rgba(12, 26, 45, 0.22);
+    }
+    .logo-inline {
+      max-width: 100%;
+      height: 72px;
+      object-fit: contain;
+      object-position: left center;
+      background: rgba(255,255,255,0.94);
+      border-radius: 16px;
+      padding: 8px 12px;
+    }
+    .logo-title { font-size: 18px; font-weight: 800; line-height: 1.3; }
+    .logo-text { font-size: 12.5px; line-height: 1.7; color: rgba(255,255,255,0.82); }
+    .hero-info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 12px;
+    }
+    .hero-info-card {
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 16px;
+      padding: 14px;
+      display: grid;
+      gap: 8px;
+    }
+    .hero-info-label {
+      font-size: 11px;
+      color: rgba(255,255,255,0.70);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+    }
+    .hero-info-value { font-size: 18px; font-weight: 800; }
+    .hero-info-note { font-size: 12px; color: rgba(255,255,255,0.76); line-height: 1.6; }
+    .section, .stat-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .stat-card {
+      padding: 16px;
+      display: grid;
+      gap: 10px;
+      min-height: 144px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card:before {
+      content: "";
+      position: absolute;
+      width: 84px;
+      height: 84px;
+      border-radius: 50%;
+      right: -20px;
+      top: -20px;
+      opacity: 0.8;
+    }
+    .stat-card.blue:before { background: rgba(59,130,246,0.10); }
+    .stat-card.sky:before { background: rgba(27,154,215,0.12); }
+    .stat-card.orange:before { background: rgba(249,115,22,0.12); }
+    .stat-card.green:before { background: rgba(34,197,94,0.12); }
+    .stat-card.yellow:before { background: rgba(245,158,11,0.14); }
+    .stat-card.red:before { background: rgba(239,68,68,0.12); }
+    .stat-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; position: relative; z-index: 1; }
+    .stat-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+    }
+    .stat-label { font-size: 12px; color: var(--muted); font-weight: 700; }
+    .stat-value { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; position: relative; z-index: 1; }
+    .stat-sub { font-size: 12px; color: var(--muted); line-height: 1.65; position: relative; z-index: 1; }
+    .layout-grid {
+      display: grid;
+      grid-template-columns: 1.28fr 0.92fr;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .stack { display: grid; gap: 14px; }
+    .section { padding: 16px; }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .section-title { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }
+    .section-note, .muted, .tiny-muted { font-size: 12px; color: var(--muted); line-height: 1.6; }
+    .module-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 12px;
+    }
+    .module-card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 15px;
+      background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+      display: grid;
+      gap: 10px;
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
+    }
+    .module-card:hover { transform: translateY(-2px); box-shadow: 0 14px 28px rgba(15,23,42,0.08); }
+    .module-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .module-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #eef7ff 0%, #f7fbff 100%);
+      border: 1px solid var(--line);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+    .module-name, .summary-title { font-size: 13px; font-weight: 800; }
+    .module-text { font-size: 12.5px; line-height: 1.7; color: var(--muted); min-height: 58px; }
+    .module-link { font-size: 12px; font-weight: 800; color: var(--navy-2); }
+    .table-shell {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #ffffff;
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 560px; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid #edf2f7; font-size: 12.5px; text-align: left; vertical-align: top; }
+    th { background: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    .list-stack { display: grid; gap: 10px; }
+    .alert-item, .summary-item {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 13px;
+      background: #fbfdff;
+      display: grid;
+      gap: 6px;
+    }
+    .alert-item.warn { border-color: #fed7aa; background: #fffaf5; }
+    .alert-item.danger { border-color: #fecaca; background: #fff7f7; }
+    .alert-item.ok { border-color: #bbf7d0; background: #f6fff8; }
+    .summary-metric { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid transparent;
+    }
+    .badge.blue { background: #eef4ff; color: #1d4ed8; border-color: #dbe7ff; }
+    .badge.green { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+    .badge.red { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+    .badge.yellow { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+    .badge.gray { background: #e5e7eb; color: #374151; border-color: #d1d5db; }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 10px;
+    }
+    .market-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .metric-card {
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 13px;
+      display: grid;
+      gap: 6px;
+    }
+    .metric-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+    .metric-value { font-size: 24px; font-weight: 800; }
+    .footer-note {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.7;
+      text-align: center;
+      padding: 2px 6px 10px;
+    }
+    .empty-state {
+      border: 1px dashed var(--line);
+      border-radius: 14px;
+      padding: 20px;
+      text-align: center;
+      color: var(--muted);
+      background: #fafcff;
+      font-size: 12.5px;
+    }
+    @media (max-width: 1280px) {
+      .stats-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+      .hero { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 980px) {
+      .layout-grid { grid-template-columns: 1fr; }
+      .module-grid, .summary-grid, .hero-info-grid { grid-template-columns: 1fr; }
+      .logo-row { grid-template-columns: 1fr; }
+      .logo-main { width: 100px; height: 100px; }
+    }
+    @media (max-width: 760px) {
+      .main { padding: 14px; }
+      .stats-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .hero-title { font-size: 28px; }
+      .market-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 520px) {
+      .stats-grid { grid-template-columns: 1fr; }
+      .hero { padding: 18px; }
+      .section { padding: 14px; }
+      .btn { width: 100%; }
+      .quick-actions { display: grid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <img src="/assets/bucak-zabita-logo.jpg" alt="Bucak Belediyesi Zabıta Logosu" class="brand-mark" />
+        <div>
+          <div class="brand">Zabıta Yönetim Sistemi</div>
+          <div class="brand-sub">Bucak Belediyesi · Kurumsal takip ve saha yönetimi</div>
+        </div>
+      </div>
+      <div class="nav-section-title">Genel</div>
+      <nav class="menu">
+        <a href="/dashboard" class="menu-item active"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
+        <div class="nav-section-title">Modüller</div>
+        <a href="/complaints" class="menu-item"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span></a>
+        <a href="/businesses" class="menu-item"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
+        <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
+        <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
+        <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
+      </nav>
+      <div class="sidebar-foot">
+        Ana sayfa; şikayet, denetim, firma, ruhsat ve pazar modüllerindeki güncel durumu tek ekranda gösterir. Kritik kayıtları buradan hızlıca takip edebilirsiniz.
+      </div>
+    </aside>
+
+    <main class="main">
+      <button class="sidebar-toggle" type="button" onclick="toggleSidebar()">☰ Modüller</button>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <span class="hero-badge">Bucak Belediyesi · Zabıta Müdürlüğü</span>
+          <h1 class="hero-title">Ana kontrol paneliyle tüm modülleri tek ekranda takip edin.</h1>
+          <p class="hero-text">Şikayetler, firmalar, denetimler, ruhsat kayıtları ve pazar işlemleri için güncel özetler bu sayfada toplanır. Bekleyen işleri öne çıkarır, son kayıtları listeler ve modüllere hızlı geçiş sağlar.</p>
+
+          <div class="hero-chip-row">
+            <span class="hero-chip">📍 Günlük saha akışı</span>
+            <span class="hero-chip">🧾 Son kayıtlar</span>
+            <span class="hero-chip">⚠️ Bekleyen işler</span>
+          </div>
+
+          <div class="quick-actions">
+            <a class="btn btn-primary" href="/complaints">💬 Şikayet Yönetimi</a>
+            <a class="btn btn-soft" href="/businesses">🏪 Firma Listesi</a>
+            <a class="btn btn-soft" href="/inspections">🧾 Denetimler</a>
+            <a class="btn btn-soft" href="/licenses">📜 Ruhsatlar</a>
+            <a class="btn btn-soft" href="/markets">🧺 Pazar Yönetimi</a>
+          </div>
+        </div>
+
+        <div class="hero-side">
+          <div class="logo-shell">
+            <div class="logo-row">
+              <img src="/assets/bucak-zabita-logo.jpg" alt="Zabıta Logosu" class="logo-main" />
+              <div>
+                <div class="logo-title">Bucak Belediyesi Zabıta Müdürlüğü</div>
+                <div class="logo-text">Kurumsal görünüm güçlendirildi. Belediye ve zabıta logoları ana sayfaya entegre edildi; giriş ekranı artık doğrudan bu kontrol paneli olarak açılır.</div>
+              </div>
+            </div>
+            <img src="/assets/bucak-belediyesi-logo.png" alt="Bucak Belediyesi Logosu" class="logo-inline" />
+          </div>
+
+          <div class="hero-info-grid">
+            <div class="hero-info-card">
+              <div class="hero-info-label">Bugün</div>
+              <div class="hero-info-value" id="todayText">-</div>
+              <div class="hero-info-note">Sistem tarihi otomatik olarak gösterilir.</div>
+            </div>
+            <div class="hero-info-card">
+              <div class="hero-info-label">Sistem durumu</div>
+              <div class="hero-info-value">Aktif</div>
+              <div class="hero-info-note" id="recordStatus">Veriler yükleniyor...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="stats-grid">
+        <article class="stat-card blue">
+          <div class="stat-top"><div class="stat-label">Açık Şikayet</div><div class="stat-icon">💬</div></div>
+          <div class="stat-value" id="statOpenComplaints">0</div>
+          <div class="stat-sub">İşlem süreci devam eden aktif şikayet kayıtları.</div>
+        </article>
+        <article class="stat-card sky">
+          <div class="stat-top"><div class="stat-label">Bugün Kontrol</div><div class="stat-icon">📍</div></div>
+          <div class="stat-value" id="statTodayControls">0</div>
+          <div class="stat-sub">Bugün takip veya saha kontrolü planlanan toplam kayıt.</div>
+        </article>
+        <article class="stat-card red">
+          <div class="stat-top"><div class="stat-label">Geciken İş</div><div class="stat-icon">⚠️</div></div>
+          <div class="stat-value" id="statDelayed">0</div>
+          <div class="stat-sub">Kontrol tarihi geçmiş veya sonuçlandırılması geciken işler.</div>
+        </article>
+        <article class="stat-card green">
+          <div class="stat-top"><div class="stat-label">Toplam Firma</div><div class="stat-icon">🏪</div></div>
+          <div class="stat-value" id="statBusinesses">0</div>
+          <div class="stat-sub">Sistemde kayıtlı aktif firma ve iş yeri sayısı.</div>
+        </article>
+        <article class="stat-card orange">
+          <div class="stat-top"><div class="stat-label">Bu Ay Denetim</div><div class="stat-icon">🧾</div></div>
+          <div class="stat-value" id="statMonthlyInspections">0</div>
+          <div class="stat-sub">Bulunulan ay içinde eklenmiş denetim kayıtları.</div>
+        </article>
+        <article class="stat-card yellow">
+          <div class="stat-top"><div class="stat-label">Aktif Ruhsat</div><div class="stat-icon">📜</div></div>
+          <div class="stat-value" id="statActiveLicenses">0</div>
+          <div class="stat-sub">Aktif ve ruhsat verilmiş durumdaki kayıtlar.</div>
+        </article>
+      </section>
+
+      <section class="layout-grid">
+        <div class="stack">
+          <section class="section">
+            <div class="section-head">
+              <h2 class="section-title">Modüller</h2>
+              <div class="section-note">En sık kullanılan ekranlara hızlı erişim</div>
+            </div>
+            <div class="module-grid">
+              <a class="module-card" href="/complaints">
+                <div class="module-top"><span class="module-icon">💬</span><span class="badge blue">Aktif</span></div>
+                <div class="module-name">Şikayet Yönetimi</div>
+                <div class="module-text">Vatandaş başvuruları, konu başlıkları, mahalle bilgileri ve süreç durumu bu modülden takip edilir.</div>
+                <div class="module-link">Modülü aç →</div>
+              </a>
+              <a class="module-card" href="/businesses">
+                <div class="module-top"><span class="module-icon">🏪</span><span class="badge blue">Firma</span></div>
+                <div class="module-name">Firma Listesi</div>
+                <div class="module-text">İş yeri adresleri, firma sahipleri, kategori bilgileri ve işletme kayıtları burada tutulur.</div>
+                <div class="module-link">Modülü aç →</div>
+              </a>
+              <a class="module-card" href="/inspections">
+                <div class="module-top"><span class="module-icon">🧾</span><span class="badge blue">Denetim</span></div>
+                <div class="module-name">Tüm Denetimler</div>
+                <div class="module-text">Yapılan denetimler, sonuçlar, kontrol tarihleri ve geçmiş kayıtlar bu ekrandan görüntülenir.</div>
+                <div class="module-link">Modülü aç →</div>
+              </a>
+              <a class="module-card" href="/licenses">
+                <div class="module-top"><span class="module-icon">📜</span><span class="badge blue">Ruhsat</span></div>
+                <div class="module-name">Ruhsat Yönetimi</div>
+                <div class="module-text">Ruhsat süreçleri, eşleşme durumu ve başvuru kayıtları bu modülde yönetilir.</div>
+                <div class="module-link">Modülü aç →</div>
+              </a>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h2 class="section-title">Son Eklenen Şikayetler</h2>
+              <a class="section-note" href="/complaints">Tümünü görüntüle</a>
+            </div>
+            <div class="table-shell">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Şikayet No</th>
+                    <th>Konu</th>
+                    <th>Mahalle</th>
+                    <th>Durum</th>
+                  </tr>
+                </thead>
+                <tbody id="complaintTableBody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h2 class="section-title">Son Denetimler</h2>
+              <a class="section-note" href="/inspections">Denetim ekranına git</a>
+            </div>
+            <div class="table-shell">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Firma</th>
+                    <th>Tarih</th>
+                    <th>Sonuç</th>
+                    <th>Durum</th>
+                  </tr>
+                </thead>
+                <tbody id="inspectionTableBody"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <div class="stack">
+          <section class="section">
+            <div class="section-head">
+              <h2 class="section-title">Bekleyen İşler ve Uyarılar</h2>
+              <div class="section-note">Öncelikli kayıtlar otomatik öne çıkarılır</div>
+            </div>
+            <div class="list-stack" id="alertsList"></div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h2 class="section-title">Günün Odağı</h2>
+              <div class="section-note">Anlık özet</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-title" id="focusTitle">Veriler hazırlanıyor</div>
+              <div class="muted" id="focusText">Ana sayfa özet bilgileri yükleniyor.</div>
+            </div>
+            <div class="summary-grid" style="margin-top:10px;">
+              <div class="summary-item">
+                <div class="section-note">Modül sayısı</div>
+                <div class="summary-metric">5</div>
+                <div class="muted">Aktif yönetim ekranı hazır durumda.</div>
+              </div>
+              <div class="summary-item">
+                <div class="section-note">Ana görünüm</div>
+                <div class="summary-metric">Tek Panel</div>
+                <div class="muted">Girişte doğrudan dashboard açılır.</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h2 class="section-title">Son Güncellenen Firmalar</h2>
+              <a class="section-note" href="/businesses">Firma listesine git</a>
+            </div>
+            <div class="table-shell">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Firma</th>
+                    <th>Mahalle</th>
+                    <th>Kategori</th>
+                  </tr>
+                </thead>
+                <tbody id="businessTableBody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h2 class="section-title">Pazar Özeti</h2>
+              <a class="section-note" href="/markets">Pazar modülüne git</a>
+            </div>
+            <div class="market-grid">
+              <div class="metric-card">
+                <div class="metric-label">Aktif pazar</div>
+                <div class="metric-value" id="marketActiveCount">0</div>
+                <div class="muted">Sistemde aktif görünen pazar sayısı.</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">Kayıtlı satıcı</div>
+                <div class="metric-value" id="marketVendorCount">0</div>
+                <div class="muted">Bölüm atanmış satıcı toplamı.</div>
+              </div>
+            </div>
+            <div class="summary-item" style="margin-top:10px;">
+              <div class="summary-title">Doluluk özeti</div>
+              <div class="muted" id="marketDensityText">Pazar verileri yükleniyor.</div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <div class="footer-note">Bucak Belediyesi Zabıta Yönetim Sistemi · Ana sayfa görünümü belediye ve zabıta logoları ile güçlendirilmiş dashboard düzeninde hazırlanmıştır.</div>
+    </main>
+  </div>
+
+  <script>
+    var complaints = [];
+    var businesses = [];
+    var inspections = [];
+    var licenses = [];
+    var markets = [];
+    var marketVendors = [];
+
+    function toggleSidebar(force) {
+      var shouldOpen = typeof force === "boolean" ? force : !document.body.classList.contains("sidebar-open");
+      document.body.classList.toggle("sidebar-open", shouldOpen);
+    }
+
+    function formatTodayText() {
+      try {
+        return new Intl.DateTimeFormat("tr-TR", {
+          weekday: "long",
+          day: "2-digit",
+          month: "long",
+          year: "numeric"
+        }).format(new Date());
+      } catch (error) {
+        return new Date().toLocaleDateString("tr-TR");
+      }
+    }
+
+    function getTodayIso() {
+      var now = new Date();
+      return now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+    }
+
+    function getMonthPrefix() {
+      var now = new Date();
+      return now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function normalizeDateValue(value) {
+      if (!value) return "";
+      if (typeof value === "string") {
+        var trimmed = value.trim();
+        if (!trimmed) return "";
+        if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10);
+      }
+      var date = new Date(value);
+      if (isNaN(date.getTime())) return "";
+      return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+    }
+
+    function formatDateDisplay(value) {
+      var normalized = normalizeDateValue(value);
+      if (!normalized) return "";
+      var parts = normalized.split("-");
+      return parts[2] + "." + parts[1] + "." + parts[0];
+    }
+
+    function setCardValue(id, value) {
+      var node = document.getElementById(id);
+      if (node) node.textContent = String(value == null ? 0 : value);
+    }
+
+    function getStatusBadge(status) {
+      var value = String(status || "Beklemede").trim() || "Beklemede";
+      var klass = "gray";
+      if (value === "Kapatıldı" || value === "Tamamlandı" || value === "Ruhsat Verildi") klass = "green";
+      else if (value === "İşlemde" || value === "Devam Ediyor" || value === "Kontrol Edilecek") klass = "blue";
+      else if (value === "Acil" || value === "Gecikti") klass = "red";
+      else if (value === "Beklemede" || value === "İncelemede") klass = "yellow";
+      return '<span class="badge ' + klass + '">' + escapeHtml(value) + '</span>';
+    }
+
+    function renderComplaintTable() {
+      var body = document.getElementById("complaintTableBody");
+      if (!body) return;
+      if (!complaints.length) {
+        body.innerHTML = '<tr><td colspan="4"><div class="empty-state">Henüz şikayet kaydı bulunmuyor.</div></td></tr>';
+        return;
+      }
+      body.innerHTML = complaints.slice(0, 5).map(function(item) {
+        var subject = item.topicNames || item.subject || "-";
+        return '<tr>' +
+          '<td><strong>' + escapeHtml(item.no || item.complaintNo || item.complaint_no || "-") + '</strong><div class="tiny-muted">' + escapeHtml(formatDateDisplay(item.createdAt || item.created_at || item.date || item.controlDate)) + '</div></td>' +
+          '<td>' + escapeHtml(subject) + '</td>' +
+          '<td>' + escapeHtml(item.neighborhood || item.mahalle || "-") + '</td>' +
+          '<td>' + getStatusBadge(item.status) + '</td>' +
+          '</tr>';
+      }).join("");
+    }
+
+    function renderInspectionTable() {
+      var body = document.getElementById("inspectionTableBody");
+      if (!body) return;
+      if (!inspections.length) {
+        body.innerHTML = '<tr><td colspan="4"><div class="empty-state">Henüz denetim kaydı bulunmuyor.</div></td></tr>';
+        return;
+      }
+      body.innerHTML = inspections.slice(0, 5).map(function(item) {
+        return '<tr>' +
+          '<td><strong>' + escapeHtml(item.tradeName || item.trade_name || item.businessName || "-") + '</strong><div class="tiny-muted">' + escapeHtml(item.categoryName || item.category_name || "") + '</div></td>' +
+          '<td>' + escapeHtml(formatDateDisplay(item.inspectionDate || item.inspection_date) || "-") + '</td>' +
+          '<td>' + escapeHtml(item.resultStatus || item.result_status || item.currentStatus || item.current_status || "-") + '</td>' +
+          '<td>' + getStatusBadge(item.currentStatus || item.current_status || item.resultStatus || item.result_status || "Beklemede") + '</td>' +
+          '</tr>';
+      }).join("");
+    }
+
+    function renderBusinessTable() {
+      var body = document.getElementById("businessTableBody");
+      if (!body) return;
+      if (!businesses.length) {
+        body.innerHTML = '<tr><td colspan="3"><div class="empty-state">Henüz firma kaydı bulunmuyor.</div></td></tr>';
+        return;
+      }
+      body.innerHTML = businesses.slice(0, 5).map(function(item) {
+        return '<tr>' +
+          '<td><strong>' + escapeHtml(item.tradeName || item.trade_name || "-") + '</strong><div class="tiny-muted">' + escapeHtml(item.ownerName || item.owner_name || "") + '</div></td>' +
+          '<td>' + escapeHtml(item.neighborhood || item.mahalle || "-") + '</td>' +
+          '<td>' + escapeHtml(item.categoryName || item.category_name || "-") + '</td>' +
+          '</tr>';
+      }).join("");
+    }
+
+    function renderAlerts(openComplaints, todayControls, delayedCount) {
+      var alerts = [];
+      if (todayControls > 0) {
+        alerts.push('<div class="alert-item warn"><div class="summary-title">Bugün kontrol gerektiren kayıtlar var</div><div class="muted">Bugün takip veya saha kontrolü gereken toplam <strong>' + todayControls + '</strong> kayıt bulundu.</div></div>');
+      }
+      if (delayedCount > 0) {
+        alerts.push('<div class="alert-item danger"><div class="summary-title">Geciken işlem bulundu</div><div class="muted">Kontrol tarihi geçmiş veya sonuçlandırılması gecikmiş toplam <strong>' + delayedCount + '</strong> kayıt tespit edildi.</div></div>');
+      }
+      if (licenses.length) {
+        var pendingLicenses = licenses.filter(function(item) {
+          return String(item.processStatus || item.process_status || "") !== "Ruhsat Verildi" || String(item.recordStatus || item.record_status || "") !== "Aktif";
+        }).length;
+        if (pendingLicenses > 0) {
+          alerts.push('<div class="alert-item warn"><div class="summary-title">Ruhsat süreci bekleyen kayıtlar var</div><div class="muted">Başvuru veya pasif durumda görünen toplam <strong>' + pendingLicenses + '</strong> ruhsat kaydı bulundu.</div></div>');
+        }
+      }
+      if (!alerts.length) {
+        alerts.push('<div class="alert-item ok"><div class="summary-title">Kritik uyarı bulunmuyor</div><div class="muted">Şu an ana göstergelerde acil müdahale gerektiren ek bir uyarı görünmüyor.</div></div>');
+      }
+      var node = document.getElementById("alertsList");
+      if (node) node.innerHTML = alerts.join("");
+    }
+
+    function updateFocusText(openComplaints, todayControls, delayedCount, monthlyInspections) {
+      var title = document.getElementById("focusTitle");
+      var text = document.getElementById("focusText");
+      if (!title || !text) return;
+      if (delayedCount > 0) {
+        title.textContent = "Öncelikli olarak geciken kayıtlar kontrol edilmeli";
+        text.textContent = "Bugün " + todayControls + " kontrol kaydı ve " + delayedCount + " geciken iş görünüyor. Bu ay eklenen denetim sayısı " + monthlyInspections + ".";
+      } else if (todayControls > 0) {
+        title.textContent = "Bugünkü kontrol listesi hazır";
+        text.textContent = "Bugün takip edilmesi gereken " + todayControls + " kayıt bulunuyor. Açık şikayet toplamı " + openComplaints + ".";
+      } else {
+        title.textContent = "Genel görünüm dengeli";
+        text.textContent = "Açık şikayet toplamı " + openComplaints + ", bu ay yapılan denetim sayısı " + monthlyInspections + ". Uyarı gerektiren kritik gecikme görünmüyor.";
+      }
+    }
+
+    function updateMarketSummary() {
+      var activeMarkets = markets.filter(function(item) { return !!item.isActive; }).length;
+      var vendors = marketVendors.filter(function(item) { return !item.isUnassigned; }).length;
+      var totalCapacity = 0;
+      var totalFilled = 0;
+      markets.forEach(function(market) {
+        (market.sections || []).forEach(function(section) {
+          totalCapacity += Number(section.capacity || 0);
+          totalFilled += Number(section.vendorCount || 0);
+        });
+      });
+      var densityText = "Tanımlı bölüm doluluk oranı hesaplanamadı.";
+      if (totalCapacity > 0) {
+        densityText = "Toplam kapasite " + totalCapacity + " yer, dolu yer " + totalFilled + " adet. Doluluk oranı yaklaşık %" + Math.round(totalFilled / totalCapacity * 100) + ".";
+      }
+      setCardValue("marketActiveCount", activeMarkets);
+      setCardValue("marketVendorCount", vendors);
+      var densityNode = document.getElementById("marketDensityText");
+      if (densityNode) densityNode.textContent = densityText;
+    }
+
+    async function loadDashboardData() {
+      var today = getTodayIso();
+      var monthPrefix = getMonthPrefix();
+      var responses = await Promise.all([
+        fetch("/api/complaints"),
+        fetch("/api/businesses"),
+        fetch("/api/inspections"),
+        fetch("/api/licenses"),
+        fetch("/api/markets"),
+        fetch("/api/markets/vendors")
+      ]);
+
+      for (var i = 0; i < responses.length; i++) {
+        if (!responses[i].ok) throw new Error("Ana sayfa verileri yüklenemedi.");
+      }
+
+      var results = await Promise.all(responses.map(function(response) { return response.json(); }));
+      complaints = Array.isArray(results[0]) ? results[0] : [];
+      businesses = Array.isArray(results[1]) ? results[1] : [];
+      inspections = Array.isArray(results[2]) ? results[2] : [];
+      licenses = Array.isArray(results[3]) ? results[3] : [];
+      markets = Array.isArray(results[4]) ? results[4] : [];
+      marketVendors = Array.isArray(results[5]) ? results[5] : [];
+
+      var openComplaints = complaints.filter(function(item) {
+        return String(item.status || "").trim() !== "Kapatıldı";
+      }).length;
+      var complaintControlsToday = complaints.filter(function(item) {
+        return normalizeDateValue(item.controlDate || item.control_date) === today && String(item.status || "").trim() !== "Kapatıldı";
+      }).length;
+      var inspectionControlsToday = inspections.filter(function(item) {
+        return normalizeDateValue(item.controlDate || item.control_date) === today && String(item.currentStatus || item.current_status || "").trim() !== "Tamamlandı";
+      }).length;
+      var todayControls = complaintControlsToday + inspectionControlsToday;
+      var delayedComplaints = complaints.filter(function(item) {
+        var controlDate = normalizeDateValue(item.controlDate || item.control_date);
+        return controlDate && controlDate < today && String(item.status || "").trim() !== "Kapatıldı";
+      }).length;
+      var delayedInspections = inspections.filter(function(item) {
+        var controlDate = normalizeDateValue(item.controlDate || item.control_date);
+        return controlDate && controlDate < today && String(item.currentStatus || item.current_status || "").trim() !== "Tamamlandı";
+      }).length;
+      var delayedCount = delayedComplaints + delayedInspections;
+      var monthlyInspections = inspections.filter(function(item) {
+        return normalizeDateValue(item.inspectionDate || item.inspection_date).indexOf(monthPrefix) === 0;
+      }).length;
+      var activeLicenses = licenses.filter(function(item) {
+        return String(item.recordStatus || item.record_status || "") === "Aktif" && String(item.processStatus || item.process_status || "") === "Ruhsat Verildi";
+      }).length;
+
+      setCardValue("statOpenComplaints", openComplaints);
+      setCardValue("statTodayControls", todayControls);
+      setCardValue("statDelayed", delayedCount);
+      setCardValue("statBusinesses", businesses.length);
+      setCardValue("statMonthlyInspections", monthlyInspections);
+      setCardValue("statActiveLicenses", activeLicenses);
+
+      var recordStatus = document.getElementById("recordStatus");
+      if (recordStatus) {
+        recordStatus.textContent = (complaints.length + businesses.length + inspections.length + licenses.length) + " kayıt kalemi okundu";
+      }
+
+      renderComplaintTable();
+      renderInspectionTable();
+      renderBusinessTable();
+      renderAlerts(openComplaints, todayControls, delayedCount);
+      updateFocusText(openComplaints, todayControls, delayedCount, monthlyInspections);
+      updateMarketSummary();
+    }
+
+    document.addEventListener("DOMContentLoaded", async function() {
+      var todayText = document.getElementById("todayText");
+      if (todayText) todayText.textContent = formatTodayText();
+      document.addEventListener("keydown", function(event) {
+        if (event.key === "Escape" && document.body.classList.contains("sidebar-open")) toggleSidebar(false);
+      });
+      try {
+        await loadDashboardData();
+      } catch (error) {
+        var focusTitle = document.getElementById("focusTitle");
+        var focusText = document.getElementById("focusText");
+        if (focusTitle) focusTitle.textContent = "Veri yükleme hatası";
+        if (focusText) focusText.textContent = error.message || "Ana sayfa verileri alınamadı.";
+        var alerts = document.getElementById("alertsList");
+        if (alerts) {
+          alerts.innerHTML = '<div class="alert-item danger"><div class="summary-title">Ana sayfa verileri yüklenemedi</div><div class="muted">' + escapeHtml(error.message || "Bir hata oluştu.") + '</div></div>';
+        }
+      }
+    });
+  </script>
+</body>
+</html>`);
 });
 
 app.get("/complaints", (req, res) => {
@@ -6712,7 +7738,7 @@ app.get("/complaints", (req, res) => {
     body.sidebar-open { overflow: hidden; }
     body.sidebar-open .sidebar { transform: translateX(0); }
     .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-    .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.16); }
+    .brand-mark { width: 52px; height: 52px; border-radius: 14px; object-fit: cover; flex-shrink: 0; background: #ffffff; border: 1px solid rgba(255,255,255,0.18); box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2); }
     .brand { font-size: 14px; font-weight: 700; line-height: 1.3; margin-bottom: 2px; letter-spacing: -0.01em; }
     .brand-sub { font-size: 10.5px; color: rgba(255,255,255,0.62); line-height: 1.45; }
     .menu { display: flex; flex-direction: column; gap: 4px; }
