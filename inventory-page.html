@@ -57,7 +57,7 @@
     .stat-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
     .stat-value { font-size: 22px; font-weight: 700; line-height: 1.05; }
     .stat-sub { font-size: 12px; color: var(--muted); }
-    .page-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(340px, 0.95fr); gap: 12px; align-items: start; }
+    .page-grid { display: grid; grid-template-columns: minmax(0, 2.45fr) minmax(260px, 0.72fr); gap: 12px; align-items: start; }
     .panel { padding: 16px; margin-bottom: 12px; }
     .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
     .panel-title { font-size: 15px; font-weight: 700; }
@@ -66,9 +66,9 @@
     input[type="text"], input[type="number"], select, textarea { width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; background: #fff; color: var(--text); }
     input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
     textarea { resize: vertical; min-height: 88px; }
-    .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
-    table { width: 100%; border-collapse: collapse; min-width: 980px; }
-    th, td { padding: 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; text-align: left; vertical-align: top; }
+    .table-wrap { overflow-x: auto; overflow-y: hidden; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; table-layout: fixed; }
+    th, td { padding: 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; text-align: left; vertical-align: top; word-break: break-word; }
     th { background: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); position: sticky; top: 0; z-index: 1; }
     tbody tr:hover { background: #f8fbff; }
     .cell-title { font-weight: 700; line-height: 1.45; }
@@ -85,6 +85,25 @@
     .mini-btn.warn { border-color: #fde68a; color: #92400e; background: #fffbeb; }
     .mini-btn.danger { border-color: #fecaca; color: #b91c1c; background: #fff1f2; }
     .action-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .inventory-table th:nth-child(1), .inventory-table td:nth-child(1) { width: 24%; }
+    .inventory-table th:nth-child(2), .inventory-table td:nth-child(2) { width: 19%; }
+    .inventory-table th:nth-child(3), .inventory-table td:nth-child(3) { width: 10%; }
+    .inventory-table th:nth-child(4), .inventory-table td:nth-child(4) { width: 13%; }
+    .inventory-table th:nth-child(5), .inventory-table td:nth-child(5) { width: 22%; }
+    .inventory-table th:nth-child(6), .inventory-table td:nth-child(6) { width: 12%; }
+    .side-panels { display: grid; gap: 12px; align-content: start; }
+    .side-panels .panel { padding: 14px; }
+    .side-panels .panel-header { margin-bottom: 10px; }
+    .side-panels .panel-title { font-size: 14px; }
+    .side-panels .panel-subtitle { font-size: 12px; line-height: 1.45; }
+    .side-panels .btn { padding: 9px 12px; font-size: 12.5px; }
+    .side-panels .note-box { padding: 10px 12px; font-size: 12px; line-height: 1.55; }
+    .side-panels .manager-list { max-height: 240px; overflow-y: auto; padding-right: 4px; }
+    .side-panels .manager-card { padding: 10px; }
+    .side-panels .manager-title { font-size: 12.5px; }
+    .side-panels .manager-meta { font-size: 11.5px; line-height: 1.45; }
+    .side-panels .badge { padding: 5px 9px; font-size: 10.5px; }
+    .side-panels .mini-btn { padding: 6px 9px; font-size: 11.5px; }
     .empty-state { border: 1px dashed var(--line); border-radius: 12px; background: #fbfdff; padding: 22px; text-align: center; color: var(--muted); font-size: 13px; }
     .note-box { border: 1px solid #dbe7ff; background: #f8fbff; border-radius: 12px; padding: 12px 14px; color: #334155; font-size: 12.5px; line-height: 1.65; }
     .manager-list { display: grid; gap: 10px; }
@@ -118,6 +137,7 @@
     @media (max-width: 1280px) {
       .stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .page-grid { grid-template-columns: 1fr; }
+      .side-panels .manager-list { max-height: none; overflow: visible; padding-right: 0; }
     }
     @media (max-width: 920px) {
       .filters { grid-template-columns: 1fr; }
@@ -201,7 +221,7 @@
             </div>
             <div style="height: 12px;"></div>
             <div class="table-wrap">
-              <table>
+              <table class="inventory-table">
                 <thead>
                   <tr>
                     <th>Demirbaş</th>
@@ -220,7 +240,7 @@
           </section>
         </section>
 
-        <section>
+        <section class="side-panels">
           <section class="panel">
             <div class="panel-header">
               <div>
