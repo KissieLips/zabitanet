@@ -60,28 +60,84 @@
     .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
     .panel-title { font-size: 15px; font-weight: 700; }
     .panel-subtitle { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
-    .module-switcher { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .module-switcher {
+      position: sticky;
+      top: 14px;
+      z-index: 35;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+      padding: 10px;
+      border: 1px solid #dbe7ff;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.92);
+      box-shadow: 0 16px 34px rgba(15,23,42,0.08);
+      backdrop-filter: blur(12px);
+    }
     .module-tab-btn {
       width: 100%;
       display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      justify-content: center;
-      gap: 4px;
+      align-items: stretch;
+      justify-content: flex-start;
+      gap: 12px;
       padding: 14px 16px;
-      border: 1px solid var(--line);
+      border: 1px solid transparent;
       border-radius: 14px;
-      background: #ffffff;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
       color: var(--text);
-      box-shadow: var(--shadow);
       cursor: pointer;
       transition: 0.18s ease;
       text-align: left;
+      min-height: 84px;
     }
-    .module-tab-btn:hover { transform: translateY(-1px); border-color: #c7d7f6; }
-    .module-tab-btn.active { border-color: #bfdbfe; background: #eff6ff; box-shadow: 0 10px 28px rgba(37,99,235,0.12); }
-    .module-tab-title { font-size: 14px; font-weight: 700; }
+    .module-tab-btn:hover {
+      transform: translateY(-1px);
+      border-color: #c7d7f6;
+      background: linear-gradient(180deg, #ffffff 0%, #f1f5ff 100%);
+      box-shadow: 0 10px 22px rgba(37,99,235,0.10);
+    }
+    .module-tab-btn.active {
+      border-color: #93c5fd;
+      background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+      box-shadow: 0 14px 30px rgba(37,99,235,0.18);
+    }
+    .module-tab-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+    }
+    .module-tab-icon {
+      width: 42px;
+      height: 42px;
+      flex: 0 0 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1px solid #dbeafe;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+    }
+    .module-tab-btn.active .module-tab-icon {
+      background: #2563eb;
+      color: #ffffff;
+      border-color: #2563eb;
+      box-shadow: 0 10px 18px rgba(37,99,235,0.24);
+    }
+    .module-tab-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .module-tab-title { font-size: 14px; font-weight: 800; line-height: 1.25; }
     .module-tab-subtitle { font-size: 12px; color: var(--muted); line-height: 1.45; }
+    .module-tab-btn.active .module-tab-title { color: #1d4ed8; }
+    .module-tab-btn.active .module-tab-subtitle { color: #1e3a8a; }
+    .module-tab-icon svg { width: 20px; height: 20px; }
     .module-panel { display: none; }
     .module-panel.active { display: block; }
     .filters { display: grid; gap: 10px; align-items: center; }
@@ -195,11 +251,14 @@
     @media (max-width: 1220px) {
       .market-grid { grid-template-columns: 1fr; }
       .stats-grid, .module-switcher { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .module-switcher { top: 10px; }
       .filters.vendor, .filters.leave, .filters.attendance { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 860px) {
       .main { padding: 14px; }
       .stats-grid, .module-switcher, .filters.vendor, .filters.leave, .filters.attendance, .filters.attendance-quick, .form-grid, .form-grid.three, .checkbox-grid { grid-template-columns: 1fr; }
+      .module-switcher { top: 8px; padding: 8px; }
+      .module-tab-btn { min-height: 74px; }
       .hero-title { font-size: 22px; }
       .modal { width: 100%; }
     }
@@ -255,20 +314,48 @@
 
       <section class="module-switcher" aria-label="Pazar yönetimi sayfa geçişleri">
         <button class="module-tab-btn active" type="button" data-module-tab="vendors" onclick="setActiveMarketModuleTab('vendors')">
-          <span class="module-tab-title">Satıcı Kayıtları</span>
-          <span class="module-tab-subtitle">Satıcı listesi ve toplu işlemler</span>
+          <span class="module-tab-head">
+            <span class="module-tab-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18"></path><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"></path><path d="M5 7h14l-1 12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7Z"></path><path d="M10 11v4"></path><path d="M14 11v4"></path></svg>
+            </span>
+            <span class="module-tab-copy">
+              <span class="module-tab-title">Satıcı Kayıtları</span>
+              <span class="module-tab-subtitle">Satıcı listesi ve toplu işlemler</span>
+            </span>
+          </span>
         </button>
         <button class="module-tab-btn" type="button" data-module-tab="leaves" onclick="setActiveMarketModuleTab('leaves')">
-          <span class="module-tab-title">İzin / Rapor Takibi</span>
-          <span class="module-tab-subtitle">İzin ve rapor kayıtları</span>
+          <span class="module-tab-head">
+            <span class="module-tab-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"></path><path d="M16 2v4"></path><rect x="3" y="4" width="18" height="18" rx="3"></rect><path d="M3 10h18"></path><path d="M8 14h3"></path><path d="M8 18h8"></path></svg>
+            </span>
+            <span class="module-tab-copy">
+              <span class="module-tab-title">İzin / Rapor Takibi</span>
+              <span class="module-tab-subtitle">İzin ve rapor kayıtları</span>
+            </span>
+          </span>
         </button>
         <button class="module-tab-btn" type="button" data-module-tab="attendance" onclick="setActiveMarketModuleTab('attendance')">
-          <span class="module-tab-title">Yoklama Paneli</span>
-          <span class="module-tab-subtitle">Günlük yoklama işlemleri</span>
+          <span class="module-tab-head">
+            <span class="module-tab-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+            </span>
+            <span class="module-tab-copy">
+              <span class="module-tab-title">Yoklama Paneli</span>
+              <span class="module-tab-subtitle">Günlük yoklama işlemleri</span>
+            </span>
+          </span>
         </button>
         <button class="module-tab-btn" type="button" data-module-tab="history" onclick="setActiveMarketModuleTab('history')">
-          <span class="module-tab-title">Yoklama Geçmişi</span>
-          <span class="module-tab-subtitle">Kayıtlı tarihleri incele</span>
+          <span class="module-tab-head">
+            <span class="module-tab-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5"></path><path d="M12 7v5l3 2"></path></svg>
+            </span>
+            <span class="module-tab-copy">
+              <span class="module-tab-title">Yoklama Geçmişi</span>
+              <span class="module-tab-subtitle">Kayıtlı tarihleri incele</span>
+            </span>
+          </span>
         </button>
       </section>
 
