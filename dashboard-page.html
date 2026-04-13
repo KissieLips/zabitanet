@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zabıta Yönetim Sistemi - Ana Sayfa</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --panel-soft: #f8fafc;
+      --line: #dbe3ee;
+      --line-strong: #c7d2df;
+      --text: #17202f;
+      --muted: #667085;
+      --navy: #163a63;
+      --navy-2: #1f4c81;
+      --accent: #f5b301;
+      --primary: #2563eb;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --success: #16a34a;
+      --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, "Segoe UI", Arial, Helvetica, sans-serif; background: #f3f6fa; color: var(--text); -webkit-font-smoothing: antialiased; }
+    body.sidebar-open { overflow: hidden; }
+    .app { min-height: 100vh; display: block; }
+    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #fff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: fixed; left: 0; top: 0; bottom: 0; width: min(84vw, 320px); height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); z-index: 60; transform: translateX(-100%); transition: transform 0.22s ease; box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18); overflow-y: auto; }
+    body.sidebar-open .sidebar { transform: translateX(0); }
+    .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.16); }
+    .brand { font-size: 14px; font-weight: 700; line-height: 1.3; margin-bottom: 2px; letter-spacing: -0.01em; }
+    .brand-sub { font-size: 10.5px; color: rgba(255,255,255,0.62); line-height: 1.45; }
+    .nav-section-title { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.42); margin-top: 6px; margin-bottom: 2px; padding: 0 2px; font-weight: 700; }
+    .menu { display: flex; flex-direction: column; gap: 4px; }
+    .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border-radius: 10px; font-size: 12.5px; text-decoration: none; color: rgba(255,255,255,0.84); transition: 0.18s ease; border: 1px solid transparent; font-weight: 500; }
+    .menu-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.08); }
+    .menu-item.active { background: rgba(255,255,255,0.08); color: #ffffff; border-color: rgba(255,255,255,0.1); font-weight: 600; }
+    .menu-left { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+    .sidebar-toggle { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px; border: 1px solid var(--line); background: #ffffff; color: var(--text); border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 700; box-shadow: var(--shadow); cursor: pointer; }
+    .sidebar-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); opacity: 0; pointer-events: none; transition: opacity 0.18s ease; z-index: 50; }
+    body.sidebar-open .sidebar-backdrop { opacity: 1; pointer-events: auto; }
+    .main { padding: 18px 20px; min-width: 0; }
+    .hero { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 16px; display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+    .hero-copy { display: grid; gap: 6px; }
+    .hero-title { margin: 0; font-size: 28px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 700; }
+    .hero-text { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; max-width: 780px; }
+    .hero-side { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; align-items: center; }
+    .date-card, .status-card { background: #f8fafc; color: var(--text); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; border: 1px solid var(--line); min-width: 210px; }
+    .date-card span, .status-card span { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
+    .date-card strong, .status-card strong { font-size: 13px; line-height: 1.35; font-weight: 700; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; width: 100%; justify-content: flex-end; }
+    .btn { border: none; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: transform 0.15s ease, opacity 0.15s ease; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+    .btn:hover { transform: translateY(-1px); opacity: 0.96; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-secondary { background: #64748b; color: #fff; }
+    .btn-warning { background: var(--accent); color: #1f2937; }
+    .btn-ghost { background: #eef2ff; color: #1d4ed8; border: 1px solid #dbe7ff; }
+    .stats-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .card { background: #ffffff; border: 1px solid var(--line); border-radius: 12px; padding: 13px; box-shadow: var(--shadow); min-height: 98px; display: grid; gap: 8px; align-content: start; }
+    .card-icon { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+    .icon-yellow { background: #fff4cf; }
+    .icon-blue { background: #e0efff; }
+    .icon-green { background: #dcfce7; }
+    .icon-red { background: #fee2e2; }
+    .icon-gray { background: #edf2f7; }
+    .icon-purple { background: #ede9fe; }
+    .card-number { font-size: 22px; font-weight: 700; line-height: 1; margin: 0; }
+    .card-label { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+    .panel { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); margin-bottom: 12px; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .panel-title { font-size: 16px; font-weight: 700; line-height: 1.25; }
+    .panel-subtitle { font-size: 12px; color: var(--muted); }
+    .module-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+    .module-card { border: 1px solid var(--line); border-radius: 13px; padding: 14px; background: linear-gradient(180deg, #ffffff 0%, #fafcff 100%); display: grid; gap: 10px; min-height: 180px; }
+    .module-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; background: #eef4ff; }
+    .module-title { font-size: 15px; font-weight: 700; }
+    .module-text { color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+    .module-actions { margin-top: auto; }
+    .content-grid { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 12px; }
+    .list { display: grid; gap: 10px; }
+    .list-item { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: #ffffff; }
+    .list-item-title { font-size: 13px; font-weight: 700; color: #0f172a; line-height: 1.45; }
+    .list-item-meta { margin-top: 5px; font-size: 12px; color: var(--muted); line-height: 1.55; }
+    .list-item-row { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+    .badge { display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .badge.info { background: #dbeafe; color: #1d4ed8; }
+    .badge.warn { background: #fef3c7; color: #92400e; }
+    .badge.danger { background: #fee2e2; color: #b91c1c; }
+    .badge.success { background: #dcfce7; color: #166534; }
+    .badge.gray { background: #e5e7eb; color: #374151; }
+    .empty-state { border: 1px dashed var(--line); border-radius: 12px; background: #fbfdff; padding: 20px; text-align: center; color: var(--muted); font-size: 13px; }
+    .market-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
+    .summary-box { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: #fafcff; }
+    .summary-box-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+    .summary-box-value { margin-top: 6px; font-size: 18px; font-weight: 700; }
+    .summary-box-sub { margin-top: 4px; font-size: 12px; color: var(--muted); line-height: 1.45; }
+    .loading { color: var(--muted); font-size: 13px; }
+    @media (max-width: 1380px) {
+      .stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .module-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 1060px) {
+      .content-grid { grid-template-columns: 1fr; }
+      .module-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .market-summary { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 760px) {
+      .main { padding: 14px; }
+      .hero-title { font-size: 24px; }
+      .stats-grid, .module-grid { grid-template-columns: 1fr; }
+      .hero-side { width: 100%; justify-content: stretch; }
+      .date-card, .status-card { min-width: 0; width: 100%; }
+      .toolbar { justify-content: stretch; }
+      .toolbar .btn { flex: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <div class="brand-mark">ZY</div>
+        <div>
+          <div class="brand">Zabıta Yönetim Sistemi</div>
+          <div class="brand-sub">Kurumsal takip ve saha yönetimi</div>
+        </div>
+      </div>
+      <nav class="menu">
+        <div class="nav-section-title">Genel</div>
+        <a href="/dashboard" class="menu-item active"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
+        <div class="nav-section-title">Modüller</div>
+        <a href="/" class="menu-item"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span></a>
+        <a href="/businesses" class="menu-item"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
+        <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
+        <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
+        <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <button class="sidebar-toggle" type="button" onclick="toggleSidebar()">☰ Modüller</button>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <h1 class="hero-title">Zabıta Yönetim Sistemi Ana Sayfa</h1>
+          <p class="hero-text">Şikayetler, firmalar, denetimler, ruhsat kayıtları ve pazar yönetimine ilişkin özet bilgiler bu ekranda toplanır. Modüllere hızlı erişebilir, son işlemleri tek ekrandan takip edebilirsiniz.</p>
+        </div>
+        <div class="hero-side">
+          <div class="date-card"><span>Tarih</span><strong id="todayText">-</strong></div>
+          <div class="status-card"><span>Sistem Durumu</span><strong id="systemStatusText">Veriler yükleniyor</strong></div>
+          <div class="toolbar">
+            <a class="btn btn-primary" href="/">Şikayet Modülü</a>
+            <a class="btn btn-secondary" href="/businesses">Firma Listesi</a>
+            <a class="btn btn-ghost" href="/inspections">Denetimler</a>
+            <a class="btn btn-warning" href="/licenses">Ruhsatlar</a>
+            <a class="btn btn-ghost" href="/markets">Pazar Yönetimi</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="stats-grid">
+        <div class="card"><div class="card-icon icon-yellow">📁</div><div class="card-number" id="openComplaintsCount">-</div><div class="card-label">Açık şikayet sayısı</div></div>
+        <div class="card"><div class="card-icon icon-blue">📆</div><div class="card-number" id="dueTodayCount">-</div><div class="card-label">Bugün kontrol edilmesi gereken kayıtlar</div></div>
+        <div class="card"><div class="card-icon icon-red">⚠</div><div class="card-number" id="overdueCount">-</div><div class="card-label">Geciken ve öncelikli işler</div></div>
+        <div class="card"><div class="card-icon icon-green">🏪</div><div class="card-number" id="businessCount">-</div><div class="card-label">Toplam firma sayısı</div></div>
+        <div class="card"><div class="card-icon icon-purple">🧾</div><div class="card-number" id="monthlyInspectionCount">-</div><div class="card-label">Bu ay yapılan denetim sayısı</div></div>
+        <div class="card"><div class="card-icon icon-gray">📜</div><div class="card-number" id="activeLicenseCount">-</div><div class="card-label">Aktif ruhsat kaydı</div></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">Modüller</div>
+            <div class="panel-subtitle">Ana ekran taslağı olarak hızlı erişim ve kısa açıklamalar hazırlandı.</div>
+          </div>
+        </div>
+        <div class="module-grid">
+          <div class="module-card">
+            <div class="module-icon">💬</div>
+            <div class="module-title">Şikayet Yönetimi</div>
+            <div class="module-text">Vatandaş başvuruları, konu başlıkları, mahalle bilgileri ve süreç durumu bu modülden takip edilir.</div>
+            <div class="module-actions"><a class="btn btn-ghost" href="/">Modülü Aç</a></div>
+          </div>
+          <div class="module-card">
+            <div class="module-icon">🏪</div>
+            <div class="module-title">Firma Listesi</div>
+            <div class="module-text">İş yeri bilgileri, adres, sahip bilgileri ve ruhsat bağlantıları bu ekranda yer alır.</div>
+            <div class="module-actions"><a class="btn btn-ghost" href="/businesses">Modülü Aç</a></div>
+          </div>
+          <div class="module-card">
+            <div class="module-icon">🧾</div>
+            <div class="module-title">Tüm Denetimler</div>
+            <div class="module-text">Yapılan denetimler, sonuçlar, kontrol tarihleri ve saha kayıtları bu modülde toplanır.</div>
+            <div class="module-actions"><a class="btn btn-ghost" href="/inspections">Modülü Aç</a></div>
+          </div>
+          <div class="module-card">
+            <div class="module-icon">📜</div>
+            <div class="module-title">Ruhsat Yönetimi</div>
+            <div class="module-text">Aktif, pasif ve başvuru sürecindeki ruhsatları tek ekranda izlemek için kullanılır.</div>
+            <div class="module-actions"><a class="btn btn-ghost" href="/licenses">Modülü Aç</a></div>
+          </div>
+          <div class="module-card">
+            <div class="module-icon">🧺</div>
+            <div class="module-title">Pazar Yönetimi</div>
+            <div class="module-text">Satıcı kayıtları, yoklama, izin-rapor işlemleri ve pazar bazlı takip bu modülden yapılır.</div>
+            <div class="module-actions"><a class="btn btn-ghost" href="/markets">Modülü Aç</a></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="content-grid">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Son Şikayetler</div>
+              <div class="panel-subtitle">Sisteme en son eklenen kayıtlar</div>
+            </div>
+          </div>
+          <div id="recentComplaints" class="list"><div class="loading">Veriler hazırlanıyor...</div></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Son Denetimler</div>
+              <div class="panel-subtitle">En son girilen saha denetimleri</div>
+            </div>
+          </div>
+          <div id="recentInspections" class="list"><div class="loading">Veriler hazırlanıyor...</div></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Bekleyen İşler ve Uyarılar</div>
+              <div class="panel-subtitle">Öncelik verilmesi gereken kayıtlar</div>
+            </div>
+          </div>
+          <div id="alertsList" class="list"><div class="loading">Veriler hazırlanıyor...</div></div>
+        </section>
+      </section>
+
+      <section class="content-grid" style="grid-template-columns: 1fr 1fr;">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Son Eklenen Firmalar</div>
+              <div class="panel-subtitle">Firma modülüne son eklenen kayıtlar</div>
+            </div>
+          </div>
+          <div id="recentBusinesses" class="list"><div class="loading">Veriler hazırlanıyor...</div></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Pazar Özeti</div>
+              <div class="panel-subtitle">Satıcı ve son yoklama bilgileri</div>
+            </div>
+          </div>
+          <div class="market-summary">
+            <div class="summary-box">
+              <div class="summary-box-label">Toplam Satıcı</div>
+              <div class="summary-box-value" id="marketVendorCount">-</div>
+              <div class="summary-box-sub">Pazar modülündeki toplam satıcı kaydı</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-box-label">Aktif Satıcı</div>
+              <div class="summary-box-value" id="activeMarketVendorCount">-</div>
+              <div class="summary-box-sub">Aktif durumda görünen satıcı sayısı</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-box-label">Son Yoklama</div>
+              <div class="summary-box-value" id="lastAttendanceDate">-</div>
+              <div class="summary-box-sub" id="lastAttendanceText">Henüz yoklama özeti alınamadı.</div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    function toggleSidebar(force) {
+      var open = typeof force === 'boolean' ? force : !document.body.classList.contains('sidebar-open');
+      document.body.classList.toggle('sidebar-open', open);
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function formatTodayText() {
+      try {
+        return new Date().toLocaleDateString('tr-TR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      } catch (error) {
+        return new Date().toLocaleDateString('tr-TR');
+      }
+    }
+
+    function parseDateInput(value) {
+      if (!value || typeof value !== 'string') return null;
+      var parts = value.split('-');
+      if (parts.length !== 3) return null;
+      var year = Number(parts[0]);
+      var month = Number(parts[1]) - 1;
+      var day = Number(parts[2]);
+      var date = new Date(year, month, day);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    function toDateKey(date) {
+      if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+      return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+    }
+
+    function getStatusBadgeClass(status) {
+      var text = String(status || '').toLowerCase();
+      if (text.indexOf('kapat') !== -1 || text.indexOf('tamam') !== -1 || text.indexOf('var') !== -1 || text.indexOf('bağlandı') !== -1) return 'success';
+      if (text.indexOf('gecik') !== -1 || text.indexOf('iptal') !== -1 || text.indexOf('yok') !== -1) return 'danger';
+      if (text.indexOf('incele') !== -1 || text.indexOf('süre') !== -1 || text.indexOf('bek') !== -1) return 'warn';
+      return 'info';
+    }
+
+    function setText(id, value) {
+      var element = document.getElementById(id);
+      if (element) element.textContent = value;
+    }
+
+    function renderEmpty(containerId, text) {
+      var container = document.getElementById(containerId);
+      if (!container) return;
+      container.innerHTML = '<div class="empty-state">' + escapeHtml(text) + '</div>';
+    }
+
+    function renderRecentComplaints(items) {
+      var container = document.getElementById('recentComplaints');
+      if (!container) return;
+      if (!items.length) return renderEmpty('recentComplaints', 'Henüz şikayet kaydı bulunmuyor.');
+      container.innerHTML = items.map(function(item) {
+        var title = item.topicNames || item.topicName || item.source || 'Şikayet kaydı';
+        var meta = [item.complaintNo || item.no || '', item.neighborhood ? (item.neighborhood + ' Mah.') : '', item.displayDate || item.date || ''].filter(Boolean).join(' · ');
+        return '<div class="list-item">'
+          + '<div class="list-item-row"><div class="list-item-title">' + escapeHtml(title) + '</div><span class="badge ' + getStatusBadgeClass(item.status) + '">' + escapeHtml(item.status || '-') + '</span></div>'
+          + '<div class="list-item-meta">' + escapeHtml(meta) + '</div>'
+          + '<div class="list-item-meta">' + escapeHtml((item.source || '-') + ' · ' + (item.address || 'Adres bilgisi yok')) + '</div>'
+          + '</div>';
+      }).join('');
+    }
+
+    function renderRecentInspections(items) {
+      var container = document.getElementById('recentInspections');
+      if (!container) return;
+      if (!items.length) return renderEmpty('recentInspections', 'Henüz denetim kaydı bulunmuyor.');
+      container.innerHTML = items.map(function(item) {
+        var meta = [item.inspectionDateText || item.inspectionDate || '', item.categoryName || '', item.addressText || ''].filter(Boolean).join(' · ');
+        return '<div class="list-item">'
+          + '<div class="list-item-row"><div class="list-item-title">' + escapeHtml(item.tradeName || 'Firma adı yok') + '</div><span class="badge ' + getStatusBadgeClass(item.currentStatus || item.resultStatus) + '">' + escapeHtml(item.currentStatus || item.resultStatus || '-') + '</span></div>'
+          + '<div class="list-item-meta">' + escapeHtml(meta) + '</div>'
+          + '<div class="list-item-meta">' + escapeHtml((item.inspectionType || 'Denetim') + (item.resultStatus ? (' · ' + item.resultStatus) : '')) + '</div>'
+          + '</div>';
+      }).join('');
+    }
+
+    function renderRecentBusinesses(items) {
+      var container = document.getElementById('recentBusinesses');
+      if (!container) return;
+      if (!items.length) return renderEmpty('recentBusinesses', 'Henüz firma kaydı bulunmuyor.');
+      container.innerHTML = items.map(function(item) {
+        var meta = [item.categoryName || '', item.neighborhood ? (item.neighborhood + ' Mah.') : '', item.createdAt || ''].filter(Boolean).join(' · ');
+        return '<div class="list-item">'
+          + '<div class="list-item-title">' + escapeHtml(item.tradeName || 'Firma adı yok') + '</div>'
+          + '<div class="list-item-meta">' + escapeHtml(meta) + '</div>'
+          + '<div class="list-item-meta">' + escapeHtml((item.ownerName || '-') + ' · ' + (item.phone || 'Telefon yok')) + '</div>'
+          + '</div>';
+      }).join('');
+    }
+
+    function renderAlerts(alerts) {
+      var container = document.getElementById('alertsList');
+      if (!container) return;
+      if (!alerts.length) return renderEmpty('alertsList', 'Bugün için öne çıkan bekleyen iş görünmüyor.');
+      container.innerHTML = alerts.map(function(item) {
+        return '<div class="list-item">'
+          + '<div class="list-item-row"><div class="list-item-title">' + escapeHtml(item.title) + '</div><span class="badge ' + item.badgeClass + '">' + escapeHtml(item.badgeText) + '</span></div>'
+          + '<div class="list-item-meta">' + escapeHtml(item.meta) + '</div>'
+          + '</div>';
+      }).join('');
+    }
+
+    function buildDashboardModel(payload) {
+      var complaints = Array.isArray(payload.complaints) ? payload.complaints : [];
+      var businesses = Array.isArray(payload.businesses) ? payload.businesses : [];
+      var inspections = Array.isArray(payload.inspections) ? payload.inspections : [];
+      var licenses = Array.isArray(payload.licenses) ? payload.licenses : [];
+      var vendors = Array.isArray(payload.vendors) ? payload.vendors : [];
+      var attendanceSummary = Array.isArray(payload.attendanceSummary) ? payload.attendanceSummary : [];
+
+      var todayKey = toDateKey(new Date());
+      var monthKey = todayKey.slice(0, 7);
+
+      var openComplaints = complaints.filter(function(item) {
+        return String(item.status || '').trim() !== 'Kapatıldı';
+      });
+      var dueToday = openComplaints.filter(function(item) {
+        return item.controlDate && item.controlDate === todayKey;
+      });
+      var overdue = openComplaints.filter(function(item) {
+        return item.controlDate && item.controlDate < todayKey;
+      });
+      var monthlyInspections = inspections.filter(function(item) {
+        return item.inspectionDate && String(item.inspectionDate).slice(0, 7) === monthKey;
+      });
+      var activeLicenses = licenses.filter(function(item) {
+        return String(item.recordStatus || '').trim() === 'Aktif';
+      });
+      var unmatchedLicenses = licenses.filter(function(item) {
+        return !item.businessId;
+      });
+      var activeVendors = vendors.filter(function(item) {
+        return item && item.isActive;
+      });
+
+      var alerts = [];
+      overdue.slice(0, 3).forEach(function(item) {
+        alerts.push({
+          title: (item.topicNames || item.source || 'Şikayet kaydı') + ' gecikmiş durumda',
+          meta: [item.complaintNo || item.no || '', item.neighborhood ? (item.neighborhood + ' Mah.') : '', item.controlDateText || item.controlDate || ''].filter(Boolean).join(' · '),
+          badgeText: 'Geciken İş',
+          badgeClass: 'danger'
+        });
+      });
+      dueToday.slice(0, 2).forEach(function(item) {
+        alerts.push({
+          title: (item.topicNames || item.source || 'Şikayet kaydı') + ' bugün kontrol edilmeli',
+          meta: [item.complaintNo || item.no || '', item.neighborhood ? (item.neighborhood + ' Mah.') : '', item.controlDateText || item.controlDate || ''].filter(Boolean).join(' · '),
+          badgeText: 'Bugün',
+          badgeClass: 'warn'
+        });
+      });
+      unmatchedLicenses.slice(0, 2).forEach(function(item) {
+        alerts.push({
+          title: (item.tradeName || 'Ruhsat kaydı') + ' için firma eşleşmesi yok',
+          meta: [item.licenseSerialNo || '', item.ownerName || '', item.processStatus || ''].filter(Boolean).join(' · '),
+          badgeText: 'Ruhsat',
+          badgeClass: 'info'
+        });
+      });
+
+      return {
+        counts: {
+          openComplaints: openComplaints.length,
+          dueToday: dueToday.length,
+          overdue: overdue.length,
+          businesses: businesses.length,
+          monthlyInspections: monthlyInspections.length,
+          activeLicenses: activeLicenses.length,
+          vendors: vendors.length,
+          activeVendors: activeVendors.length
+        },
+        recentComplaints: complaints.slice(0, 5),
+        recentInspections: inspections.slice(0, 5),
+        recentBusinesses: businesses.slice(0, 5),
+        alerts: alerts,
+        latestAttendance: attendanceSummary.length ? attendanceSummary[0] : null
+      };
+    }
+
+    async function loadDashboard() {
+      setText('todayText', formatTodayText());
+      setText('systemStatusText', 'Veriler yükleniyor');
+
+      var requests = [
+        fetch('/api/complaints').then(function(r){ if (!r.ok) throw new Error('complaints'); return r.json(); }),
+        fetch('/api/businesses').then(function(r){ if (!r.ok) throw new Error('businesses'); return r.json(); }),
+        fetch('/api/inspections').then(function(r){ if (!r.ok) throw new Error('inspections'); return r.json(); }),
+        fetch('/api/licenses').then(function(r){ if (!r.ok) throw new Error('licenses'); return r.json(); }),
+        fetch('/api/markets/vendors').then(function(r){ if (!r.ok) throw new Error('vendors'); return r.json(); }),
+        fetch('/api/markets/attendance-history-summary?limit=1').then(function(r){ if (!r.ok) throw new Error('attendance'); return r.json(); })
+      ];
+
+      try {
+        var results = await Promise.allSettled(requests);
+        var payload = {
+          complaints: results[0].status === 'fulfilled' ? results[0].value : [],
+          businesses: results[1].status === 'fulfilled' ? results[1].value : [],
+          inspections: results[2].status === 'fulfilled' ? results[2].value : [],
+          licenses: results[3].status === 'fulfilled' ? results[3].value : [],
+          vendors: results[4].status === 'fulfilled' ? results[4].value : [],
+          attendanceSummary: results[5].status === 'fulfilled' ? results[5].value : []
+        };
+
+        var model = buildDashboardModel(payload);
+        setText('openComplaintsCount', String(model.counts.openComplaints));
+        setText('dueTodayCount', String(model.counts.dueToday));
+        setText('overdueCount', String(model.counts.overdue));
+        setText('businessCount', String(model.counts.businesses));
+        setText('monthlyInspectionCount', String(model.counts.monthlyInspections));
+        setText('activeLicenseCount', String(model.counts.activeLicenses));
+        setText('marketVendorCount', String(model.counts.vendors));
+        setText('activeMarketVendorCount', String(model.counts.activeVendors));
+
+        if (model.latestAttendance) {
+          setText('lastAttendanceDate', model.latestAttendance.attendanceDateText || model.latestAttendance.attendanceDate || '-');
+          setText('lastAttendanceText', (model.latestAttendance.marketName || '-') + ' · Var: ' + (model.latestAttendance.presentCount || 0) + ' · Yok: ' + (model.latestAttendance.absentCount || 0));
+        } else {
+          setText('lastAttendanceDate', '-');
+          setText('lastAttendanceText', 'Henüz yoklama özeti bulunmuyor.');
+        }
+
+        renderRecentComplaints(model.recentComplaints);
+        renderRecentInspections(model.recentInspections);
+        renderRecentBusinesses(model.recentBusinesses);
+        renderAlerts(model.alerts);
+        setText('systemStatusText', 'Sistem aktif · Özet veriler yüklendi');
+      } catch (error) {
+        console.error(error);
+        setText('systemStatusText', 'Veriler yüklenemedi');
+        renderEmpty('recentComplaints', 'Şikayet verileri alınamadı.');
+        renderEmpty('recentInspections', 'Denetim verileri alınamadı.');
+        renderEmpty('recentBusinesses', 'Firma verileri alınamadı.');
+        renderEmpty('alertsList', 'Uyarı verileri alınamadı.');
+      }
+    }
+
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape') toggleSidebar(false);
+    });
+
+    loadDashboard();
+  </script>
+</body>
+</html>

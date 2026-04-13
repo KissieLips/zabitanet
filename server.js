@@ -3532,6 +3532,7 @@ app.get("/businesses", (req, res) => {
       </div>
       <div class="nav-section-title">Modüller</div>
       <nav class="menu">
+        <a href="/dashboard" class="menu-item"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
         <a href="/" class="menu-item"><span class="menu-left"><span>📌</span><span>Şikayet Takip</span></span></a>
         <a href="/businesses" class="menu-item active"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
         <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
@@ -5071,6 +5072,7 @@ app.get("/businesses/:id", (req, res) => {
       </div>
       <div class="nav-section-title">Modüller</div>
       <nav class="menu">
+        <a href="/dashboard" class="menu-item"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
         <a href="/" class="menu-item"><span class="menu-left"><span>📌</span><span>Şikayet Takip</span></span></a>
         <a href="/businesses" class="menu-item active"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
         <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
@@ -6488,6 +6490,7 @@ app.get("/inspections", (req, res) => {
       <div class="sidebar-top"><div class="brand-mark">ZB</div><div><div class="brand">Zabıta Yönetim Sistemi</div><div class="brand-sub">Kurumsal takip ve saha yönetimi</div></div></div>
       <div class="nav-section-title">Modüller</div>
       <nav class="menu">
+        <a href="/dashboard" class="menu-item"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
         <a href="/" class="menu-item"><span class="menu-left"><span>📌</span><span>Şikayet Takip</span></span></a>
         <a href="/businesses" class="menu-item"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
         <a href="/inspections" class="menu-item active"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
@@ -6664,6 +6667,10 @@ app.get("/inspections", (req, res) => {
 
 app.get("/business-categories", (req, res) => {
   res.redirect("/businesses");
+});
+
+app.get("/dashboard", (req, res) => {
+  res.sendFile(path.join(__dirname, "dashboard-page.html"));
 });
 
 app.get("/", (req, res) => {
@@ -6879,9 +6886,9 @@ app.get("/", (req, res) => {
       </div>
       <nav class="menu">
         <div class="nav-section-title">Genel</div>
-        <a href="#" class="menu-item"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
+        <a href="/dashboard" class="menu-item"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
         <div class="nav-section-title">Modüller</div>
-        <a href="#" class="menu-item active"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span></a>
+        <a href="/" class="menu-item active"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span></a>
         <a href="/businesses" class="menu-item"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
         <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
         <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
