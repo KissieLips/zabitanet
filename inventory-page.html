@@ -57,7 +57,7 @@
     .stat-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
     .stat-value { font-size: 22px; font-weight: 700; line-height: 1.05; }
     .stat-sub { font-size: 12px; color: var(--muted); }
-    .page-grid { display: grid; grid-template-columns: minmax(0, 2.45fr) minmax(260px, 0.72fr); gap: 12px; align-items: start; }
+    .page-grid { display: grid; grid-template-columns: minmax(0, 2.9fr) minmax(235px, 0.56fr); gap: 12px; align-items: start; }
     .panel { padding: 16px; margin-bottom: 12px; }
     .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
     .panel-title { font-size: 15px; font-weight: 700; }
@@ -98,12 +98,18 @@
     .side-panels .panel-subtitle { font-size: 12px; line-height: 1.45; }
     .side-panels .btn { padding: 9px 12px; font-size: 12.5px; }
     .side-panels .note-box { padding: 10px 12px; font-size: 12px; line-height: 1.55; }
-    .side-panels .manager-list { max-height: 240px; overflow-y: auto; padding-right: 4px; }
+    .side-panels .manager-list { max-height: 360px; overflow-y: auto; padding-right: 4px; }
     .side-panels .manager-card { padding: 10px; }
     .side-panels .manager-title { font-size: 12.5px; }
     .side-panels .manager-meta { font-size: 11.5px; line-height: 1.45; }
     .side-panels .badge { padding: 5px 9px; font-size: 10.5px; }
     .side-panels .mini-btn { padding: 6px 9px; font-size: 11.5px; }
+    .management-panel { min-width: 0; }
+    .tab-switcher { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .tab-btn { border: 1px solid #dbe3ee; background: #f8fafc; color: #475569; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: 0.15s ease; }
+    .tab-btn.active { background: #eef4ff; color: #1d4ed8; border-color: #cfe0ff; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
     .empty-state { border: 1px dashed var(--line); border-radius: 12px; background: #fbfdff; padding: 22px; text-align: center; color: var(--muted); font-size: 13px; }
     .note-box { border: 1px solid #dbe7ff; background: #f8fbff; border-radius: 12px; padding: 12px 14px; color: #334155; font-size: 12.5px; line-height: 1.65; }
     .manager-list { display: grid; gap: 10px; }
@@ -186,8 +192,6 @@
         </div>
         <div class="toolbar">
           <button class="btn btn-primary" type="button" onclick="openItemModal()">+ Yeni Demirbaş</button>
-          <button class="btn btn-secondary" type="button" onclick="openLocationModal()">Yer Ekle</button>
-          <button class="btn btn-secondary" type="button" onclick="openSectionModal()">Bölüm Ekle</button>
           <button class="btn btn-ghost" type="button" onclick="exportInventory()">Excel Aktar</button>
         </div>
       </section>
@@ -241,28 +245,41 @@
         </section>
 
         <section class="side-panels">
-          <section class="panel">
+          <section class="panel management-panel">
             <div class="panel-header">
               <div>
-                <div class="panel-title">Yer Yönetimi</div>
-                <div class="panel-subtitle">Perşembe Pazarı, Tır Garajı, Pazar Pazarı gibi ana alanları burada tanımlayın.</div>
+                <div class="panel-title">Alan Yönetimi</div>
+                <div class="panel-subtitle">Yer ve bölüm kayıtlarını tek kutuda yönetin. Kullanım alanı geniş, yönetim alanı sade kalsın.</div>
               </div>
-              <button class="btn btn-secondary" type="button" onclick="openLocationModal()">+ Yer Ekle</button>
+            </div>
+            <div class="tab-switcher">
+              <button class="tab-btn active" id="tabBtnLocations" type="button" onclick="switchManagementTab('locations')">Yerler</button>
+              <button class="tab-btn" id="tabBtnSections" type="button" onclick="switchManagementTab('sections')">Bölümler</button>
             </div>
             <div class="note-box">Öneri: önce <strong>yer</strong>, sonra o yere bağlı <strong>bölüm</strong> tanımlayın. Örnek: Perşembe Pazarı → Büro, Dinlenme Odası, Depo.</div>
             <div style="height: 12px;"></div>
-            <div class="manager-list" id="locationsList"><div class="empty-state">Yer kayıtları yükleniyor...</div></div>
-          </section>
 
-          <section class="panel">
-            <div class="panel-header">
-              <div>
-                <div class="panel-title">Bölüm Yönetimi</div>
-                <div class="panel-subtitle">Büro, dinlenme odası, depo, araç gereç alanı gibi alt bölümleri burada yönetin.</div>
+            <div class="tab-pane active" id="tabPaneLocations">
+              <div class="panel-header">
+                <div>
+                  <div class="panel-title">Yer Yönetimi</div>
+                  <div class="panel-subtitle">Perşembe Pazarı, Tır Garajı, Pazar Pazarı gibi ana alanları burada tanımlayın.</div>
+                </div>
+                <button class="btn btn-secondary" type="button" onclick="openLocationModal()">+ Yer Ekle</button>
               </div>
-              <button class="btn btn-secondary" type="button" onclick="openSectionModal()">+ Bölüm Ekle</button>
+              <div class="manager-list" id="locationsList"><div class="empty-state">Yer kayıtları yükleniyor...</div></div>
             </div>
-            <div class="manager-list" id="sectionsList"><div class="empty-state">Bölüm kayıtları yükleniyor...</div></div>
+
+            <div class="tab-pane" id="tabPaneSections">
+              <div class="panel-header">
+                <div>
+                  <div class="panel-title">Bölüm Yönetimi</div>
+                  <div class="panel-subtitle">Büro, dinlenme odası, depo, araç gereç alanı gibi alt bölümleri burada yönetin.</div>
+                </div>
+                <button class="btn btn-secondary" type="button" onclick="openSectionModal()">+ Bölüm Ekle</button>
+              </div>
+              <div class="manager-list" id="sectionsList"><div class="empty-state">Bölüm kayıtları yükleniyor...</div></div>
+            </div>
           </section>
         </section>
       </div>
@@ -414,6 +431,14 @@
     function toggleSidebar(forceOpen) {
       var shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !document.body.classList.contains('sidebar-open');
       document.body.classList.toggle('sidebar-open', shouldOpen);
+    }
+
+    function switchManagementTab(tabName) {
+      var isLocations = tabName !== 'sections';
+      document.getElementById('tabBtnLocations').classList.toggle('active', isLocations);
+      document.getElementById('tabBtnSections').classList.toggle('active', !isLocations);
+      document.getElementById('tabPaneLocations').classList.toggle('active', isLocations);
+      document.getElementById('tabPaneSections').classList.toggle('active', !isLocations);
     }
 
     function showBanner(message, type) {
