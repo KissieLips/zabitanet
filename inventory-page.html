@@ -57,40 +57,40 @@
     .stat-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
     .stat-value { font-size: 22px; font-weight: 700; line-height: 1.05; }
     .stat-sub { font-size: 12px; color: var(--muted); }
-    .page-grid { display: grid; grid-template-columns: minmax(0, 2.9fr) minmax(235px, 0.56fr); gap: 12px; align-items: start; }
+    .page-grid { display: grid; grid-template-columns: minmax(0, 3.35fr) minmax(220px, 0.48fr); gap: 12px; align-items: start; }
     .panel { padding: 16px; margin-bottom: 12px; }
     .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
     .panel-title { font-size: 15px; font-weight: 700; }
     .panel-subtitle { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
-    .filters { display: grid; grid-template-columns: minmax(240px, 1.1fr) 170px 180px 180px auto auto; gap: 10px; align-items: center; }
-    input[type="text"], input[type="number"], select, textarea { width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; background: #fff; color: var(--text); }
+    .filters { display: grid; grid-template-columns: minmax(220px, 1.2fr) 150px 150px 150px auto auto; gap: 8px; align-items: center; }
+    input[type="text"], input[type="number"], select, textarea { width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 9px 11px; font-size: 12.5px; outline: none; background: #fff; color: var(--text); }
     input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
     textarea { resize: vertical; min-height: 88px; }
     .table-wrap { overflow-x: auto; overflow-y: hidden; border: 1px solid var(--line); border-radius: 12px; }
-    table { width: 100%; border-collapse: collapse; min-width: 760px; table-layout: fixed; }
-    th, td { padding: 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; text-align: left; vertical-align: top; word-break: break-word; }
+    table { width: 100%; border-collapse: collapse; min-width: 680px; table-layout: fixed; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid #edf2f7; font-size: 12.5px; text-align: left; vertical-align: top; word-break: break-word; }
     th { background: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); position: sticky; top: 0; z-index: 1; }
     tbody tr:hover { background: #f8fbff; }
-    .cell-title { font-weight: 700; line-height: 1.45; }
-    .cell-sub { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 4px; }
-    .stack { display: grid; gap: 4px; }
-    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .cell-title { font-weight: 700; line-height: 1.35; }
+    .cell-sub { color: var(--muted); font-size: 11.5px; line-height: 1.35; margin-top: 3px; }
+    .stack { display: grid; gap: 2px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
     .badge.success { background: #dcfce7; color: #166534; }
     .badge.warn { background: #fef3c7; color: #92400e; }
     .badge.danger { background: #fee2e2; color: #b91c1c; }
     .badge.info { background: #dbeafe; color: #1d4ed8; }
     .badge.gray { background: #e5e7eb; color: #374151; }
-    .mini-btn { border: 1px solid var(--line); background: #fff; border-radius: 9px; padding: 7px 10px; font-size: 12px; font-weight: 600; cursor: pointer; color: #111827; display: inline-flex; align-items: center; gap: 6px; }
+    .mini-btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 8px; font-size: 11.5px; font-weight: 600; cursor: pointer; color: #111827; display: inline-flex; align-items: center; gap: 4px; line-height: 1; }
     .mini-btn.primary { border-color: #cfe0ff; color: #1d4ed8; background: #eef4ff; }
     .mini-btn.warn { border-color: #fde68a; color: #92400e; background: #fffbeb; }
     .mini-btn.danger { border-color: #fecaca; color: #b91c1c; background: #fff1f2; }
-    .action-row { display: flex; gap: 6px; flex-wrap: wrap; }
-    .inventory-table th:nth-child(1), .inventory-table td:nth-child(1) { width: 24%; }
-    .inventory-table th:nth-child(2), .inventory-table td:nth-child(2) { width: 19%; }
-    .inventory-table th:nth-child(3), .inventory-table td:nth-child(3) { width: 10%; }
+    .action-row { display: flex; gap: 4px; flex-wrap: nowrap; white-space: nowrap; }
+    .inventory-table th:nth-child(1), .inventory-table td:nth-child(1) { width: 26%; }
+    .inventory-table th:nth-child(2), .inventory-table td:nth-child(2) { width: 18%; }
+    .inventory-table th:nth-child(3), .inventory-table td:nth-child(3) { width: 9%; }
     .inventory-table th:nth-child(4), .inventory-table td:nth-child(4) { width: 13%; }
-    .inventory-table th:nth-child(5), .inventory-table td:nth-child(5) { width: 22%; }
-    .inventory-table th:nth-child(6), .inventory-table td:nth-child(6) { width: 12%; }
+    .inventory-table th:nth-child(5), .inventory-table td:nth-child(5) { width: 24%; }
+    .inventory-table th:nth-child(6), .inventory-table td:nth-child(6) { width: 10%; }
     .side-panels { display: grid; gap: 12px; align-content: start; }
     .side-panels .panel { padding: 14px; }
     .side-panels .panel-header { margin-bottom: 10px; }
@@ -140,6 +140,9 @@
     .modal-footer { padding: 14px 20px 20px; display: flex; justify-content: flex-end; gap: 8px; }
     .close-btn { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 9px 12px; font-weight: 700; cursor: pointer; }
     .muted { color: var(--muted); }
+    .text-compact { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .inline-note { display: inline-block; max-width: 100%; }
+
     @media (max-width: 1280px) {
       .stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .page-grid { grid-template-columns: 1fr; }
@@ -232,7 +235,7 @@
                     <th>Yer / Bölüm</th>
                     <th>Miktar</th>
                     <th>Durum</th>
-                    <th>Tahsis / Açıklama</th>
+                    <th>Açıklama</th>
                     <th>İşlem</th>
                   </tr>
                 </thead>
@@ -249,7 +252,7 @@
             <div class="panel-header">
               <div>
                 <div class="panel-title">Alan Yönetimi</div>
-                <div class="panel-subtitle">Yer ve bölüm kayıtlarını tek kutuda yönetin. Kullanım alanı geniş, yönetim alanı sade kalsın.</div>
+                <div class="panel-subtitle">Yer ve bölüm kayıtları burada dursun; ana kullanım alanı solda geniş kalsın.</div>
               </div>
             </div>
             <div class="tab-switcher">
@@ -531,13 +534,13 @@
       for (var i = 0; i < inventoryItems.length; i++) {
         var item = inventoryItems[i];
         html += '<tr>' +
-          '<td><div class="stack"><div class="cell-title">' + escapeHtml(item.name) + '</div>' +
-          '<div class="cell-sub">Kod: ' + escapeHtml(item.itemCode || '-') + (item.category ? ' · Kategori: ' + escapeHtml(item.category) : '') + '</div></div></td>' +
+          '<td><div class="stack"><div class="cell-title text-compact">' + escapeHtml(item.name) + '</div>' +
+          '<div class="cell-sub text-compact">Kod: ' + escapeHtml(item.itemCode || '-') + (item.category ? ' · ' + escapeHtml(item.category) : '') + '</div></div></td>' +
           '<td>' + formatPlacement(item) + '</td>' +
           '<td><div class="cell-title">' + escapeHtml(item.quantity) + ' ' + escapeHtml(item.unit || 'Adet') + '</div></td>' +
           '<td>' + badgeForStatus(item.status) + '</td>' +
-          '<td><div class="stack">' + (item.assignedUnit ? '<div class="cell-title">Tahsis: ' + escapeHtml(item.assignedUnit) + '</div>' : '<div class="cell-sub">Tahsis bilgisi girilmedi</div>') +
-          (item.description ? '<div class="cell-sub">' + escapeHtml(item.description) + '</div>' : '') + '</div></td>' +
+          '<td><div class="stack">' + (item.assignedUnit ? '<div class="cell-sub text-compact">Tahsis: ' + escapeHtml(item.assignedUnit) + '</div>' : '') +
+          (item.description ? '<div class="cell-sub text-compact">' + escapeHtml(item.description) + '</div>' : '<div class="cell-sub">Açıklama yok</div>') + '</div></td>' +
           '<td><div class="action-row"><button class="mini-btn primary" type="button" onclick="editItem(' + item.id + ')">Düzenle</button><button class="mini-btn danger" type="button" onclick="deleteItem(' + item.id + ')">Sil</button></div></td>' +
           '</tr>';
       }
