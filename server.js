@@ -77,6 +77,17 @@ const BUCAK_NEIGHBORHOODS = [
   "Yunus Emre"
 ];
 
+const INVENTORY_STATUS_OPTIONS = [
+  "Kullanımda",
+  "Depoda",
+  "Arızalı",
+  "Bakımda",
+  "Kayıp",
+  "Hurda",
+  "Başka Birime Tahsis Edildi"
+];
+
+
 fs.mkdirSync(complaintUploadsRoot, { recursive: true });
 fs.mkdirSync(businessUploadsRoot, { recursive: true });
 fs.mkdirSync(businessInspectionUploadsRoot, { recursive: true });
@@ -1035,6 +1046,67 @@ function safeUnlink(filePath) {
   }
 }
 
+
+function normalizeInventoryStatus(value) {
+  const text = String(value || '').trim();
+  return INVENTORY_STATUS_OPTIONS.includes(text) ? text : 'Kullanımda';
+}
+
+function normalizeInventoryQuantity(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) return 1;
+  return Math.max(1, Math.round(parsed));
+}
+
+function normalizeInventoryText(value) {
+  const text = String(value || '').trim();
+  return text || null;
+}
+
+async function ensureInventoryItemCode(id) {
+  if (!id) return null;
+  const code = 'DMB-' + String(id).padStart(5, '0');
+  await pool.query(`
+    UPDATE inventory_items
+    SET item_code = COALESCE(NULLIF(TRIM(item_code), ''), $2), updated_at = CURRENT_TIMESTAMP
+    WHERE id = $1
+  `, [id, code]);
+  return code;
+}
+
+async function resolveInventoryPlacement(locationId, sectionId) {
+  let resolvedLocationId = locationId ? Number(locationId) : null;
+  let resolvedSectionId = sectionId ? Number(sectionId) : null;
+
+  if (resolvedLocationId && !Number.isFinite(resolvedLocationId)) {
+    throw new Error('Geçerli bir yer seçimi yapılmadı.');
+  }
+
+  if (resolvedSectionId && !Number.isFinite(resolvedSectionId)) {
+    throw new Error('Geçerli bir bölüm seçimi yapılmadı.');
+  }
+
+  let sectionRow = null;
+  if (resolvedSectionId) {
+    const sectionResult = await pool.query('SELECT id, location_id FROM inventory_sections WHERE id = $1 LIMIT 1', [resolvedSectionId]);
+    if (!sectionResult.rows.length) throw new Error('Seçilen bölüm bulunamadı.');
+    sectionRow = sectionResult.rows[0];
+    if (sectionRow.location_id && resolvedLocationId && Number(sectionRow.location_id) !== resolvedLocationId) {
+      throw new Error('Seçilen bölüm, seçilen yer ile eşleşmiyor.');
+    }
+    if (!resolvedLocationId && sectionRow.location_id) {
+      resolvedLocationId = Number(sectionRow.location_id);
+    }
+  }
+
+  if (resolvedLocationId) {
+    const locationResult = await pool.query('SELECT id FROM inventory_locations WHERE id = $1 LIMIT 1', [resolvedLocationId]);
+    if (!locationResult.rows.length) throw new Error('Seçilen yer bulunamadı.');
+  }
+
+  return { locationId: resolvedLocationId, sectionId: resolvedSectionId };
+}
+
 async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS complaints (
@@ -1397,6 +1469,164 @@ async function initDb() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_licenses_process_status
     ON licenses(process_status)
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS inventory_locations (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(160) UNIQUE NOT NULL,
+      note TEXT,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_locations
+    ADD COLUMN IF NOT EXISTS note TEXT
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_locations
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_locations
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS inventory_sections (
+      id SERIAL PRIMARY KEY,
+      location_id INTEGER REFERENCES inventory_locations(id) ON DELETE SET NULL,
+      name VARCHAR(160) NOT NULL,
+      note TEXT,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_sections
+    ADD COLUMN IF NOT EXISTS location_id INTEGER REFERENCES inventory_locations(id) ON DELETE SET NULL
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_sections
+    ADD COLUMN IF NOT EXISTS note TEXT
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_sections
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_sections
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_inventory_sections_location_id
+    ON inventory_sections(location_id)
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS inventory_items (
+      id SERIAL PRIMARY KEY,
+      item_code VARCHAR(40),
+      name VARCHAR(160) NOT NULL,
+      category VARCHAR(120),
+      location_id INTEGER REFERENCES inventory_locations(id) ON DELETE SET NULL,
+      section_id INTEGER REFERENCES inventory_sections(id) ON DELETE SET NULL,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      unit VARCHAR(30) NOT NULL DEFAULT 'Adet',
+      status VARCHAR(50) NOT NULL DEFAULT 'Kullanımda',
+      assigned_unit VARCHAR(160),
+      description TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_items
+    ADD COLUMN IF NOT EXISTS item_code VARCHAR(40)
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_items
+    ADD COLUMN IF NOT EXISTS category VARCHAR(120)
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_items
+    ADD COLUMN IF NOT EXISTS location_id INTEGER REFERENCES inventory_locations(id) ON DELETE SET NULL
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_items
+    ADD COLUMN IF NOT EXISTS section_id INTEGER REFERENCES inventory_sections(id) ON DELETE SET NULL
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_items
+    ADD COLUMN IF NOT EXISTS quantity INTEGER NOT NULL DEFAULT 1
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_items
+    ADD COLUMN IF NOT EXISTS unit VARCHAR(30) NOT NULL DEFAULT 'Adet'
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_items
+    ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT 'Kullanımda'
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_items
+    ADD COLUMN IF NOT EXISTS assigned_unit VARCHAR(160)
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_items
+    ADD COLUMN IF NOT EXISTS description TEXT
+  `);
+
+  await pool.query(`
+    ALTER TABLE inventory_items
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_items_item_code
+    ON inventory_items(item_code)
+    WHERE item_code IS NOT NULL AND TRIM(item_code) <> ''
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_inventory_items_location_id
+    ON inventory_items(location_id)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_inventory_items_section_id
+    ON inventory_items(section_id)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_inventory_items_status
+    ON inventory_items(status)
+  `);
+
+  await pool.query(`
+    UPDATE inventory_items
+    SET item_code = 'DMB-' || LPAD(id::text, 5, '0')
+    WHERE item_code IS NULL OR TRIM(item_code) = ''
   `);
 
   await initMarketModuleDb(pool);
@@ -3541,6 +3771,8 @@ app.get("/businesses", (req, res) => {
         <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
         <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
         <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
+        <div class="nav-section-title">Diğer</div>
+        <a href="/inventory" class="menu-item"><span class="menu-left"><span>📦</span><span>Demirbaş Listesi</span></span></a>
       </nav>
     </aside>
 
@@ -5082,6 +5314,8 @@ app.get("/businesses/:id", (req, res) => {
         <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
         <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
         <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
+        <div class="nav-section-title">Diğer</div>
+        <a href="/inventory" class="menu-item"><span class="menu-left"><span>📦</span><span>Demirbaş Listesi</span></span></a>
       </nav>
     </aside>
 
@@ -6501,6 +6735,8 @@ app.get("/inspections", (req, res) => {
         <a href="/inspections" class="menu-item active"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
         <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
         <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
+        <div class="nav-section-title">Diğer</div>
+        <a href="/inventory" class="menu-item"><span class="menu-left"><span>📦</span><span>Demirbaş Listesi</span></span></a>
       </nav>
     </aside>
     <main class="main">
@@ -6668,6 +6904,558 @@ app.get("/inspections", (req, res) => {
   </script>
 </body>
 </html>`);
+});
+
+app.get('/inventory', (req, res) => {
+  res.sendFile(path.join(__dirname, 'inventory-page.html'));
+});
+
+app.get('/api/inventory/options', async (req, res) => {
+  try {
+    const [locationsResult, sectionsResult] = await Promise.all([
+      pool.query(`
+        SELECT
+          l.id,
+          l.name,
+          l.note,
+          l.is_active AS "isActive",
+          l.created_at AS "createdAt",
+          l.updated_at AS "updatedAt",
+          COUNT(DISTINCT s.id) AS "sectionCount",
+          COUNT(DISTINCT i.id) AS "itemCount"
+        FROM inventory_locations l
+        LEFT JOIN inventory_sections s ON s.location_id = l.id
+        LEFT JOIN inventory_items i ON i.location_id = l.id
+        GROUP BY l.id
+        ORDER BY l.name ASC
+      `),
+      pool.query(`
+        SELECT
+          s.id,
+          s.location_id AS "locationId",
+          l.name AS "locationName",
+          s.name,
+          s.note,
+          s.is_active AS "isActive",
+          s.created_at AS "createdAt",
+          s.updated_at AS "updatedAt",
+          COUNT(i.id) AS "itemCount"
+        FROM inventory_sections s
+        LEFT JOIN inventory_locations l ON l.id = s.location_id
+        LEFT JOIN inventory_items i ON i.section_id = s.id
+        GROUP BY s.id, l.name
+        ORDER BY COALESCE(l.name, ''), s.name ASC
+      `)
+    ]);
+
+    res.json({ locations: locationsResult.rows, sections: sectionsResult.rows, statuses: INVENTORY_STATUS_OPTIONS });
+  } catch (error) {
+    res.status(500).json({ error: 'Yer ve bölüm listeleri yüklenemedi.' });
+  }
+});
+
+app.post('/api/inventory/locations', async (req, res) => {
+  try {
+    const name = String(req.body.name || '').trim();
+    const note = normalizeInventoryText(req.body.note);
+    const isActive = req.body.isActive === undefined ? true : Boolean(req.body.isActive);
+
+    if (!name) {
+      return res.status(400).json({ error: 'Yer adı zorunludur.' });
+    }
+
+    const duplicate = await pool.query('SELECT id FROM inventory_locations WHERE LOWER(name) = LOWER($1) LIMIT 1', [name]);
+    if (duplicate.rows.length) {
+      return res.status(400).json({ error: 'Aynı isimde bir yer kaydı zaten var.' });
+    }
+
+    const result = await pool.query(`
+      INSERT INTO inventory_locations (name, note, is_active)
+      VALUES ($1, $2, $3)
+      RETURNING id, name, note, is_active AS "isActive", created_at AS "createdAt", updated_at AS "updatedAt"
+    `, [name, note, isActive]);
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'Yer kaydı oluşturulamadı.' });
+  }
+});
+
+app.put('/api/inventory/locations/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const name = String(req.body.name || '').trim();
+    const note = normalizeInventoryText(req.body.note);
+    const isActive = req.body.isActive === undefined ? true : Boolean(req.body.isActive);
+
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Geçerli bir yer seçilmedi.' });
+    if (!name) return res.status(400).json({ error: 'Yer adı zorunludur.' });
+
+    const duplicate = await pool.query('SELECT id FROM inventory_locations WHERE LOWER(name) = LOWER($1) AND id <> $2 LIMIT 1', [name, id]);
+    if (duplicate.rows.length) {
+      return res.status(400).json({ error: 'Aynı isimde başka bir yer kaydı zaten var.' });
+    }
+
+    const result = await pool.query(`
+      UPDATE inventory_locations
+      SET name = $2, note = $3, is_active = $4, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      RETURNING id, name, note, is_active AS "isActive", created_at AS "createdAt", updated_at AS "updatedAt"
+    `, [id, name, note, isActive]);
+
+    if (!result.rows.length) return res.status(404).json({ error: 'Yer kaydı bulunamadı.' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'Yer kaydı güncellenemedi.' });
+  }
+});
+
+app.delete('/api/inventory/locations/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Geçerli bir yer seçilmedi.' });
+
+    const relatedSections = await pool.query('SELECT id FROM inventory_sections WHERE location_id = $1 LIMIT 1', [id]);
+    if (relatedSections.rows.length) {
+      return res.status(400).json({ error: 'Bu yere bağlı bölümler olduğu için kayıt silinemez.' });
+    }
+
+    const relatedItems = await pool.query('SELECT id FROM inventory_items WHERE location_id = $1 LIMIT 1', [id]);
+    if (relatedItems.rows.length) {
+      return res.status(400).json({ error: 'Bu yere bağlı demirbaş kayıtları olduğu için kayıt silinemez.' });
+    }
+
+    const result = await pool.query('DELETE FROM inventory_locations WHERE id = $1 RETURNING id', [id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Yer kaydı bulunamadı.' });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Yer kaydı silinemedi.' });
+  }
+});
+
+app.post('/api/inventory/sections', async (req, res) => {
+  try {
+    const name = String(req.body.name || '').trim();
+    const note = normalizeInventoryText(req.body.note);
+    const isActive = req.body.isActive === undefined ? true : Boolean(req.body.isActive);
+    const locationId = req.body.locationId ? Number(req.body.locationId) : null;
+
+    if (!name) return res.status(400).json({ error: 'Bölüm adı zorunludur.' });
+    if (locationId && !Number.isFinite(locationId)) return res.status(400).json({ error: 'Geçerli bir yer seçimi yapılmadı.' });
+
+    if (locationId) {
+      const locationCheck = await pool.query('SELECT id FROM inventory_locations WHERE id = $1 LIMIT 1', [locationId]);
+      if (!locationCheck.rows.length) return res.status(400).json({ error: 'Seçilen yer bulunamadı.' });
+    }
+
+    const duplicate = await pool.query(
+      'SELECT id FROM inventory_sections WHERE LOWER(name) = LOWER($1) AND COALESCE(location_id, 0) = COALESCE($2, 0) LIMIT 1',
+      [name, locationId]
+    );
+    if (duplicate.rows.length) return res.status(400).json({ error: 'Aynı yerde aynı isimde bölüm kaydı zaten var.' });
+
+    const result = await pool.query(`
+      INSERT INTO inventory_sections (location_id, name, note, is_active)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, location_id AS "locationId", name, note, is_active AS "isActive", created_at AS "createdAt", updated_at AS "updatedAt"
+    `, [locationId, name, note, isActive]);
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'Bölüm kaydı oluşturulamadı.' });
+  }
+});
+
+app.put('/api/inventory/sections/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const name = String(req.body.name || '').trim();
+    const note = normalizeInventoryText(req.body.note);
+    const isActive = req.body.isActive === undefined ? true : Boolean(req.body.isActive);
+    const locationId = req.body.locationId ? Number(req.body.locationId) : null;
+
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Geçerli bir bölüm seçilmedi.' });
+    if (!name) return res.status(400).json({ error: 'Bölüm adı zorunludur.' });
+    if (locationId && !Number.isFinite(locationId)) return res.status(400).json({ error: 'Geçerli bir yer seçimi yapılmadı.' });
+
+    if (locationId) {
+      const locationCheck = await pool.query('SELECT id FROM inventory_locations WHERE id = $1 LIMIT 1', [locationId]);
+      if (!locationCheck.rows.length) return res.status(400).json({ error: 'Seçilen yer bulunamadı.' });
+    }
+
+    const duplicate = await pool.query(
+      'SELECT id FROM inventory_sections WHERE LOWER(name) = LOWER($1) AND COALESCE(location_id, 0) = COALESCE($2, 0) AND id <> $3 LIMIT 1',
+      [name, locationId, id]
+    );
+    if (duplicate.rows.length) return res.status(400).json({ error: 'Aynı yerde aynı isimde başka bir bölüm kaydı zaten var.' });
+
+    const result = await pool.query(`
+      UPDATE inventory_sections
+      SET location_id = $2, name = $3, note = $4, is_active = $5, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      RETURNING id, location_id AS "locationId", name, note, is_active AS "isActive", created_at AS "createdAt", updated_at AS "updatedAt"
+    `, [id, locationId, name, note, isActive]);
+
+    if (!result.rows.length) return res.status(404).json({ error: 'Bölüm kaydı bulunamadı.' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'Bölüm kaydı güncellenemedi.' });
+  }
+});
+
+app.delete('/api/inventory/sections/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Geçerli bir bölüm seçilmedi.' });
+
+    const relatedItems = await pool.query('SELECT id FROM inventory_items WHERE section_id = $1 LIMIT 1', [id]);
+    if (relatedItems.rows.length) {
+      return res.status(400).json({ error: 'Bu bölüme bağlı demirbaş kayıtları olduğu için kayıt silinemez.' });
+    }
+
+    const result = await pool.query('DELETE FROM inventory_sections WHERE id = $1 RETURNING id', [id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Bölüm kaydı bulunamadı.' });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Bölüm kaydı silinemedi.' });
+  }
+});
+
+app.get('/api/inventory/items', async (req, res) => {
+  try {
+    const where = [];
+    const values = [];
+    const search = String(req.query.search || '').trim();
+    const locationId = req.query.locationId ? Number(req.query.locationId) : null;
+    const sectionId = req.query.sectionId ? Number(req.query.sectionId) : null;
+    const status = String(req.query.status || '').trim();
+
+    if (search) {
+      values.push('%' + search + '%');
+      where.push(`(
+        COALESCE(i.item_code, '') ILIKE $${values.length}
+        OR COALESCE(i.name, '') ILIKE $${values.length}
+        OR COALESCE(i.category, '') ILIKE $${values.length}
+        OR COALESCE(i.unit, '') ILIKE $${values.length}
+        OR COALESCE(i.status, '') ILIKE $${values.length}
+        OR COALESCE(i.assigned_unit, '') ILIKE $${values.length}
+        OR COALESCE(i.description, '') ILIKE $${values.length}
+        OR COALESCE(l.name, '') ILIKE $${values.length}
+        OR COALESCE(s.name, '') ILIKE $${values.length}
+      )`);
+    }
+
+    if (locationId && Number.isFinite(locationId)) {
+      values.push(locationId);
+      where.push(`i.location_id = $${values.length}`);
+    }
+
+    if (sectionId && Number.isFinite(sectionId)) {
+      values.push(sectionId);
+      where.push(`i.section_id = $${values.length}`);
+    }
+
+    if (status && INVENTORY_STATUS_OPTIONS.includes(status)) {
+      values.push(status);
+      where.push(`i.status = $${values.length}`);
+    }
+
+    const result = await pool.query(`
+      SELECT
+        i.id,
+        i.item_code AS "itemCode",
+        i.name,
+        i.category,
+        i.location_id AS "locationId",
+        l.name AS "locationName",
+        i.section_id AS "sectionId",
+        s.name AS "sectionName",
+        i.quantity,
+        i.unit,
+        i.status,
+        i.assigned_unit AS "assignedUnit",
+        i.description,
+        i.created_at AS "createdAt",
+        i.updated_at AS "updatedAt"
+      FROM inventory_items i
+      LEFT JOIN inventory_locations l ON l.id = i.location_id
+      LEFT JOIN inventory_sections s ON s.id = i.section_id
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY i.updated_at DESC, i.id DESC
+    `, values);
+
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: 'Demirbaş listesi yüklenemedi.' });
+  }
+});
+
+app.get('/api/inventory/items/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Geçerli bir demirbaş seçilmedi.' });
+
+    const result = await pool.query(`
+      SELECT
+        i.id,
+        i.item_code AS "itemCode",
+        i.name,
+        i.category,
+        i.location_id AS "locationId",
+        l.name AS "locationName",
+        i.section_id AS "sectionId",
+        s.name AS "sectionName",
+        i.quantity,
+        i.unit,
+        i.status,
+        i.assigned_unit AS "assignedUnit",
+        i.description,
+        i.created_at AS "createdAt",
+        i.updated_at AS "updatedAt"
+      FROM inventory_items i
+      LEFT JOIN inventory_locations l ON l.id = i.location_id
+      LEFT JOIN inventory_sections s ON s.id = i.section_id
+      WHERE i.id = $1
+      LIMIT 1
+    `, [id]);
+
+    if (!result.rows.length) return res.status(404).json({ error: 'Demirbaş kaydı bulunamadı.' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'Demirbaş detayı yüklenemedi.' });
+  }
+});
+
+app.post('/api/inventory/items', async (req, res) => {
+  try {
+    const name = String(req.body.name || '').trim();
+    const category = normalizeInventoryText(req.body.category);
+    const quantity = normalizeInventoryQuantity(req.body.quantity);
+    const unit = String(req.body.unit || 'Adet').trim() || 'Adet';
+    const status = normalizeInventoryStatus(req.body.status);
+    const assignedUnit = normalizeInventoryText(req.body.assignedUnit);
+    const description = normalizeInventoryText(req.body.description);
+    const placement = await resolveInventoryPlacement(req.body.locationId, req.body.sectionId);
+
+    if (!name) return res.status(400).json({ error: 'Demirbaş adı zorunludur.' });
+
+    const result = await pool.query(`
+      INSERT INTO inventory_items (name, category, location_id, section_id, quantity, unit, status, assigned_unit, description)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING id
+    `, [name, category, placement.locationId, placement.sectionId, quantity, unit, status, assignedUnit, description]);
+
+    const id = result.rows[0].id;
+    await ensureInventoryItemCode(id);
+
+    const item = await pool.query(`
+      SELECT
+        i.id,
+        i.item_code AS "itemCode",
+        i.name,
+        i.category,
+        i.location_id AS "locationId",
+        l.name AS "locationName",
+        i.section_id AS "sectionId",
+        s.name AS "sectionName",
+        i.quantity,
+        i.unit,
+        i.status,
+        i.assigned_unit AS "assignedUnit",
+        i.description,
+        i.created_at AS "createdAt",
+        i.updated_at AS "updatedAt"
+      FROM inventory_items i
+      LEFT JOIN inventory_locations l ON l.id = i.location_id
+      LEFT JOIN inventory_sections s ON s.id = i.section_id
+      WHERE i.id = $1
+      LIMIT 1
+    `, [id]);
+
+    res.status(201).json(item.rows[0]);
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Demirbaş kaydı oluşturulamadı.' });
+  }
+});
+
+app.put('/api/inventory/items/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const name = String(req.body.name || '').trim();
+    const category = normalizeInventoryText(req.body.category);
+    const quantity = normalizeInventoryQuantity(req.body.quantity);
+    const unit = String(req.body.unit || 'Adet').trim() || 'Adet';
+    const status = normalizeInventoryStatus(req.body.status);
+    const assignedUnit = normalizeInventoryText(req.body.assignedUnit);
+    const description = normalizeInventoryText(req.body.description);
+    const placement = await resolveInventoryPlacement(req.body.locationId, req.body.sectionId);
+
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Geçerli bir demirbaş seçilmedi.' });
+    if (!name) return res.status(400).json({ error: 'Demirbaş adı zorunludur.' });
+
+    const result = await pool.query(`
+      UPDATE inventory_items
+      SET
+        name = $2,
+        category = $3,
+        location_id = $4,
+        section_id = $5,
+        quantity = $6,
+        unit = $7,
+        status = $8,
+        assigned_unit = $9,
+        description = $10,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      RETURNING id
+    `, [id, name, category, placement.locationId, placement.sectionId, quantity, unit, status, assignedUnit, description]);
+
+    if (!result.rows.length) return res.status(404).json({ error: 'Demirbaş kaydı bulunamadı.' });
+    await ensureInventoryItemCode(id);
+
+    const item = await pool.query(`
+      SELECT
+        i.id,
+        i.item_code AS "itemCode",
+        i.name,
+        i.category,
+        i.location_id AS "locationId",
+        l.name AS "locationName",
+        i.section_id AS "sectionId",
+        s.name AS "sectionName",
+        i.quantity,
+        i.unit,
+        i.status,
+        i.assigned_unit AS "assignedUnit",
+        i.description,
+        i.created_at AS "createdAt",
+        i.updated_at AS "updatedAt"
+      FROM inventory_items i
+      LEFT JOIN inventory_locations l ON l.id = i.location_id
+      LEFT JOIN inventory_sections s ON s.id = i.section_id
+      WHERE i.id = $1
+      LIMIT 1
+    `, [id]);
+
+    res.json(item.rows[0]);
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Demirbaş kaydı güncellenemedi.' });
+  }
+});
+
+app.delete('/api/inventory/items/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Geçerli bir demirbaş seçilmedi.' });
+
+    const result = await pool.query('DELETE FROM inventory_items WHERE id = $1 RETURNING id', [id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Demirbaş kaydı bulunamadı.' });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Demirbaş kaydı silinemedi.' });
+  }
+});
+
+app.get('/api/inventory/summary', async (req, res) => {
+  try {
+    const [inventoryResult, locationsResult, sectionsResult] = await Promise.all([
+      pool.query(`
+        SELECT
+          COUNT(*) AS item_count,
+          COALESCE(SUM(quantity), 0) AS total_quantity,
+          COALESCE(SUM(CASE WHEN status = 'Kullanımda' THEN quantity ELSE 0 END), 0) AS active_quantity,
+          COALESCE(SUM(CASE WHEN status = 'Depoda' THEN quantity ELSE 0 END), 0) AS storage_quantity,
+          COALESCE(SUM(CASE WHEN status = 'Arızalı' THEN quantity ELSE 0 END), 0) AS faulty_quantity,
+          COALESCE(SUM(CASE WHEN status = 'Kayıp' THEN quantity ELSE 0 END), 0) AS lost_quantity,
+          COALESCE(SUM(CASE WHEN status = 'Başka Birime Tahsis Edildi' THEN quantity ELSE 0 END), 0) AS assigned_quantity
+        FROM inventory_items
+      `),
+      pool.query('SELECT COUNT(*) AS count FROM inventory_locations'),
+      pool.query('SELECT COUNT(*) AS count FROM inventory_sections')
+    ]);
+
+    const row = inventoryResult.rows[0] || {};
+    res.json({
+      itemCount: Number(row.item_count || 0),
+      totalQuantity: Number(row.total_quantity || 0),
+      activeQuantity: Number(row.active_quantity || 0),
+      storageQuantity: Number(row.storage_quantity || 0),
+      faultyQuantity: Number(row.faulty_quantity || 0),
+      lostQuantity: Number(row.lost_quantity || 0),
+      assignedQuantity: Number(row.assigned_quantity || 0),
+      locationCount: Number(locationsResult.rows[0] ? locationsResult.rows[0].count : 0),
+      sectionCount: Number(sectionsResult.rows[0] ? sectionsResult.rows[0].count : 0)
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Demirbaş özet bilgileri yüklenemedi.' });
+  }
+});
+
+app.get('/api/inventory/export.xlsx', async (req, res) => {
+  try {
+    const where = [];
+    const values = [];
+    const search = String(req.query.search || '').trim();
+    const locationId = req.query.locationId ? Number(req.query.locationId) : null;
+    const sectionId = req.query.sectionId ? Number(req.query.sectionId) : null;
+    const status = String(req.query.status || '').trim();
+
+    if (search) {
+      values.push('%' + search + '%');
+      where.push(`(
+        COALESCE(i.item_code, '') ILIKE $${values.length}
+        OR COALESCE(i.name, '') ILIKE $${values.length}
+        OR COALESCE(i.category, '') ILIKE $${values.length}
+        OR COALESCE(i.assigned_unit, '') ILIKE $${values.length}
+        OR COALESCE(i.description, '') ILIKE $${values.length}
+        OR COALESCE(l.name, '') ILIKE $${values.length}
+        OR COALESCE(s.name, '') ILIKE $${values.length}
+      )`);
+    }
+    if (locationId && Number.isFinite(locationId)) {
+      values.push(locationId);
+      where.push(`i.location_id = $${values.length}`);
+    }
+    if (sectionId && Number.isFinite(sectionId)) {
+      values.push(sectionId);
+      where.push(`i.section_id = $${values.length}`);
+    }
+    if (status && INVENTORY_STATUS_OPTIONS.includes(status)) {
+      values.push(status);
+      where.push(`i.status = $${values.length}`);
+    }
+
+    const result = await pool.query(`
+      SELECT
+        COALESCE(i.item_code, '') AS "Demirbaş Kodu",
+        i.name AS "Demirbaş Adı",
+        COALESCE(i.category, '') AS "Kategori",
+        COALESCE(l.name, '') AS "Yer",
+        COALESCE(s.name, '') AS "Bölüm",
+        i.quantity AS "Miktar",
+        i.unit AS "Birim",
+        i.status AS "Durum",
+        COALESCE(i.assigned_unit, '') AS "Tahsis Edilen Birim",
+        COALESCE(i.description, '') AS "Açıklama",
+        TO_CHAR(i.updated_at, 'DD.MM.YYYY HH24:MI') AS "Son Güncelleme"
+      FROM inventory_items i
+      LEFT JOIN inventory_locations l ON l.id = i.location_id
+      LEFT JOIN inventory_sections s ON s.id = i.section_id
+      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+      ORDER BY COALESCE(l.name, ''), COALESCE(s.name, ''), i.name
+    `, values);
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(result.rows);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Demirbas');
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="demirbas-listesi.xlsx"');
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: 'Demirbaş Excel çıktısı oluşturulamadı.' });
+  }
 });
 
 app.get("/business-categories", (req, res) => {
@@ -7176,6 +7964,8 @@ app.get("/dashboard", (req, res) => {
         <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
         <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
         <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
+        <div class="nav-section-title">Diğer</div>
+        <a href="/inventory" class="menu-item"><span class="menu-left"><span>📦</span><span>Demirbaş Listesi</span></span></a>
       </nav>
       <div class="sidebar-foot">
         Ana sayfa; şikayet, denetim, firma, ruhsat ve pazar modüllerindeki güncel durumu tek ekranda gösterir. Kritik kayıtları buradan hızlıca takip edebilirsiniz.
@@ -7926,6 +8716,8 @@ app.get("/complaints", (req, res) => {
         <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
         <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
         <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
+        <div class="nav-section-title">Diğer</div>
+        <a href="/inventory" class="menu-item"><span class="menu-left"><span>📦</span><span>Demirbaş Listesi</span></span></a>
       </nav>
     </aside>
     <main class="main">
