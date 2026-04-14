@@ -6,6 +6,7 @@ const path = require("path");
 const https = require("https");
 const XLSX = require("xlsx");
 const { initMarketModuleDb, registerMarketModule } = require("./market-module");
+const { initIssueModuleDb, registerIssueModule } = require("./issue-module");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,6 +19,7 @@ const pool = new Pool({
 });
 
 registerMarketModule({ app, pool });
+registerIssueModule({ app, pool, rootDir: __dirname });
 
 const uploadsRoot = path.join(__dirname, "uploads");
 const assetsRoot = path.join(__dirname, "assets");
@@ -1630,6 +1632,7 @@ async function initDb() {
   `);
 
   await initMarketModuleDb(pool);
+  await initIssueModuleDb(pool);
 
   const legacyLicenses = await pool.query(`
     SELECT *
@@ -3773,6 +3776,7 @@ app.get("/businesses", (req, res) => {
         <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
         <div class="nav-section-title">Diğer</div>
         <a href="/inventory" class="menu-item"><span class="menu-left"><span>📦</span><span>Demirbaş Listesi</span></span></a>
+        <a href="/issues" class="menu-item"><span class="menu-left"><span>🛠️</span><span>Arıza / Eksiklik / Talep</span></span></a>
       </nav>
     </aside>
 
@@ -5347,6 +5351,7 @@ app.get("/businesses/:id", (req, res) => {
         <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
         <div class="nav-section-title">Diğer</div>
         <a href="/inventory" class="menu-item"><span class="menu-left"><span>📦</span><span>Demirbaş Listesi</span></span></a>
+        <a href="/issues" class="menu-item"><span class="menu-left"><span>🛠️</span><span>Arıza / Eksiklik / Talep</span></span></a>
       </nav>
     </aside>
 
@@ -6768,6 +6773,7 @@ app.get("/inspections", (req, res) => {
         <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
         <div class="nav-section-title">Diğer</div>
         <a href="/inventory" class="menu-item"><span class="menu-left"><span>📦</span><span>Demirbaş Listesi</span></span></a>
+        <a href="/issues" class="menu-item"><span class="menu-left"><span>🛠️</span><span>Arıza / Eksiklik / Talep</span></span></a>
       </nav>
     </aside>
     <main class="main">
@@ -7997,6 +8003,7 @@ app.get("/dashboard", (req, res) => {
         <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
         <div class="nav-section-title">Diğer</div>
         <a href="/inventory" class="menu-item"><span class="menu-left"><span>📦</span><span>Demirbaş Listesi</span></span></a>
+        <a href="/issues" class="menu-item"><span class="menu-left"><span>🛠️</span><span>Arıza / Eksiklik / Talep</span></span></a>
       </nav>
       <div class="sidebar-foot">
         Ana sayfa; şikayet, denetim, firma, ruhsat ve pazar modüllerindeki güncel durumu tek ekranda gösterir. Kritik kayıtları buradan hızlıca takip edebilirsiniz.
@@ -8024,6 +8031,7 @@ app.get("/dashboard", (req, res) => {
             <a class="btn btn-soft" href="/inspections">🧾 Denetimler</a>
             <a class="btn btn-soft" href="/licenses">📜 Ruhsatlar</a>
             <a class="btn btn-soft" href="/markets">🧺 Pazar Yönetimi</a>
+            <a class="btn btn-soft" href="/issues">🛠️ Arıza Takibi</a>
           </div>
         </div>
 
@@ -8117,6 +8125,12 @@ app.get("/dashboard", (req, res) => {
                 <div class="module-top"><span class="module-icon">📜</span><span class="badge blue">Ruhsat</span></div>
                 <div class="module-name">Ruhsat Yönetimi</div>
                 <div class="module-text">Ruhsat süreçleri, eşleşme durumu ve başvuru kayıtları bu modülde yönetilir.</div>
+                <div class="module-link">Modülü aç →</div>
+              </a>
+              <a class="module-card" href="/issues">
+                <div class="module-top"><span class="module-icon">🛠️</span><span class="badge blue">Takip</span></div>
+                <div class="module-name">Arıza / Eksiklik / Talep</div>
+                <div class="module-text">Sahada tespit edilen arıza, eksiklik, talep ve kayıp kayıtlarını görselleriyle birlikte takip eder.</div>
                 <div class="module-link">Modülü aç →</div>
               </a>
             </div>
@@ -8749,6 +8763,7 @@ app.get("/complaints", (req, res) => {
         <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
         <div class="nav-section-title">Diğer</div>
         <a href="/inventory" class="menu-item"><span class="menu-left"><span>📦</span><span>Demirbaş Listesi</span></span></a>
+        <a href="/issues" class="menu-item"><span class="menu-left"><span>🛠️</span><span>Arıza / Eksiklik / Talep</span></span></a>
       </nav>
     </aside>
     <main class="main">

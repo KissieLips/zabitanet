@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zabıta Yönetim Sistemi - Arıza / Eksiklik / Talep Takibi</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --panel-soft: #f8fafc;
+      --line: #dbe3ee;
+      --text: #17202f;
+      --muted: #667085;
+      --primary: #2563eb;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --success: #16a34a;
+      --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, "Segoe UI", Arial, sans-serif; background: #f3f6fa; color: var(--text); }
+    body.sidebar-open { overflow: hidden; }
+    a { color: inherit; text-decoration: none; }
+    .app { min-height: 100vh; display: block; }
+    .sidebar { background: linear-gradient(180deg, #17324f 0%, #12283f 100%); color: #fff; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; position: fixed; left: 0; top: 0; bottom: 0; width: min(84vw, 320px); height: 100vh; border-right: 1px solid rgba(255,255,255,0.06); z-index: 60; transform: translateX(-100%); transition: transform 0.22s ease; box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18); overflow-y: auto; }
+    body.sidebar-open .sidebar { transform: translateX(0); }
+    .sidebar-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); opacity: 0; pointer-events: none; transition: opacity 0.18s ease; z-index: 50; }
+    body.sidebar-open .sidebar-backdrop { opacity: 1; pointer-events: auto; }
+    .sidebar-top { display: flex; align-items: center; gap: 9px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .brand-mark { width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, rgba(245,179,1,1) 0%, rgba(255,217,102,1) 100%); color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; box-shadow: 0 8px 18px rgba(245, 179, 1, 0.16); }
+    .brand { font-size: 14px; font-weight: 700; line-height: 1.3; }
+    .brand-sub { font-size: 10.5px; color: rgba(255,255,255,0.62); line-height: 1.45; }
+    .nav-section-title { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.42); margin-top: 6px; padding: 0 2px; font-weight: 700; }
+    .menu { display: flex; flex-direction: column; gap: 4px; }
+    .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border-radius: 10px; font-size: 12.5px; text-decoration: none; color: rgba(255,255,255,0.84); transition: 0.18s ease; border: 1px solid transparent; font-weight: 500; }
+    .menu-item:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.08); }
+    .menu-item.active { background: rgba(255,255,255,0.08); color: #ffffff; border-color: rgba(255,255,255,0.1); font-weight: 600; }
+    .menu-left { display: inline-flex; align-items: center; gap: 8px; }
+    .main { padding: 18px 20px; min-width: 0; }
+    .sidebar-toggle { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px; border: 1px solid var(--line); background: #ffffff; color: var(--text); border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 700; box-shadow: var(--shadow); cursor: pointer; }
+    .hero, .panel, .stat-card { background: #ffffff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+    .hero { padding: 16px 18px; display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 12px; }
+    .hero-title { margin: 0; font-size: 26px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 700; }
+    .hero-text { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.65; max-width: 900px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn { border: none; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; transition: 0.15s ease; }
+    .btn:hover { transform: translateY(-1px); opacity: 0.96; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-secondary { background: #eef2ff; color: #1d4ed8; border: 1px solid #dbe7ff; }
+    .btn-ghost { background: #ffffff; color: var(--text); border: 1px solid var(--line); }
+    .btn-danger { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+    .btn-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .btn-warning { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+    .stats-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .stat-card { padding: 14px; display: grid; gap: 7px; }
+    .stat-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; }
+    .stat-value { font-size: 22px; font-weight: 700; line-height: 1.05; }
+    .stat-sub { font-size: 12px; color: var(--muted); }
+    .page-grid { display: grid; grid-template-columns: minmax(0, 3.25fr) minmax(250px, 0.65fr); gap: 12px; align-items: start; }
+    .panel { padding: 16px; margin-bottom: 12px; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+    .panel-title { font-size: 15px; font-weight: 700; }
+    .panel-subtitle { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+    .filters { display: grid; grid-template-columns: minmax(220px, 1.2fr) 160px 160px 160px auto auto; gap: 8px; align-items: center; }
+    input[type="text"], input[type="number"], input[type="date"], select, textarea { width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 9px 11px; font-size: 12.5px; outline: none; background: #fff; color: var(--text); }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+    textarea { resize: vertical; min-height: 88px; }
+    .table-wrap { overflow-x: auto; overflow-y: hidden; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; min-width: 840px; table-layout: fixed; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid #edf2f7; font-size: 12.5px; text-align: left; vertical-align: top; word-break: break-word; }
+    th { background: #f8fafc; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); position: sticky; top: 0; z-index: 1; }
+    tbody tr:hover { background: #f8fbff; }
+    .cell-title { font-weight: 700; line-height: 1.35; }
+    .cell-sub { color: var(--muted); font-size: 11.5px; line-height: 1.35; margin-top: 3px; }
+    .stack { display: grid; gap: 2px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+    .badge.success { background: #dcfce7; color: #166534; }
+    .badge.warn { background: #fef3c7; color: #92400e; }
+    .badge.danger { background: #fee2e2; color: #b91c1c; }
+    .badge.info { background: #dbeafe; color: #1d4ed8; }
+    .badge.gray { background: #e5e7eb; color: #374151; }
+    .mini-btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 8px; font-size: 11.5px; font-weight: 600; cursor: pointer; color: #111827; display: inline-flex; align-items: center; gap: 4px; line-height: 1; }
+    .mini-btn.primary { border-color: #cfe0ff; color: #1d4ed8; background: #eef4ff; }
+    .mini-btn.warn { border-color: #fde68a; color: #92400e; background: #fffbeb; }
+    .mini-btn.danger { border-color: #fecaca; color: #b91c1c; background: #fff1f2; }
+    .action-row { display: flex; gap: 4px; flex-wrap: wrap; }
+    .empty-state { border: 1px dashed var(--line); border-radius: 12px; background: #fbfdff; padding: 22px; text-align: center; color: var(--muted); font-size: 13px; }
+    .banner { padding: 12px 14px; border-radius: 12px; margin-bottom: 12px; font-size: 13px; display: none; }
+    .banner.show { display: block; }
+    .banner.info { background: #eef4ff; color: #1d4ed8; border: 1px solid #dbeafe; }
+    .banner.warn { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+    .banner.success { background: #effcf3; color: #166534; border: 1px solid #bbf7d0; }
+    .note-box { border: 1px solid #dbe7ff; background: #f8fbff; border-radius: 12px; padding: 12px 14px; color: #334155; font-size: 12.5px; line-height: 1.65; }
+    .manager-list { display: grid; gap: 10px; }
+    .manager-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: #fff; }
+    .manager-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+    .manager-title { font-size: 13px; font-weight: 700; line-height: 1.45; }
+    .manager-meta { margin-top: 4px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .form-row-wide { grid-column: 1 / -1; }
+    .field label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 6px; color: #334155; }
+    .field-hint { font-size: 12px; color: var(--muted); margin-top: 5px; line-height: 1.5; }
+    .muted { color: var(--muted); }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: none; align-items: center; justify-content: center; padding: 18px; z-index: 90; }
+    .modal-overlay.show { display: flex; }
+    .modal { width: min(960px, 96vw); max-height: 92vh; overflow: auto; background: #fff; border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 18px 60px rgba(15,23,42,0.18); }
+    .modal.small { width: min(720px, 96vw); }
+    .modal-header { padding: 18px 20px 12px; border-bottom: 1px solid #edf2f7; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .modal-title { font-size: 18px; font-weight: 700; }
+    .modal-subtitle { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+    .modal-body { padding: 18px 20px; display: grid; gap: 18px; }
+    .modal-footer { padding: 14px 20px 20px; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+    .close-btn { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 9px 12px; font-weight: 700; cursor: pointer; }
+    .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .detail-card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: #f9fbff; }
+    .detail-card .label { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: var(--muted); text-transform: uppercase; }
+    .detail-card .value { margin-top: 6px; font-size: 13px; line-height: 1.6; }
+    .file-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .file-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: #fff; display: grid; gap: 8px; }
+    .file-preview { width: 100%; height: 180px; border-radius: 10px; object-fit: cover; border: 1px solid var(--line); background: #f8fafc; }
+    .file-link { font-size: 12.5px; font-weight: 700; color: #1d4ed8; word-break: break-word; }
+    .inline-flex { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .side-panels { display: grid; gap: 12px; align-content: start; }
+
+    @media (max-width: 1280px) {
+      .stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .page-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 920px) {
+      .filters { grid-template-columns: 1fr; }
+      .form-grid, .form-grid.three, .detail-grid, .file-grid { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .main { padding: 14px; }
+      .hero-title { font-size: 24px; }
+      .stats-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <div class="brand-mark">ZY</div>
+        <div>
+          <div class="brand">Zabıta Yönetim Sistemi</div>
+          <div class="brand-sub">Kurumsal takip ve saha yönetimi</div>
+        </div>
+      </div>
+      <nav class="menu">
+        <div class="nav-section-title">Genel</div>
+        <a href="/dashboard" class="menu-item"><span class="menu-left"><span>🏠</span><span>Ana Sayfa</span></span></a>
+        <div class="nav-section-title">Modüller</div>
+        <a href="/complaints" class="menu-item"><span class="menu-left"><span>💬</span><span>Şikayet Yönetimi</span></span></a>
+        <a href="/businesses" class="menu-item"><span class="menu-left"><span>🏪</span><span>Firma Listesi</span></span></a>
+        <a href="/inspections" class="menu-item"><span class="menu-left"><span>🧾</span><span>Tüm Denetimler</span></span></a>
+        <a href="/licenses" class="menu-item"><span class="menu-left"><span>📜</span><span>Ruhsat Yönetimi</span></span></a>
+        <a href="/markets" class="menu-item"><span class="menu-left"><span>🧺</span><span>Pazar Yönetimi</span></span></a>
+        <div class="nav-section-title">Diğer</div>
+        <a href="/inventory" class="menu-item"><span class="menu-left"><span>📦</span><span>Demirbaş Listesi</span></span></a>
+        <a href="/issues" class="menu-item active"><span class="menu-left"><span>🛠️</span><span>Arıza / Eksiklik / Talep</span></span></a>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <button class="sidebar-toggle" type="button" onclick="toggleSidebar()">☰ Modüller</button>
+
+      <section class="hero">
+        <div>
+          <h1 class="hero-title">Arıza / Eksiklik / Talep Takibi</h1>
+          <p class="hero-text">Otogar, pazar yeri, sosyal tesis, hizmet binası ve diğer sahalarda görülen arıza, eksiklik, talep veya kayıp kayıtları bu modülden açılır. Kayıt üzerine görsel eklenebilir, durum takibi yapılabilir ve müdürlük paylaşımı için yazdır / PDF çıktısı hazırlanabilir.</p>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-primary" type="button" onclick="openRecordModal()">+ Yeni Kayıt</button>
+          <button class="btn btn-ghost" type="button" onclick="reloadAll()">Yenile</button>
+        </div>
+      </section>
+
+      <div id="pageBanner" class="banner info"></div>
+
+      <section class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Açık / Bildirildi</div><div class="stat-value" id="statOpen">-</div><div class="stat-sub">Henüz sonuçlanmamış kayıt</div></div>
+        <div class="stat-card"><div class="stat-label">İşlemde / Beklemede</div><div class="stat-value" id="statProgress">-</div><div class="stat-sub">Takibi süren işler</div></div>
+        <div class="stat-card"><div class="stat-label">Tamamlanan</div><div class="stat-value" id="statCompleted">-</div><div class="stat-sub">Kapatılan veya biten kayıt</div></div>
+        <div class="stat-card"><div class="stat-label">Geciken</div><div class="stat-value" id="statOverdue">-</div><div class="stat-sub">Termin tarihi geçen kayıt</div></div>
+        <div class="stat-card"><div class="stat-label">Görsel Ekli</div><div class="stat-value" id="statImageRecords">-</div><div class="stat-sub">Fotoğraf veya görsel ekli kayıt</div></div>
+      </section>
+
+      <div class="page-grid">
+        <section>
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-title">Kayıt Listesi</div>
+                <div class="panel-subtitle">Arama, tür, durum ve öncelik filtreleriyle kayıtları daraltabilirsiniz.</div>
+              </div>
+            </div>
+            <div class="filters">
+              <input type="text" id="searchInput" placeholder="Kayıt no, başlık, yer, birim veya açıklama ara" />
+              <select id="filterType"><option value="">Tüm türler</option></select>
+              <select id="filterStatus"><option value="">Tüm durumlar</option></select>
+              <select id="filterPriority"><option value="">Tüm öncelikler</option></select>
+              <button class="btn btn-ghost" type="button" onclick="applyFilters()">Filtrele</button>
+              <button class="btn btn-ghost" type="button" onclick="clearFilters()">Temizle</button>
+            </div>
+            <div style="height: 12px;"></div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Kayıt</th>
+                    <th>Tür / Öncelik</th>
+                    <th>Yer / Nokta</th>
+                    <th>Durum</th>
+                    <th>Termin</th>
+                    <th>Ek</th>
+                    <th>İşlem</th>
+                  </tr>
+                </thead>
+                <tbody id="recordsTableBody">
+                  <tr><td colspan="7"><div class="empty-state">Kayıtlar yükleniyor...</div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="side-panels">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-title">Modül amacı</div>
+                <div class="panel-subtitle">Pratik saha kullanımı için hazırlandı.</div>
+              </div>
+            </div>
+            <div class="note-box">
+              <strong>Önerilen akış:</strong><br />
+              1) Kayıt açın<br />
+              2) Fotoğraf / belge ekleyin<br />
+              3) İlgili birimi ve sorumluyu yazın<br />
+              4) Durumu güncelleyin<br />
+              5) Detay ekranından yazdır / PDF alın
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-title">Durum rehberi</div>
+                <div class="panel-subtitle">Takibin standardı için örnek kullanım</div>
+              </div>
+            </div>
+            <div class="manager-list">
+              <div class="manager-card"><div class="manager-top"><div class="manager-title">Açık / Bildirildi</div><span class="badge info">Yeni</span></div><div class="manager-meta">Sahada tespit edildi veya ilgili birime ilk bildirim yapıldı.</div></div>
+              <div class="manager-card"><div class="manager-top"><div class="manager-title">İşleme Alındı</div><span class="badge warn">Takipte</span></div><div class="manager-meta">İş ilgili birime geçti, sahada müdahale veya teknik çalışma başladı.</div></div>
+              <div class="manager-card"><div class="manager-top"><div class="manager-title">Beklemede</div><span class="badge gray">Bekleme</span></div><div class="manager-meta">Malzeme, ekip veya bütçe bekleniyor olabilir. Sebebi sonuç notunda yazılabilir.</div></div>
+              <div class="manager-card"><div class="manager-top"><div class="manager-title">Tamamlandı / Kapatıldı</div><span class="badge success">Bitti</span></div><div class="manager-meta">İş bittiğinde veya sorun giderildiğinde çıktı alınarak arşivlenebilir.</div></div>
+            </div>
+          </section>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="recordModalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="recordModalTitle">Yeni Kayıt</div>
+          <div class="modal-subtitle">Arıza, eksiklik, talep veya kayıp kaydı oluşturun.</div>
+        </div>
+        <button class="close-btn" type="button" onclick="closeRecordModal()">Kapat</button>
+      </div>
+      <div class="modal-body">
+        <form id="recordForm">
+          <div class="form-grid three">
+            <div class="field">
+              <label>Kayıt No</label>
+              <input type="text" id="recordNoInput" readonly />
+              <div class="field-hint">Otomatik üretilir.</div>
+            </div>
+            <div class="field">
+              <label>Kayıt Tarihi</label>
+              <input type="date" id="recordDateInput" required />
+            </div>
+            <div class="field">
+              <label>Tür</label>
+              <select id="recordTypeInput"></select>
+            </div>
+            <div class="field form-row-wide">
+              <label>Başlık</label>
+              <input type="text" id="titleInput" maxlength="255" required placeholder="Örn: Perşembe Pazarı aydınlatma arızası" />
+            </div>
+            <div class="field">
+              <label>Yer / Tesis</label>
+              <input type="text" id="locationNameInput" required placeholder="Örn: Perşembe Pazarı, Otogar, Hizmet Binası" />
+            </div>
+            <div class="field">
+              <label>Bölüm / Nokta</label>
+              <input type="text" id="unitNameInput" placeholder="Örn: giriş kapısı, aydınlatma hattı, WC bölgesi" />
+            </div>
+            <div class="field">
+              <label>Öncelik</label>
+              <select id="priorityInput"></select>
+            </div>
+            <div class="field">
+              <label>Durum</label>
+              <select id="statusInput"></select>
+            </div>
+            <div class="field">
+              <label>Termin Tarihi</label>
+              <input type="date" id="dueDateInput" />
+            </div>
+            <div class="field">
+              <label>Tamamlanma Tarihi</label>
+              <input type="date" id="completedDateInput" />
+            </div>
+            <div class="field">
+              <label>İlgili Birim</label>
+              <input type="text" id="responsibleUnitInput" placeholder="Örn: Fen İşleri, Elektrik Ekibi" />
+            </div>
+            <div class="field">
+              <label>Sorumlu Kişi</label>
+              <input type="text" id="assignedPersonInput" placeholder="İsim / görev" />
+            </div>
+            <div class="field">
+              <label>Kaydı Açan</label>
+              <input type="text" id="reportedByInput" placeholder="Zabıta personeli / birim adı" />
+            </div>
+            <div class="field form-row-wide">
+              <label>Açıklama</label>
+              <textarea id="detailInput" placeholder="Sorunun detayı, görülen eksiklik veya istek açıklaması"></textarea>
+            </div>
+            <div class="field form-row-wide">
+              <label>Sonuç / Takip Notu</label>
+              <textarea id="resultNoteInput" placeholder="Yapılan işlem, bekleme sebebi veya kapanış notu"></textarea>
+            </div>
+            <div class="field form-row-wide">
+              <label>Dosya / Görsel Ekle</label>
+              <input type="file" id="attachmentsInput" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" />
+              <div class="field-hint">Formu kaydederken seçili dosyalar da eklenir. Sonradan detay ekranından yeni dosya ekleyebilirsiniz.</div>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" type="button" onclick="closeRecordModal()">Vazgeç</button>
+        <button class="btn btn-primary" type="button" onclick="submitRecordForm()">Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="detailModalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="detailTitle">Kayıt Detayı</div>
+          <div class="modal-subtitle">Yazdır / PDF çıktısı için uygun görünüm.</div>
+        </div>
+        <button class="close-btn" type="button" onclick="closeDetailModal()">Kapat</button>
+      </div>
+      <div class="modal-body">
+        <div class="detail-grid" id="detailGrid"></div>
+        <section>
+          <div class="panel-header" style="margin-bottom: 10px;">
+            <div>
+              <div class="panel-title">Ek Dosyalar</div>
+              <div class="panel-subtitle">Fotoğraf ve belgeler</div>
+            </div>
+          </div>
+          <div class="inline-flex" style="margin-bottom: 12px;">
+            <input type="file" id="detailAttachmentsInput" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" />
+            <button class="btn btn-secondary" type="button" onclick="uploadDetailFiles()">Dosya Ekle</button>
+          </div>
+          <div id="filesArea"></div>
+        </section>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" type="button" onclick="printCurrentRecord()">Yazdır / PDF</button>
+        <button class="btn btn-secondary" type="button" onclick="editCurrentRecord()">Düzenle</button>
+        <button class="btn btn-danger" type="button" onclick="deleteCurrentRecord()">Sil</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var RECORD_TYPES = ['Arıza', 'Eksiklik', 'Talep', 'Kayıp', 'Bakım İsteği', 'Diğer'];
+    var PRIORITY_OPTIONS = ['Düşük', 'Orta', 'Yüksek', 'Acil'];
+    var STATUS_OPTIONS = ['Açık', 'Bildirildi', 'İşleme Alındı', 'Beklemede', 'Tamamlandı', 'Kapatıldı'];
+    var records = [];
+    var currentRecord = null;
+    var editingRecordId = null;
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function toggleSidebar(forceOpen) {
+      var shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !document.body.classList.contains('sidebar-open');
+      document.body.classList.toggle('sidebar-open', shouldOpen);
+    }
+
+    function showBanner(message, type) {
+      var banner = document.getElementById('pageBanner');
+      banner.textContent = message;
+      banner.className = 'banner show ' + (type || 'info');
+      clearTimeout(showBanner._timer);
+      showBanner._timer = setTimeout(function() {
+        banner.className = 'banner ' + (type || 'info');
+      }, 3500);
+    }
+
+    function formatDate(value) {
+      if (!value) return '-';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        var parts = value.split('-');
+        return parts[2] + '.' + parts[1] + '.' + parts[0];
+      }
+      var date = new Date(value);
+      if (isNaN(date.getTime())) return '-';
+      return date.toLocaleDateString('tr-TR');
+    }
+
+    function formatDateTime(value) {
+      if (!value) return '-';
+      var date = new Date(value);
+      if (isNaN(date.getTime())) return '-';
+      return date.toLocaleString('tr-TR');
+    }
+
+    function formatFileSize(bytes) {
+      bytes = Number(bytes || 0);
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function badgeForStatus(status) {
+      if (status === 'Tamamlandı' || status === 'Kapatıldı') return '<span class="badge success">' + escapeHtml(status) + '</span>';
+      if (status === 'İşleme Alındı' || status === 'Beklemede') return '<span class="badge warn">' + escapeHtml(status) + '</span>';
+      return '<span class="badge info">' + escapeHtml(status || 'Açık') + '</span>';
+    }
+
+    function badgeForPriority(priority) {
+      if (priority === 'Acil') return '<span class="badge danger">Acil</span>';
+      if (priority === 'Yüksek') return '<span class="badge warn">Yüksek</span>';
+      if (priority === 'Düşük') return '<span class="badge gray">Düşük</span>';
+      return '<span class="badge info">' + escapeHtml(priority || 'Orta') + '</span>';
+    }
+
+    function fillSelectOptions(selectId, options, placeholder, defaultValue) {
+      var select = document.getElementById(selectId);
+      var html = '';
+      if (placeholder !== null) html += '<option value="">' + escapeHtml(placeholder || '') + '</option>';
+      for (var i = 0; i < options.length; i++) {
+        html += '<option value="' + escapeHtml(options[i]) + '">' + escapeHtml(options[i]) + '</option>';
+      }
+      select.innerHTML = html;
+      if (defaultValue) select.value = defaultValue;
+    }
+
+    async function fetchJson(url, options) {
+      var response = await fetch(url, options || {});
+      var data = null;
+      try { data = await response.json(); } catch (error) {}
+      if (!response.ok) throw new Error(data && data.error ? data.error : 'İşlem sırasında hata oluştu.');
+      return data;
+    }
+
+    async function loadSummary() {
+      var summary = await fetchJson('/api/issue-records/summary');
+      document.getElementById('statOpen').textContent = summary.openCount || 0;
+      document.getElementById('statProgress').textContent = summary.progressCount || 0;
+      document.getElementById('statCompleted').textContent = summary.completedCount || 0;
+      document.getElementById('statOverdue').textContent = summary.overdueCount || 0;
+      document.getElementById('statImageRecords').textContent = summary.imageRecordCount || 0;
+    }
+
+    async function loadRecords() {
+      records = await fetchJson('/api/issue-records');
+      renderRecordsTable();
+    }
+
+    function getFilteredRecords() {
+      var search = document.getElementById('searchInput').value.trim().toLocaleLowerCase('tr-TR');
+      var type = document.getElementById('filterType').value;
+      var status = document.getElementById('filterStatus').value;
+      var priority = document.getElementById('filterPriority').value;
+      return records.filter(function(item) {
+        if (type && item.recordType !== type) return false;
+        if (status && item.status !== status) return false;
+        if (priority && item.priority !== priority) return false;
+        if (search) {
+          var haystack = [item.recordNo, item.title, item.locationName, item.unitName, item.detail, item.responsibleUnit, item.assignedPerson].join(' ').toLocaleLowerCase('tr-TR');
+          if (haystack.indexOf(search) === -1) return false;
+        }
+        return true;
+      });
+    }
+
+    function renderRecordsTable() {
+      var body = document.getElementById('recordsTableBody');
+      var rows = getFilteredRecords();
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="7"><div class="empty-state">Bu filtreye uygun kayıt bulunmuyor.</div></td></tr>';
+        return;
+      }
+      var html = '';
+      for (var i = 0; i < rows.length; i++) {
+        var item = rows[i];
+        html += '<tr>' +
+          '<td><div class="cell-title">' + escapeHtml(item.recordNo) + '</div><div class="cell-sub">' + escapeHtml(item.title) + '</div><div class="cell-sub">Tarih: ' + escapeHtml(item.recordDateText || '-') + '</div></td>' +
+          '<td><div class="stack"><div>' + badgeForPriority(item.priority) + '</div><div>' + '<span class="badge gray">' + escapeHtml(item.recordType || '-') + '</span>' + '</div></div></td>' +
+          '<td><div class="cell-title">' + escapeHtml(item.locationName || '-') + '</div><div class="cell-sub">' + escapeHtml(item.unitName || 'Nokta belirtilmedi') + '</div></td>' +
+          '<td><div class="stack">' + badgeForStatus(item.status) + (item.isOverdue ? '<span class="badge danger">Gecikti</span>' : '') + '</div></td>' +
+          '<td><div class="cell-title">' + escapeHtml(item.dueDateText || '-') + '</div><div class="cell-sub">Bitiş: ' + escapeHtml(item.completedDateText || '-') + '</div></td>' +
+          '<td><div class="cell-title">' + escapeHtml(String(item.fileCount || 0)) + ' dosya</div><div class="cell-sub">' + escapeHtml(String(item.imageCount || 0)) + ' görsel</div></td>' +
+          '<td><div class="action-row"><button class="mini-btn primary" type="button" onclick="openDetailModal(' + item.id + ')">Detay</button><button class="mini-btn warn" type="button" onclick="openRecordModal(' + item.id + ')">Düzenle</button></div></td>' +
+        '</tr>';
+      }
+      body.innerHTML = html;
+    }
+
+    function applyFilters() { renderRecordsTable(); }
+
+    function clearFilters() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('filterType').value = '';
+      document.getElementById('filterStatus').value = '';
+      document.getElementById('filterPriority').value = '';
+      renderRecordsTable();
+    }
+
+    async function reloadAll() {
+      await Promise.all([loadSummary(), loadRecords()]);
+    }
+
+    async function openRecordModal(id) {
+      editingRecordId = id || null;
+      document.getElementById('recordForm').reset();
+      document.getElementById('attachmentsInput').value = '';
+      document.getElementById('recordDateInput').value = new Date().toISOString().slice(0, 10);
+      document.getElementById('completedDateInput').value = '';
+      document.getElementById('recordModalTitle').textContent = id ? 'Kayıt Düzenle' : 'Yeni Kayıt';
+      fillSelectOptions('recordTypeInput', RECORD_TYPES, null, 'Arıza');
+      fillSelectOptions('priorityInput', PRIORITY_OPTIONS, null, 'Orta');
+      fillSelectOptions('statusInput', STATUS_OPTIONS, null, 'Açık');
+
+      if (id) {
+        var detail = await fetchJson('/api/issue-records/' + id);
+        document.getElementById('recordNoInput').value = detail.recordNo || '';
+        document.getElementById('recordDateInput').value = detail.recordDate || '';
+        document.getElementById('recordTypeInput').value = detail.recordType || 'Arıza';
+        document.getElementById('titleInput').value = detail.title || '';
+        document.getElementById('locationNameInput').value = detail.locationName || '';
+        document.getElementById('unitNameInput').value = detail.unitName || '';
+        document.getElementById('priorityInput').value = detail.priority || 'Orta';
+        document.getElementById('statusInput').value = detail.status || 'Açık';
+        document.getElementById('dueDateInput').value = detail.dueDate || '';
+        document.getElementById('completedDateInput').value = detail.completedDate || '';
+        document.getElementById('responsibleUnitInput').value = detail.responsibleUnit || '';
+        document.getElementById('assignedPersonInput').value = detail.assignedPerson || '';
+        document.getElementById('reportedByInput').value = detail.reportedBy || '';
+        document.getElementById('detailInput').value = detail.detail || '';
+        document.getElementById('resultNoteInput').value = detail.resultNote || '';
+      } else {
+        var next = await fetchJson('/api/issue-records/next-no');
+        document.getElementById('recordNoInput').value = next.recordNo || '';
+      }
+
+      document.getElementById('recordModalOverlay').classList.add('show');
+    }
+
+    function closeRecordModal() {
+      document.getElementById('recordModalOverlay').classList.remove('show');
+    }
+
+    function collectFormPayload() {
+      return {
+        recordDate: document.getElementById('recordDateInput').value,
+        recordType: document.getElementById('recordTypeInput').value,
+        title: document.getElementById('titleInput').value.trim(),
+        locationName: document.getElementById('locationNameInput').value.trim(),
+        unitName: document.getElementById('unitNameInput').value.trim(),
+        priority: document.getElementById('priorityInput').value,
+        status: document.getElementById('statusInput').value,
+        dueDate: document.getElementById('dueDateInput').value,
+        completedDate: document.getElementById('completedDateInput').value,
+        responsibleUnit: document.getElementById('responsibleUnitInput').value.trim(),
+        assignedPerson: document.getElementById('assignedPersonInput').value.trim(),
+        reportedBy: document.getElementById('reportedByInput').value.trim(),
+        detail: document.getElementById('detailInput').value.trim(),
+        resultNote: document.getElementById('resultNoteInput').value.trim()
+      };
+    }
+
+    async function uploadFilesForRecord(recordId, inputId) {
+      var input = document.getElementById(inputId);
+      if (!input.files || !input.files.length) return;
+      var formData = new FormData();
+      for (var i = 0; i < input.files.length; i++) formData.append('files', input.files[i]);
+      await fetchJson('/api/issue-records/' + recordId + '/files', { method: 'POST', body: formData });
+      input.value = '';
+    }
+
+    async function submitRecordForm() {
+      try {
+        var payload = collectFormPayload();
+        var method = editingRecordId ? 'PUT' : 'POST';
+        var url = editingRecordId ? '/api/issue-records/' + editingRecordId : '/api/issue-records';
+        var saved = await fetchJson(url, {
+          method: method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        await uploadFilesForRecord(saved.id, 'attachmentsInput');
+        closeRecordModal();
+        await reloadAll();
+        showBanner(editingRecordId ? 'Kayıt güncellendi.' : 'Yeni kayıt oluşturuldu.', 'success');
+      } catch (error) {
+        showBanner(error.message || 'Kayıt kaydedilemedi.', 'warn');
+      }
+    }
+
+    async function openDetailModal(id) {
+      try {
+        currentRecord = await fetchJson('/api/issue-records/' + id);
+        document.getElementById('detailTitle').textContent = (currentRecord.recordNo || '') + ' · ' + (currentRecord.title || 'Kayıt Detayı');
+        renderDetail(currentRecord);
+        document.getElementById('detailModalOverlay').classList.add('show');
+      } catch (error) {
+        showBanner(error.message || 'Detay yüklenemedi.', 'warn');
+      }
+    }
+
+    function renderDetail(record) {
+      var grid = document.getElementById('detailGrid');
+      grid.innerHTML = '' +
+        '<div class="detail-card"><div class="label">Kayıt Türü</div><div class="value">' + escapeHtml(record.recordType || '-') + '</div></div>' +
+        '<div class="detail-card"><div class="label">Öncelik / Durum</div><div class="value">' + escapeHtml(record.priority || '-') + ' · ' + escapeHtml(record.status || '-') + (record.isOverdue ? ' · Gecikti' : '') + '</div></div>' +
+        '<div class="detail-card"><div class="label">Yer / Nokta</div><div class="value">' + escapeHtml(record.locationName || '-') + '<br />' + escapeHtml(record.unitName || 'Nokta belirtilmedi') + '</div></div>' +
+        '<div class="detail-card"><div class="label">Tarih Bilgileri</div><div class="value">Kayıt: ' + escapeHtml(record.recordDateText || '-') + '<br />Termin: ' + escapeHtml(record.dueDateText || '-') + '<br />Tamamlanma: ' + escapeHtml(record.completedDateText || '-') + '</div></div>' +
+        '<div class="detail-card"><div class="label">İlgili Birim / Sorumlu</div><div class="value">' + escapeHtml(record.responsibleUnit || '-') + '<br />' + escapeHtml(record.assignedPerson || '-') + '</div></div>' +
+        '<div class="detail-card"><div class="label">Kaydı Açan / Güncelleme</div><div class="value">' + escapeHtml(record.reportedBy || '-') + '<br />Oluşturma: ' + escapeHtml(record.createdAtText || '-') + '<br />Son Güncelleme: ' + escapeHtml(record.updatedAtText || '-') + '</div></div>' +
+        '<div class="detail-card" style="grid-column: 1 / -1;"><div class="label">Açıklama</div><div class="value">' + escapeHtml(record.detail || 'Açıklama girilmedi.').replace(/\n/g, '<br />') + '</div></div>' +
+        '<div class="detail-card" style="grid-column: 1 / -1;"><div class="label">Sonuç / Takip Notu</div><div class="value">' + escapeHtml(record.resultNote || 'Sonuç notu girilmedi.').replace(/\n/g, '<br />') + '</div></div>';
+      renderFiles(record.files || []);
+    }
+
+    function renderFiles(files) {
+      var area = document.getElementById('filesArea');
+      if (!files.length) {
+        area.innerHTML = '<div class="empty-state">Bu kayda henüz dosya eklenmedi.</div>';
+        return;
+      }
+      var html = '<div class="file-grid">';
+      for (var i = 0; i < files.length; i++) {
+        var file = files[i];
+        html += '<div class="file-card">' +
+          (file.isImage ? '<img src="' + escapeHtml(file.filePath) + '" alt="Ek görsel" class="file-preview" />' : '<div class="file-preview" style="display:flex;align-items:center;justify-content:center;font-weight:700;color:#64748b;">Belge</div>') +
+          '<a class="file-link" href="' + escapeHtml(file.filePath) + '" target="_blank">' + escapeHtml(file.originalName || 'Dosya') + '</a>' +
+          '<div class="cell-sub">' + escapeHtml(file.createdAtText || '-') + ' · ' + escapeHtml(formatFileSize(file.fileSize)) + '</div>' +
+          '<div class="action-row"><button class="mini-btn danger" type="button" onclick="deleteFile(' + file.id + ')">Sil</button></div>' +
+        '</div>';
+      }
+      html += '</div>';
+      area.innerHTML = html;
+    }
+
+    function closeDetailModal() {
+      document.getElementById('detailModalOverlay').classList.remove('show');
+    }
+
+    async function uploadDetailFiles() {
+      if (!currentRecord || !currentRecord.id) return;
+      try {
+        await uploadFilesForRecord(currentRecord.id, 'detailAttachmentsInput');
+        await openDetailModal(currentRecord.id);
+        await reloadAll();
+        showBanner('Dosyalar kayda eklendi.', 'success');
+      } catch (error) {
+        showBanner(error.message || 'Dosyalar eklenemedi.', 'warn');
+      }
+    }
+
+    async function deleteFile(fileId) {
+      if (!confirm('Bu dosya silinsin mi?')) return;
+      try {
+        await fetchJson('/api/issue-record-files/' + fileId, { method: 'DELETE' });
+        await openDetailModal(currentRecord.id);
+        await reloadAll();
+        showBanner('Dosya silindi.', 'success');
+      } catch (error) {
+        showBanner(error.message || 'Dosya silinemedi.', 'warn');
+      }
+    }
+
+    function editCurrentRecord() {
+      if (!currentRecord || !currentRecord.id) return;
+      closeDetailModal();
+      openRecordModal(currentRecord.id);
+    }
+
+    async function deleteCurrentRecord() {
+      if (!currentRecord || !currentRecord.id) return;
+      if (!confirm('Bu kayıt tamamen silinsin mi?')) return;
+      try {
+        await fetchJson('/api/issue-records/' + currentRecord.id, { method: 'DELETE' });
+        closeDetailModal();
+        await reloadAll();
+        showBanner('Kayıt silindi.', 'success');
+      } catch (error) {
+        showBanner(error.message || 'Kayıt silinemedi.', 'warn');
+      }
+    }
+
+    function printCurrentRecord() {
+      if (!currentRecord) return;
+      var imageHtml = '';
+      var files = currentRecord.files || [];
+      var fileLinks = '';
+      for (var i = 0; i < files.length; i++) {
+        var file = files[i];
+        if (file.isImage) {
+          imageHtml += '<div class="img-card"><img src="' + escapeHtml(new URL(file.filePath, window.location.origin).href) + '" alt="Görsel" /><div class="cap">' + escapeHtml(file.originalName || 'Görsel') + '</div></div>';
+        } else {
+          fileLinks += '<li>' + escapeHtml(file.originalName || 'Belge') + '</li>';
+        }
+      }
+
+      var html = '<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8" /><title>' + escapeHtml(currentRecord.recordNo || 'Kayıt') + '</title>' +
+        '<style>body{font-family:Arial,sans-serif;color:#111827;margin:24px;} h1{margin:0 0 8px;font-size:24px;} h2{font-size:16px;margin:20px 0 10px;} .muted{color:#6b7280;font-size:13px;} .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px;} .card{border:1px solid #dbe3ee;border-radius:10px;padding:12px;background:#f8fafc;} .label{font-size:11px;font-weight:700;letter-spacing:.05em;color:#6b7280;text-transform:uppercase;} .value{margin-top:6px;font-size:13px;line-height:1.6;} .images{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px;} .img-card{border:1px solid #dbe3ee;border-radius:10px;padding:8px;} .img-card img{width:100%;height:260px;object-fit:cover;border-radius:8px;} .cap{margin-top:6px;font-size:12px;color:#374151;} ul{margin:8px 0 0;padding-left:18px;} @media print{body{margin:12mm;} .card,.img-card{break-inside:avoid;}} </style></head><body>' +
+        '<h1>' + escapeHtml(currentRecord.recordNo || '') + ' · ' + escapeHtml(currentRecord.title || '') + '</h1>' +
+        '<div class="muted">Arıza / Eksiklik / Talep Takip Formu</div>' +
+        '<div class="grid">' +
+          '<div class="card"><div class="label">Tür</div><div class="value">' + escapeHtml(currentRecord.recordType || '-') + '</div></div>' +
+          '<div class="card"><div class="label">Öncelik / Durum</div><div class="value">' + escapeHtml(currentRecord.priority || '-') + ' · ' + escapeHtml(currentRecord.status || '-') + '</div></div>' +
+          '<div class="card"><div class="label">Yer / Nokta</div><div class="value">' + escapeHtml(currentRecord.locationName || '-') + '<br />' + escapeHtml(currentRecord.unitName || 'Nokta belirtilmedi') + '</div></div>' +
+          '<div class="card"><div class="label">Tarih Bilgileri</div><div class="value">Kayıt: ' + escapeHtml(currentRecord.recordDateText || '-') + '<br />Termin: ' + escapeHtml(currentRecord.dueDateText || '-') + '<br />Tamamlanma: ' + escapeHtml(currentRecord.completedDateText || '-') + '</div></div>' +
+          '<div class="card"><div class="label">İlgili Birim / Sorumlu</div><div class="value">' + escapeHtml(currentRecord.responsibleUnit || '-') + '<br />' + escapeHtml(currentRecord.assignedPerson || '-') + '</div></div>' +
+          '<div class="card"><div class="label">Kaydı Açan</div><div class="value">' + escapeHtml(currentRecord.reportedBy || '-') + '</div></div>' +
+          '<div class="card" style="grid-column:1 / -1;"><div class="label">Açıklama</div><div class="value">' + escapeHtml(currentRecord.detail || 'Açıklama girilmedi.').replace(/\n/g, '<br />') + '</div></div>' +
+          '<div class="card" style="grid-column:1 / -1;"><div class="label">Sonuç / Takip Notu</div><div class="value">' + escapeHtml(currentRecord.resultNote || 'Sonuç notu girilmedi.').replace(/\n/g, '<br />') + '</div></div>' +
+        '</div>' +
+        '<h2>Ek Görseller</h2>' + (imageHtml ? '<div class="images">' + imageHtml + '</div>' : '<div class="muted">Görsel eklenmedi.</div>') +
+        '<h2>Diğer Ekler</h2>' + (fileLinks ? '<ul>' + fileLinks + '</ul>' : '<div class="muted">Belge eklenmedi.</div>') +
+        '</body></html>';
+
+      var win = window.open('', '_blank');
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      setTimeout(function() { win.print(); }, 300);
+    }
+
+    document.addEventListener('DOMContentLoaded', async function() {
+      fillSelectOptions('filterType', RECORD_TYPES, 'Tüm türler');
+      fillSelectOptions('filterStatus', STATUS_OPTIONS, 'Tüm durumlar');
+      fillSelectOptions('filterPriority', PRIORITY_OPTIONS, 'Tüm öncelikler');
+      document.getElementById('searchInput').addEventListener('input', renderRecordsTable);
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+          toggleSidebar(false);
+          closeRecordModal();
+          closeDetailModal();
+        }
+      });
+      try {
+        await reloadAll();
+      } catch (error) {
+        document.getElementById('recordsTableBody').innerHTML = '<tr><td colspan="7"><div class="empty-state">' + escapeHtml(error.message || 'Kayıtlar yüklenemedi.') + '</div></td></tr>';
+      }
+    });
+  </script>
+</body>
+</html>
