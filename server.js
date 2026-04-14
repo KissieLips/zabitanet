@@ -2292,20 +2292,8 @@ app.get("/api/businesses", async (req, res) => {
 
     res.json(result.rows.map(mapBusiness));
   } catch (error) {
-    console.error('[DEBUG][/api/businesses]', error);
-    res.status(500).json({
-      error: "İşyerleri alınamadı.",
-      debug: {
-        message: error && error.message ? String(error.message) : '',
-        detail: error && error.detail ? String(error.detail) : '',
-        hint: error && error.hint ? String(error.hint) : '',
-        code: error && error.code ? String(error.code) : '',
-        table: error && error.table ? String(error.table) : '',
-        column: error && error.column ? String(error.column) : '',
-        constraint: error && error.constraint ? String(error.constraint) : '',
-        where: error && error.where ? String(error.where) : ''
-      }
-    });
+    console.error(error);
+    res.status(500).json({ error: "İşyerleri alınamadı." });
   }
 });
 
@@ -3680,11 +3668,10 @@ app.get("/businesses", (req, res) => {
     input, select, textarea { width: 100%; border: 1px solid #cfd8e4; border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none; background: #ffffff; color: var(--text); transition: border-color 0.15s ease, box-shadow 0.15s ease; }
     input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
     .filters { display: grid; grid-template-columns: 220px 170px 170px minmax(220px, 1fr); gap: 10px; align-items: center; margin-bottom: 12px; }
-    .table-wrap { overflow: auto; max-height: min(68vh, 760px); border: 1px solid var(--line); border-radius: 14px; }
-    .table-wrap table td:nth-child(2) { min-width: 230px; }
-    .table-wrap thead th { position: sticky; top: 0; z-index: 2; }
+    .table-wrap { overflow: auto; max-height: 560px; border: 1px solid var(--line); border-radius: 14px; }
+    .table-wrap table td:first-child { min-width: 76px; }
     table { width: 100%; border-collapse: collapse; min-width: 1320px; background: #ffffff; }
-    th { text-align: left; padding: 13px 12px; font-size: 12px; color: #475569; border-bottom: 1px solid var(--line); font-weight: 700; letter-spacing: 0.02em; background: #f8fafc; }
+    th { text-align: left; padding: 13px 12px; font-size: 12px; color: #475569; border-bottom: 1px solid var(--line); font-weight: 700; letter-spacing: 0.02em; background: #f8fafc; position: sticky; top: 0; z-index: 2; }
     td { padding: 13px 12px; border-bottom: 1px solid #edf2f7; font-size: 13px; vertical-align: top; }
     tbody tr:hover { background: #f8fbff; }
     .badge { display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; background: #eff6ff; color: #1d4ed8; }
@@ -3700,11 +3687,6 @@ app.get("/businesses", (req, res) => {
     .map-help { margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.55; }
     .map-help.tight { margin-top: 6px; }
     .action-row { display: flex; flex-wrap: wrap; gap: 8px; }
-    .action-stack { display: grid; gap: 8px; min-width: 220px; }
-    .action-stack .action-row { gap: 6px; }
-    .row-no { display: inline-flex; min-width: 34px; justify-content: center; align-items: center; padding: 6px 8px; border-radius: 999px; background: #eef2ff; color: #1d4ed8; font-size: 12px; font-weight: 800; }
-    .license-stack { min-width: 180px; }
-    .license-meta { display: grid; gap: 2px; }
     .mini-btn { border: 1px solid var(--line); background: #ffffff; color: #1f2937; padding: 7px 9px; border-radius: 9px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; }
     .mini-btn:hover { background: #f8fafc; }
     .mini-btn.primary { color: #1d4ed8; border-color: #bfdbfe; background: #eff6ff; }
@@ -4516,6 +4498,32 @@ app.get("/businesses", (req, res) => {
       });
     }
 
+    function badgeForLicense(status) {
+      if (status === 'Var') return '<span class="badge" style="background:#dcfce7;color:#166534;">Ruhsat Var</span>';
+      if (status === 'Başvuru Aşamasında') return '<span class="badge" style="background:#fef3c7;color:#92400e;">Başvuru Aşamasında</span>';
+      return '<span class="badge" style="background:#fee2e2;color:#b91c1c;">Ruhsat Yok</span>';
+    }
+
+    function buildLicenseCell(item) {
+      var parts = [badgeForLicense(item.licenseStatus)];
+      if (item.licenseStatus === 'Var') {
+        parts.push('<div class="cell-sub">No: ' + escapeHtml(item.licenseNo || '-') + '</div>');
+        parts.push('<div class="cell-sub">Tarih: ' + escapeHtml(item.licenseDateText || '-') + '</div>');
+      } else if (item.licenseStatus === 'Başvuru Aşamasında') {
+        parts.push('<div class="cell-sub">Ruhsat süreci devam ediyor</div>');
+      } else {
+        parts.push('<div class="cell-sub">Kayıtlı ruhsat bilgisi yok</div>');
+      }
+      return '<div class="stack">' + parts.join('') + '</div>';
+    }
+
+    function buildLicenseAction(item) {
+      var title = 'Ruhsat Ekle';
+      if (item.licenseStatus === 'Var') title = 'Ruhsat Detay';
+      else if (item.licenseStatus === 'Başvuru Aşamasında') title = 'Başvuru Detay';
+      return '<a class="mini-btn" href="/licenses?businessId=' + item.id + '">' + title + '</a>';
+    }
+
     function renderBusinessTable() {
       var rows = getFilteredBusinesses();
       var body = document.getElementById("businessTableBody");
@@ -4528,7 +4536,7 @@ app.get("/businesses", (req, res) => {
       var html = "";
       for (var i = 0; i < rows.length; i++) {
         var item = rows[i];
-        var licenseStatus = String(item.licenseStatus || 'Yok');
+        var rowNo = i + 1;
         var neighborhoodText = item.neighborhood ? escapeHtml(item.neighborhood + ' Mah.') : '';
         var streetText = [];
         if (item.street) streetText.push(escapeHtml(item.street));
@@ -4541,34 +4549,8 @@ app.get("/businesses", (req, res) => {
           '</div>';
         }
 
-        var licenseBits = [badgeForLicense(licenseStatus)];
-        if (licenseStatus === 'Var') {
-          licenseBits.push('<div class="license-meta"><div class="cell-title compact">No: ' + escapeHtml(item.licenseNo || '-') + '</div><div class="cell-sub">Tarih: ' + escapeHtml(item.licenseDateText || '-') + '</div></div>');
-        } else if (licenseStatus === 'Başvuru Aşamasında') {
-          if (item.licenseNo || item.licenseDateText) {
-            licenseBits.push('<div class="license-meta">' +
-              (item.licenseNo ? '<div class="cell-title compact">No: ' + escapeHtml(item.licenseNo) + '</div>' : '') +
-              (item.licenseDateText ? '<div class="cell-sub">Tarih: ' + escapeHtml(item.licenseDateText) + '</div>' : '<div class="cell-sub">Ruhsat tarihi henüz girilmedi</div>') +
-            '</div>');
-          } else {
-            licenseBits.push('<div class="cell-sub">Ruhsat no / tarih henüz girilmedi</div>');
-          }
-        } else {
-          licenseBits.push('<div class="muted">Ruhsat yok</div>');
-        }
-
-        var licenseButtonLabel = 'Ruhsat Ekle';
-        var licenseButtonClass = 'mini-btn';
-        if (licenseStatus === 'Var') {
-          licenseButtonLabel = 'Ruhsatı Gör';
-          licenseButtonClass = 'mini-btn primary';
-        } else if (licenseStatus === 'Başvuru Aşamasında') {
-          licenseButtonLabel = 'Başvuruyu Gör';
-          licenseButtonClass = 'mini-btn primary';
-        }
-
         html += '<tr>' +
-          '<td><span class="row-no">' + (i + 1) + '</span></td>' +
+          '<td><div class="cell-title">' + rowNo + '</div></td>' +
           '<td>' +
             '<div class="stack">' +
               '<div><span class="badge">' + escapeHtml(item.categoryName || "Kategori Yok") + '</span></div>' +
@@ -4577,7 +4559,7 @@ app.get("/businesses", (req, res) => {
           '</td>' +
           '<td><div class="stack"><div class="cell-title">' + escapeHtml(item.ownerName) + '</div><div class="cell-sub">Yetkili / İşletme sahibi</div></div></td>' +
           '<td>' + (item.phone ? '<div class="cell-title">' + escapeHtml(item.phone) + '</div>' : '<span class="muted">Belirtilmedi</span>') + '</td>' +
-          '<td><div class="stack license-stack">' + licenseBits.join('') + '</div></td>' +
+          '<td>' + buildLicenseCell(item) + '</td>' +
           '<td>' + addressHtml + '</td>' +
           '<td><div class="cell-title compact">Ada: ' + escapeHtml(item.ada || '-') + ' · Parsel: ' + escapeHtml(item.parcel || '-') + '</div></td>' +
           '<td>' +
@@ -4586,16 +4568,12 @@ app.get("/businesses", (req, res) => {
               : (item.addressMapsUrl ? '<div class="stack"><div class="muted">Koordinat yok</div><div class="cell-sub">Adres bilgisi mevcut</div></div>' : '<span class="muted">Konum eklenmedi</span>')) +
           '</td>' +
           '<td>' +
-            '<div class="action-stack">' +
-              '<div class="action-row">' +
-                '<a class="mini-btn primary" href="/businesses/' + item.id + '">Detay</a>' +
-                '<a class="' + licenseButtonClass + '" href="/licenses?businessId=' + item.id + '">' + licenseButtonLabel + '</a>' +
-              '</div>' +
-              '<div class="action-row">' +
-                '<button class="mini-btn" onclick="editBusiness(' + item.id + ')">Düzenle</button>' +
-                ((item.mapsUrl || item.addressMapsUrl) ? '<a class="mini-btn" href="' + escapeHtml(item.mapsUrl || item.addressMapsUrl) + '" target="_blank" rel="noopener noreferrer">Google Maps Aç</a>' : '') +
-                '<button class="mini-btn danger" onclick="deleteBusiness(' + item.id + ')">Sil</button>' +
-              '</div>' +
+            '<div class="action-row">' +
+              '<a class="mini-btn primary" href="/businesses/' + item.id + '">Detay</a>' +
+              buildLicenseAction(item) +
+              '<button class="mini-btn" onclick="editBusiness(' + item.id + ')">Düzenle</button>' +
+              ((item.mapsUrl || item.addressMapsUrl) ? '<a class="mini-btn" href="' + escapeHtml(item.mapsUrl || item.addressMapsUrl) + '" target="_blank" rel="noopener noreferrer">Google Maps Aç</a>' : '') +
+              '<button class="mini-btn danger" onclick="deleteBusiness(' + item.id + ')">Sil</button>' +
             '</div>' +
           '</td>' +
         '</tr>';
@@ -4604,59 +4582,9 @@ app.get("/businesses", (req, res) => {
       body.innerHTML = html;
     }
 
-    function buildApiDebugMessage(payload, fallbackMessage) {
-      var parts = [];
-      var mainMessage = payload && payload.error ? String(payload.error) : (fallbackMessage || 'Veriler yüklenemedi.');
-      parts.push(mainMessage);
-
-      if (payload && payload.debug) {
-        var debug = payload.debug;
-        if (debug.message) parts.push('Mesaj: ' + String(debug.message));
-        if (debug.detail) parts.push('Detay: ' + String(debug.detail));
-        if (debug.hint) parts.push('İpucu: ' + String(debug.hint));
-        if (debug.code) parts.push('Kod: ' + String(debug.code));
-        if (debug.table) parts.push('Tablo: ' + String(debug.table));
-        if (debug.column) parts.push('Kolon: ' + String(debug.column));
-        if (debug.constraint) parts.push('Kısıt: ' + String(debug.constraint));
-        if (debug.where) parts.push('Where: ' + String(debug.where));
-      }
-
-      return parts.join(' | ');
-    }
-
-    async function parseApiError(response, fallbackMessage) {
-      var contentType = response.headers.get('content-type') || '';
-      if (contentType.indexOf('application/json') !== -1) {
-        var payload = await response.json();
-        return new Error(buildApiDebugMessage(payload, fallbackMessage));
-      }
-
-      var text = '';
-      try {
-        text = await response.text();
-      } catch (readError) {
-        text = '';
-      }
-
-      var message = fallbackMessage || 'Veriler yüklenemedi.';
-      if (response.status) {
-        message += ' HTTP ' + response.status;
-        if (response.statusText) message += ' ' + response.statusText;
-      }
-      if (text) message += ' | ' + String(text).slice(0, 700);
-      return new Error(message);
-    }
-
-    function showBusinessLoadError(error) {
-      var body = document.getElementById('businessTableBody');
-      if (!body) return;
-      var message = error && error.message ? error.message : 'Veriler yüklenemedi.';
-      body.innerHTML = '<tr><td colspan="9"><div class="empty-state" style="text-align:left; white-space:normal; line-height:1.55;"><strong>Firma listesi yüklenemedi.</strong><br>' + escapeHtml(message) + '</div></td></tr>';
-    }
-
     async function loadCategories() {
       var response = await fetch('/api/business-categories');
-      if (!response.ok) throw await parseApiError(response, 'Kategoriler yüklenemedi.');
+      if (!response.ok) throw new Error();
       categories = await response.json();
       renderCategoryOptions();
       renderStats();
@@ -4664,7 +4592,7 @@ app.get("/businesses", (req, res) => {
 
     async function loadBusinesses() {
       var response = await fetch('/api/businesses');
-      if (!response.ok) throw await parseApiError(response, 'Firma listesi alınamadı.');
+      if (!response.ok) throw new Error();
       businesses = await response.json();
       renderStats();
       renderBusinessTable();
@@ -5164,9 +5092,7 @@ app.get("/businesses", (req, res) => {
         await loadCategories();
         await loadBusinesses();
       } catch (error) {
-        console.error('[DEBUG][business-page-init]', error);
-        showBusinessLoadError(error);
-        alert(error && error.message ? error.message : 'Veriler yüklenemedi.');
+        alert('Veriler yüklenemedi.');
       }
 
       var overlays = document.querySelectorAll('.modal-overlay');
