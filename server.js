@@ -3686,8 +3686,8 @@ app.get("/businesses", (req, res) => {
     .map-box { height: 420px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #f8fafc; }
     .map-help { margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.55; }
     .map-help.tight { margin-top: 6px; }
-    .action-row { display: grid; grid-template-columns: repeat(2, minmax(118px, 1fr)); gap: 8px; align-items: stretch; min-width: 252px; }
-    .mini-btn { border: 1px solid var(--line); background: #ffffff; color: #1f2937; min-height: 40px; width: 100%; padding: 8px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; text-align: center; line-height: 1.2; }
+    .action-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 300px; }
+    .mini-btn { border: 1px solid var(--line); background: #ffffff; color: #1f2937; min-height: 32px; min-width: 86px; padding: 6px 8px; border-radius: 9px; font-size: 11.5px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; text-align: center; line-height: 1.1; white-space: nowrap; }
     .mini-btn:hover { background: #f8fafc; }
     .mini-btn.primary { color: #1d4ed8; border-color: #bfdbfe; background: #eff6ff; }
     .mini-btn.danger { color: #dc2626; border-color: #fecaca; background: #fff1f2; }
