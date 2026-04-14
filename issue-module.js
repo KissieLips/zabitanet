@@ -230,9 +230,19 @@ async function initIssueModuleDb(pool) {
   `);
 }
 
-function registerIssueModule({ app, pool, rootDir }) {
-  const uploadsRoot = path.join(rootDir, "uploads");
-  const issueUploadsRoot = path.join(uploadsRoot, "issues");
+function registerIssueModule({ app, pool, rootDir, uploadsRoot }) {
+  const resolvedUploadsRoot = path.resolve(uploadsRoot || process.env.UPLOADS_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(rootDir, "uploads"));
+  const issueUploadsRoot = path.join(resolvedUploadsRoot, "issues");
+
+  function getUploadAbsolutePath(relativePath) {
+    if (!relativePath) return "";
+
+    const normalizedPath = String(relativePath)
+      .replace(/^\/+/, "")
+      .replace(/^uploads\//i, "");
+
+    return path.join(resolvedUploadsRoot, normalizedPath);
+  }
   fs.mkdirSync(issueUploadsRoot, { recursive: true });
 
   const issueStorage = multer.diskStorage({
@@ -244,8 +254,12 @@ function registerIssueModule({ app, pool, rootDir }) {
     filename: function(req, file, cb) {
       const decodedOriginalName = decodeUploadFilename(file.originalname || "dosya");
       const ext = path.extname(decodedOriginalName || "");
-      const base = path.basename(decodedOriginalName || "dosya", ext).replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, "-");
-      cb(null, Date.now() + "-" + base + ext);
+      const base = path.basename(decodedOriginalName || "dosya", ext)
+        .replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "") || "dosya";
+      const uniqueSuffix = Math.random().toString(36).slice(2, 8);
+      cb(null, Date.now() + "-" + uniqueSuffix + "-" + base + ext);
     }
   });
 
@@ -459,7 +473,7 @@ function registerIssueModule({ app, pool, rootDir }) {
       const filesResult = await pool.query('SELECT file_path FROM issue_record_files WHERE record_id = $1', [id]);
       for (const row of filesResult.rows) {
         if (!row.file_path) continue;
-        const absolutePath = path.join(rootDir, row.file_path.replace(/^\/uploads\//, 'uploads/'));
+        const absolutePath = getUploadAbsolutePath(row.file_path);
         if (fs.existsSync(absolutePath)) {
           try { fs.unlinkSync(absolutePath); } catch (error) {}
         }
@@ -542,7 +556,7 @@ function registerIssueModule({ app, pool, rootDir }) {
 
       const row = result.rows[0];
       if (row.file_path) {
-        const absolutePath = path.join(rootDir, row.file_path.replace(/^\/uploads\//, 'uploads/'));
+        const absolutePath = getUploadAbsolutePath(row.file_path);
         if (fs.existsSync(absolutePath)) {
           try { fs.unlinkSync(absolutePath); } catch (error) {}
         }

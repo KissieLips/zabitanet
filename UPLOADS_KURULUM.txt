@@ -1,0 +1,11 @@
+Railway kurulumu:
+1) zabitanet servisine Volume bağla
+2) Mount path: /data/uploads
+3) Variable ekle: UPLOADS_DIR=/data/uploads
+4) Deploy et
+5) Yeni yüklenen görseller /data/uploads altına yazılır
+
+Not:
+- Eski, volume öncesi yüklenen görseller otomatik geri gelmez.
+- Testi mutlaka yeni bir kayıt + yeni görsel ile yap.
+- Başlangıç logunda "[uploads] aktif klasör:" satırını kontrol et.

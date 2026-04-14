@@ -18,15 +18,30 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-registerMarketModule({ app, pool });
-registerIssueModule({ app, pool, rootDir: __dirname });
-
-const uploadsRoot = path.join(__dirname, "uploads");
+const DEFAULT_LOCAL_UPLOADS_DIR = path.join(__dirname, "uploads");
+const uploadsRoot = path.resolve(
+  process.env.UPLOADS_DIR
+    || process.env.RAILWAY_VOLUME_MOUNT_PATH
+    || DEFAULT_LOCAL_UPLOADS_DIR
+);
 const assetsRoot = path.join(__dirname, "assets");
+
+registerMarketModule({ app, pool });
+registerIssueModule({ app, pool, rootDir: __dirname, uploadsRoot });
 const complaintUploadsRoot = path.join(uploadsRoot, "complaints");
 const businessUploadsRoot = path.join(uploadsRoot, "businesses");
 const businessInspectionUploadsRoot = path.join(uploadsRoot, "business-inspections");
 const complaintStreamClients = new Set();
+
+function getUploadAbsolutePath(relativePath) {
+  if (!relativePath) return "";
+
+  const normalizedPath = String(relativePath)
+    .replace(/^\/+/, "")
+    .replace(/^uploads\//i, "");
+
+  return path.join(uploadsRoot, normalizedPath);
+}
 
 function sendComplaintStreamEvent(response, eventName, payload) {
   try {
@@ -90,9 +105,14 @@ const INVENTORY_STATUS_OPTIONS = [
 ];
 
 
-fs.mkdirSync(complaintUploadsRoot, { recursive: true });
-fs.mkdirSync(businessUploadsRoot, { recursive: true });
-fs.mkdirSync(businessInspectionUploadsRoot, { recursive: true });
+ensureDir(uploadsRoot);
+ensureDir(complaintUploadsRoot);
+ensureDir(businessUploadsRoot);
+ensureDir(businessInspectionUploadsRoot);
+console.log("[uploads] aktif klasör:", uploadsRoot);
+if (uploadsRoot !== DEFAULT_LOCAL_UPLOADS_DIR) {
+  console.log("[uploads] kalıcı depolama etkin.");
+}
 
 function normalizeStoredText(value) {
   if (value === null || value === undefined) return "";
@@ -119,6 +139,37 @@ function decodeUploadFilename(value) {
   }
 }
 
+
+function ensureDir(dirPath) {
+  fs.mkdirSync(dirPath, { recursive: true });
+  return dirPath;
+}
+
+function buildStoredFilename(originalName) {
+  const decodedOriginalName = decodeUploadFilename(originalName || "dosya");
+  const ext = path.extname(decodedOriginalName || "");
+  const safeBase = path
+    .basename(decodedOriginalName || "dosya", ext)
+    .replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "") || "dosya";
+  const uniqueSuffix = Math.random().toString(36).slice(2, 8);
+  return Date.now() + "-" + uniqueSuffix + "-" + safeBase + ext;
+}
+
+function buildPublicUploadPath() {
+  return "/uploads/" + Array.from(arguments)
+    .map(function(part) { return String(part || "").replace(/^\/+|\/+$/g, ""); })
+    .filter(Boolean)
+    .join("/");
+}
+
+function getAbsolutePathFromPublicUploadPath(publicPath) {
+  if (!publicPath) return "";
+  const normalizedPath = String(publicPath).replace(/\\/g, "/");
+  const relativePath = normalizedPath.replace(/^\/uploads\//, "");
+  return path.join(uploadsRoot, relativePath);
+}
 
 function normalizeMatchText(value) {
   return String(value || '')
@@ -297,10 +348,7 @@ const storage = multer.diskStorage({
     cb(null, complaintFolder);
   },
   filename: function(req, file, cb) {
-    const decodedOriginalName = decodeUploadFilename(file.originalname || "dosya");
-    const ext = path.extname(decodedOriginalName || "");
-    const base = path.basename(decodedOriginalName || "dosya", ext).replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, "-");
-    cb(null, Date.now() + "-" + base + ext);
+    cb(null, buildStoredFilename(file.originalname || "dosya"));
   }
 });
 
@@ -316,10 +364,7 @@ const businessStorage = multer.diskStorage({
     cb(null, businessFolder);
   },
   filename: function(req, file, cb) {
-    const decodedOriginalName = decodeUploadFilename(file.originalname || "dosya");
-    const ext = path.extname(decodedOriginalName || "");
-    const base = path.basename(decodedOriginalName || "dosya", ext).replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, "-");
-    cb(null, Date.now() + "-" + base + ext);
+    cb(null, buildStoredFilename(file.originalname || "dosya"));
   }
 });
 
@@ -335,10 +380,7 @@ const inspectionFileStorage = multer.diskStorage({
     cb(null, inspectionFolder);
   },
   filename: function(req, file, cb) {
-    const decodedOriginalName = decodeUploadFilename(file.originalname || "dosya");
-    const ext = path.extname(decodedOriginalName || "");
-    const base = path.basename(decodedOriginalName || "dosya", ext).replace(/[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ_-]/g, "-");
-    cb(null, Date.now() + "-" + base + ext);
+    cb(null, buildStoredFilename(file.originalname || "dosya"));
   }
 });
 
@@ -2116,7 +2158,7 @@ app.delete("/api/complaints/:id", async (req, res) => {
     });
 
     for (const row of filesResult.rows) {
-      const absolutePath = path.join(__dirname, row.file_path.replace(/^\/uploads\//, "uploads/"));
+      const absolutePath = getUploadAbsolutePath(row.file_path);
       safeUnlink(absolutePath);
     }
 
@@ -2233,7 +2275,7 @@ app.delete("/api/complaint-files/:fileId", async (req, res) => {
     }
 
     const fileRow = fileResult.rows[0];
-    const absolutePath = path.join(__dirname, fileRow.file_path.replace(/^\/uploads\//, "uploads/"));
+    const absolutePath = getUploadAbsolutePath(fileRow.file_path);
 
     await pool.query("DELETE FROM complaint_files WHERE id = $1", [fileId]);
     safeUnlink(absolutePath);
@@ -2513,12 +2555,12 @@ app.delete("/api/businesses/:id", async (req, res) => {
     await pool.query("DELETE FROM businesses WHERE id = $1", [id]);
 
     for (const row of filesResult.rows) {
-      const absolutePath = path.join(__dirname, row.file_path.replace(/^\/uploads\//, "uploads/"));
+      const absolutePath = getUploadAbsolutePath(row.file_path);
       safeUnlink(absolutePath);
     }
 
     for (const row of inspectionFilesResult.rows) {
-      const absolutePath = path.join(__dirname, row.file_path.replace(/^\/uploads\//, "uploads/"));
+      const absolutePath = getUploadAbsolutePath(row.file_path);
       safeUnlink(absolutePath);
     }
 
@@ -2760,7 +2802,7 @@ app.delete("/api/businesses/:id/inspections/:inspectionId", async (req, res) => 
     );
 
     fileResult.rows.forEach(function(row) {
-      const absolutePath = path.join(__dirname, row.file_path.replace(/^\/uploads\//, "uploads/"));
+      const absolutePath = getUploadAbsolutePath(row.file_path);
       safeUnlink(absolutePath);
     });
 
@@ -2872,7 +2914,7 @@ app.delete("/api/business-files/:fileId", async (req, res) => {
     }
 
     const fileRow = fileResult.rows[0];
-    const absolutePath = path.join(__dirname, fileRow.file_path.replace(/^\/uploads\//, "uploads/"));
+    const absolutePath = getUploadAbsolutePath(fileRow.file_path);
 
     await pool.query("DELETE FROM business_files WHERE id = $1", [fileId]);
     safeUnlink(absolutePath);
@@ -2983,7 +3025,7 @@ app.delete("/api/business-inspection-files/:fileId", async (req, res) => {
     }
 
     const fileRow = fileResult.rows[0];
-    const absolutePath = path.join(__dirname, fileRow.file_path.replace(/^\/uploads\//, "uploads/"));
+    const absolutePath = getUploadAbsolutePath(fileRow.file_path);
 
     await pool.query("DELETE FROM business_inspection_files WHERE id = $1", [fileId]);
     safeUnlink(absolutePath);
