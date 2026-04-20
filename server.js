@@ -8776,9 +8776,46 @@ app.get("/complaints", (req, res) => {
     .alert-item-meta { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
     .alert-item.overdue .alert-item-meta { color: #8a4a4a; }
     .alert-item.today .alert-item-meta { color: #7c6030; }
-    @media (max-width: 1280px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .stats-modal { max-width: 1240px; }
+    .stats-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .stats-toolbar-copy { display: grid; gap: 4px; }
+    .stats-toolbar-title { font-size: 18px; font-weight: 800; color: #0f172a; }
+    .stats-toolbar-subtitle { font-size: 12px; color: var(--muted); line-height: 1.55; }
+    .stats-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+    .stats-tab { border: 1px solid var(--line); background: #ffffff; color: #334155; border-radius: 999px; padding: 9px 14px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .stats-tab.active { background: var(--primary); color: #ffffff; border-color: var(--primary); box-shadow: 0 8px 20px rgba(37, 99, 235, 0.18); }
+    .stats-period-line { border: 1px solid #dbe7f4; background: #f8fbff; border-radius: 14px; padding: 12px 14px; font-size: 13px; line-height: 1.6; color: #334155; margin-bottom: 16px; }
+    .stats-summary-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .stats-mini-card { border: 1px solid var(--line); background: #ffffff; border-radius: 14px; padding: 14px; display: grid; gap: 8px; }
+    .stats-mini-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+    .stats-mini-value { font-size: 24px; font-weight: 800; color: #0f172a; line-height: 1.1; }
+    .stats-mini-note { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+    .stats-highlight-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .stats-highlight-card { border: 1px solid #dbe7f4; background: linear-gradient(135deg, #f8fbff 0%, #ffffff 100%); border-radius: 14px; padding: 14px; display: grid; gap: 8px; }
+    .stats-highlight-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+    .stats-highlight-value { font-size: 16px; font-weight: 800; color: #0f172a; line-height: 1.35; }
+    .stats-highlight-note { font-size: 12px; color: var(--muted); line-height: 1.55; }
+    .stats-two-col { display: grid; grid-template-columns: 1.25fr 1fr; gap: 12px; margin-bottom: 12px; }
+    .stats-three-col { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+    .stats-chart-card { border: 1px solid var(--line); border-radius: 14px; background: #ffffff; padding: 14px; }
+    .stats-chart-title { font-size: 15px; font-weight: 800; color: #0f172a; margin-bottom: 6px; }
+    .stats-chart-subtitle { font-size: 11.5px; color: var(--muted); line-height: 1.55; margin-bottom: 14px; }
+    .stats-chart-list { display: grid; gap: 10px; }
+    .stats-chart-row { display: grid; grid-template-columns: 150px minmax(0, 1fr) 46px; gap: 10px; align-items: center; }
+    .stats-chart-label { font-size: 12px; font-weight: 700; color: #334155; line-height: 1.4; }
+    .stats-chart-value { text-align: right; font-size: 12px; font-weight: 800; color: #0f172a; }
+    .stats-bar-track { width: 100%; height: 12px; border-radius: 999px; background: #e8eef6; overflow: hidden; position: relative; }
+    .stats-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #1d4ed8 0%, #60a5fa 100%); min-width: 0; }
+    .stats-trend-bars { display: grid; grid-template-columns: repeat(auto-fit, minmax(56px, 1fr)); gap: 8px; align-items: end; }
+    .stats-trend-item { display: grid; gap: 6px; }
+    .stats-trend-value { font-size: 11px; font-weight: 800; color: #0f172a; text-align: center; }
+    .stats-trend-bar { height: 170px; border: 1px solid #e5edf5; background: #f8fafc; border-radius: 14px; padding: 8px; display: flex; align-items: flex-end; justify-content: center; }
+    .stats-trend-column { width: 100%; border-radius: 10px 10px 6px 6px; background: linear-gradient(180deg, #93c5fd 0%, #2563eb 100%); min-height: 6px; }
+    .stats-trend-label { font-size: 11px; color: var(--muted); line-height: 1.45; text-align: center; }
+    .stats-narrative { border: 1px solid #dbe7f4; background: #f8fbff; border-radius: 14px; padding: 14px; font-size: 13px; line-height: 1.7; color: #334155; }
+    @media (max-width: 1280px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stats-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .stats-highlight-grid, .stats-three-col { grid-template-columns: 1fr; } .stats-two-col { grid-template-columns: 1fr; } }
     .alert-item .btn { padding: 8px 10px; font-size: 12px; box-shadow: none; }
-    @media (max-width: 980px) { .main { padding: 16px; } .hero { padding: 14px; border-radius: 16px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; justify-content: space-between; flex-wrap: wrap; } .critical-grid, .stats-grid, .attachments-grid, .form-grid, .filters, .complaint-form-grid { grid-template-columns: 1fr; } .span-2, .span-4 { grid-column: 1 / -1; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .detail-table th { width: 150px; } }
+    @media (max-width: 980px) { .main { padding: 16px; } .hero { padding: 14px; border-radius: 16px; } .hero-title { font-size: 24px; } .hero-side { min-width: 0; max-width: none; width: 100%; justify-content: space-between; flex-wrap: wrap; } .critical-grid, .stats-grid, .attachments-grid, .form-grid, .filters, .complaint-form-grid, .stats-summary-grid, .stats-highlight-grid, .stats-two-col, .stats-three-col { grid-template-columns: 1fr; } .span-2, .span-4 { grid-column: 1 / -1; } .panel, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; } .modal { border-radius: 20px; } .detail-table th { width: 150px; } .stats-chart-row { grid-template-columns: 1fr; } }
     @media (max-width: 640px) { .main { padding: 14px; } .hero-title { font-size: 22px; } .panel-title { font-size: 17px; } .card, .critical-card { padding: 14px; } .section-actions { width: 100%; } .section-actions .btn { flex: 1; } .attachment-card { grid-template-columns: 1fr; } .attachment-thumb, .attachment-thumb-doc { width: 100%; height: 180px; } table { min-width: 760px; } .date-card { min-width: 0; width: 100%; } }
   </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
@@ -8819,7 +8856,7 @@ app.get("/complaints", (req, res) => {
           <div class="date-card"><span>Tarih</span><strong id="todayText"></strong></div>
           <div class="live-status-chip live-waiting" id="liveStatusChip"><span class="live-status-dot"></span><span id="liveStatusText">Canlı takip hazırlanıyor</span></div>
           <div class="section-actions">
-            <button class="btn btn-info" type="button">📊 İstatistikler</button>
+            <button class="btn btn-info" type="button" onclick="openStatsModal()">📊 İstatistikler</button>
             <button class="btn btn-secondary" type="button" onclick="openTopicManager()">🏷 Konu Başlıkları</button>
             <button class="btn btn-primary" type="button" onclick="openNewModal()">＋ Yeni Şikayet</button>
           </div>
@@ -8864,6 +8901,66 @@ app.get("/complaints", (req, res) => {
       </section>
       <div class="toast-area" id="liveToastArea"></div>
     </main>
+  </div>
+
+
+<div class="modal-overlay" id="statsModal">
+    <div class="modal stats-modal">
+      <div class="modal-header white">
+        <span>Şikayet İstatistikleri</span>
+        <button class="close-btn" onclick="closeModal('statsModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="stats-toolbar">
+          <div class="stats-toolbar-copy">
+            <div class="stats-toolbar-title">Faaliyet raporu istatistik ekranı</div>
+            <div class="stats-toolbar-subtitle">Günlük, haftalık ve aylık görünümde toplam kayıt, konu yoğunluğu, mahalle, kaynak ve durum dağılımı birlikte gösterilir.</div>
+          </div>
+          <div class="stats-tabs">
+            <button class="stats-tab" type="button" id="statsTabDaily" onclick="setStatsPeriodMode('daily')">Günlük</button>
+            <button class="stats-tab" type="button" id="statsTabWeekly" onclick="setStatsPeriodMode('weekly')">Haftalık</button>
+            <button class="stats-tab" type="button" id="statsTabMonthly" onclick="setStatsPeriodMode('monthly')">Aylık</button>
+          </div>
+        </div>
+        <div class="stats-period-line" id="statsPeriodLine">İstatistikler hazırlanıyor...</div>
+        <div class="stats-summary-grid" id="statsSummaryGrid"></div>
+        <div class="stats-highlight-grid" id="statsHighlights"></div>
+        <div class="stats-two-col">
+          <div class="stats-chart-card">
+            <div class="stats-chart-title">Tarih bazlı dağılım</div>
+            <div class="stats-chart-subtitle" id="statsTrendSubtitle">Seçilen dönemde hangi günlerde yoğunluk oluştuğunu gösterir.</div>
+            <div id="statsTrendChart"></div>
+          </div>
+          <div class="stats-chart-card">
+            <div class="stats-chart-title">Konu başlığı yoğunluğu</div>
+            <div class="stats-chart-subtitle">Bir şikayette birden fazla konu varsa her konu ayrı adet olarak sayılır.</div>
+            <div id="statsTopicChart"></div>
+          </div>
+        </div>
+        <div class="stats-three-col">
+          <div class="stats-chart-card">
+            <div class="stats-chart-title">Kaynak dağılımı</div>
+            <div class="stats-chart-subtitle">Şikayetlerin hangi kanaldan geldiğini gösterir.</div>
+            <div id="statsSourceChart"></div>
+          </div>
+          <div class="stats-chart-card">
+            <div class="stats-chart-title">Durum dağılımı</div>
+            <div class="stats-chart-subtitle">Açık, inceleme, süre verilen ve kapatılan kayıtlar birlikte görünür.</div>
+            <div id="statsStatusChart"></div>
+          </div>
+          <div class="stats-chart-card">
+            <div class="stats-chart-title">Mahalle yoğunluğu</div>
+            <div class="stats-chart-subtitle">En fazla şikayet gelen mahalleleri öne çıkarır.</div>
+            <div id="statsNeighborhoodChart"></div>
+          </div>
+        </div>
+        <div class="stats-narrative" id="statsNarrative"></div>
+        <div class="field-soft-note" style="margin-top:12px;">Not: Konu başlığı istatistiğinde çoklu konu seçilmiş şikayetlerde her konu ayrı ayrı sayılır. Böylece faaliyet raporunda toplam şikayet sayısı ile konu yoğunluğu aynı şey olarak değerlendirilmez.</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('statsModal')">Kapat</button>
+      </div>
+    </div>
   </div>
 
 <div class="modal-overlay" id="newModal">
@@ -9125,6 +9222,7 @@ app.get("/complaints", (req, res) => {
     var activeAlertType = "";
     var detailComplaintId = null;
     var complaintFiles = [];
+    var statsPeriodMode = "daily";
 
     function toggleSidebar(forceOpen) {
       var shouldOpen = typeof forceOpen === "boolean" ? forceOpen : !document.body.classList.contains("sidebar-open");
@@ -9480,6 +9578,367 @@ app.get("/complaints", (req, res) => {
         weekday: "long"
       }).format(now);
       document.getElementById("todayText").textContent = text;
+    }
+
+
+    function parseInputDate(value) {
+      if (!value) return null;
+      var parts = String(value).split("-");
+      if (parts.length !== 3) return null;
+      var year = Number(parts[0]);
+      var month = Number(parts[1]) - 1;
+      var day = Number(parts[2]);
+      var date = new Date(year, month, day);
+      if (Number.isNaN(date.getTime())) return null;
+      return date;
+    }
+
+    function formatInputDateValue(date) {
+      if (!date) return "";
+      var yyyy = date.getFullYear();
+      var mm = String(date.getMonth() + 1).padStart(2, "0");
+      var dd = String(date.getDate()).padStart(2, "0");
+      return yyyy + "-" + mm + "-" + dd;
+    }
+
+    function addDays(date, amount) {
+      var copy = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      copy.setDate(copy.getDate() + amount);
+      return copy;
+    }
+
+    function formatStatsRange(startDate, endDate) {
+      if (!startDate || !endDate) return "";
+      var formatter = new Intl.DateTimeFormat("tr-TR", {
+        day: "numeric",
+        month: "long",
+        year: "numeric"
+      });
+      if (formatInputDateValue(startDate) === formatInputDateValue(endDate)) {
+        return formatter.format(startDate);
+      }
+      return formatter.format(startDate) + " - " + formatter.format(endDate);
+    }
+
+    function formatStatsShortDate(date) {
+      return new Intl.DateTimeFormat("tr-TR", {
+        day: "2-digit",
+        month: "2-digit"
+      }).format(date);
+    }
+
+    function getStatsPeriodConfig(mode) {
+      var today = parseInputDate(todayInputDate());
+      var startDate = today;
+      var endDate = today;
+      var title = "Günlük";
+
+      if (mode === "weekly") {
+        var weekDay = today.getDay();
+        var diff = (weekDay + 6) % 7;
+        startDate = addDays(today, -diff);
+        endDate = today;
+        title = "Haftalık";
+      } else if (mode === "monthly") {
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+        endDate = today;
+        title = "Aylık";
+      }
+
+      return {
+        mode: mode,
+        title: title,
+        startDate: startDate,
+        endDate: endDate,
+        startValue: formatInputDateValue(startDate),
+        endValue: formatInputDateValue(endDate),
+        rangeText: formatStatsRange(startDate, endDate)
+      };
+    }
+
+    function getComplaintTopicLabels(item) {
+      var labels = [];
+      var seen = {};
+      var sourceList = [];
+      if (item && Array.isArray(item.topics) && item.topics.length) {
+        sourceList = item.topics.map(function(topic) { return topic && topic.name ? topic.name : ""; });
+      } else if (item && item.topicNames) {
+        sourceList = String(item.topicNames).split(",");
+      } else if (item && item.subject) {
+        sourceList = [item.subject];
+      }
+
+      for (var i = 0; i < sourceList.length; i++) {
+        var value = String(sourceList[i] || "").trim();
+        if (!value || seen[value]) continue;
+        seen[value] = true;
+        labels.push(value);
+      }
+      return labels;
+    }
+
+    function increaseCounter(counter, label, amount) {
+      var key = String(label || "").trim();
+      if (!key) return;
+      var step = Number(amount || 1);
+      counter[key] = (counter[key] || 0) + step;
+    }
+
+    function counterToSortedList(counter, limit) {
+      var list = Object.keys(counter || {}).map(function(key) {
+        return { label: key, count: Number(counter[key] || 0) };
+      }).sort(function(a, b) {
+        if (b.count !== a.count) return b.count - a.count;
+        return a.label.localeCompare(b.label, "tr");
+      });
+
+      if (Number(limit) > 0) {
+        return list.slice(0, limit);
+      }
+      return list;
+    }
+
+    function buildHorizontalChart(items, emptyText) {
+      if (!items || !items.length) {
+        return '<div class="muted">' + escapeHtml(emptyText || 'Veri bulunmuyor.') + '</div>';
+      }
+
+      var max = 0;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].count > max) max = items[i].count;
+      }
+
+      var html = '<div class="stats-chart-list">';
+      for (var j = 0; j < items.length; j++) {
+        var percent = max > 0 ? Math.round((items[j].count / max) * 100) : 0;
+        if (items[j].count > 0 && percent < 8) percent = 8;
+        html += '<div class="stats-chart-row">';
+        html += '<div class="stats-chart-label">' + escapeHtml(items[j].label) + '</div>';
+        html += '<div class="stats-bar-track"><div class="stats-bar-fill" style="width:' + percent + '%"></div></div>';
+        html += '<div class="stats-chart-value">' + escapeHtml(String(items[j].count)) + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function buildTrendChart(points) {
+      if (!points || !points.length) {
+        return '<div class="muted">Seçilen dönem için tarih bazlı kayıt bulunmuyor.</div>';
+      }
+
+      var max = 0;
+      for (var i = 0; i < points.length; i++) {
+        if (points[i].count > max) max = points[i].count;
+      }
+
+      var html = '<div class="stats-trend-bars">';
+      for (var j = 0; j < points.length; j++) {
+        var height = 6;
+        if (max > 0 && points[j].count > 0) {
+          height = Math.round((points[j].count / max) * 140);
+          if (height < 16) height = 16;
+        }
+        html += '<div class="stats-trend-item">';
+        html += '<div class="stats-trend-value">' + escapeHtml(String(points[j].count)) + '</div>';
+        html += '<div class="stats-trend-bar"><div class="stats-trend-column" style="height:' + height + 'px"></div></div>';
+        html += '<div class="stats-trend-label">' + escapeHtml(points[j].label) + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function getTopEntryText(list, fallbackText) {
+      if (!list || !list.length) return fallbackText || 'Veri yok';
+      return list[0].label + ' (' + list[0].count + ')';
+    }
+
+    function renderStatsSummaryCards(metrics) {
+      var cards = [
+        { title: 'Toplam Kayıt', value: metrics.totalComplaints, note: 'Seçilen dönem içindeki benzersiz şikayet adedi.' },
+        { title: 'Konu Geçişi', value: metrics.totalTopicHits, note: 'Çoklu konu seçilen kayıtlarda her konu ayrı sayılır.' },
+        { title: 'Çok Konulu', value: metrics.multiTopicCount, note: 'Birden fazla konu başlığı içeren şikayet sayısı.' },
+        { title: 'İşlem Yapılan', value: metrics.actionedCount, note: 'Henüz işlem yapılmadı dışında işlem girilmiş kayıtlar.' },
+        { title: 'Kapanan', value: metrics.closedCount, note: 'Durumu kapatıldı olan kayıtlar.' },
+        { title: 'Devam Eden', value: metrics.ongoingCount, note: 'Açık, inceleniyor veya süre verilen kayıtlar.' }
+      ];
+
+      var html = '';
+      for (var i = 0; i < cards.length; i++) {
+        html += '<div class="stats-mini-card">';
+        html += '<div class="stats-mini-title">' + escapeHtml(cards[i].title) + '</div>';
+        html += '<div class="stats-mini-value">' + escapeHtml(String(cards[i].value)) + '</div>';
+        html += '<div class="stats-mini-note">' + escapeHtml(cards[i].note) + '</div>';
+        html += '</div>';
+      }
+      return html;
+    }
+
+    function renderStatsHighlights(topics, sources, neighborhoods) {
+      var cards = [
+        {
+          label: 'En Yoğun Konu',
+          value: getTopEntryText(topics, 'Veri yok'),
+          note: 'Konu başlığı sayımı çoklu konu seçimlerini ayrı ayrı içerir.'
+        },
+        {
+          label: 'En Yoğun Kaynak',
+          value: getTopEntryText(sources, 'Veri yok'),
+          note: 'Şikayetin sisteme hangi kanaldan girdiğini gösterir.'
+        },
+        {
+          label: 'En Yoğun Mahalle',
+          value: getTopEntryText(neighborhoods, 'Veri yok'),
+          note: 'Mahalle bilgisi girilmiş kayıtlar üzerinden hesaplanır.'
+        }
+      ];
+
+      var html = '';
+      for (var i = 0; i < cards.length; i++) {
+        html += '<div class="stats-highlight-card">';
+        html += '<div class="stats-highlight-label">' + escapeHtml(cards[i].label) + '</div>';
+        html += '<div class="stats-highlight-value">' + escapeHtml(cards[i].value) + '</div>';
+        html += '<div class="stats-highlight-note">' + escapeHtml(cards[i].note) + '</div>';
+        html += '</div>';
+      }
+      return html;
+    }
+
+    function renderComplaintStatistics() {
+      var config = getStatsPeriodConfig(statsPeriodMode || 'daily');
+      var tabs = {
+        daily: document.getElementById('statsTabDaily'),
+        weekly: document.getElementById('statsTabWeekly'),
+        monthly: document.getElementById('statsTabMonthly')
+      };
+
+      Object.keys(tabs).forEach(function(key) {
+        if (tabs[key]) {
+          tabs[key].classList.toggle('active', key === config.mode);
+        }
+      });
+
+      var filtered = complaints.filter(function(item) {
+        return item && item.date && item.date >= config.startValue && item.date <= config.endValue;
+      });
+
+      var topicCounter = {};
+      var sourceCounter = {};
+      var statusCounter = {};
+      var neighborhoodCounter = {};
+      var trendCounter = {};
+      var trendPoints = [];
+      var actionedCount = 0;
+      var closedCount = 0;
+      var ongoingCount = 0;
+      var totalTopicHits = 0;
+      var multiTopicCount = 0;
+
+      var cursor = new Date(config.startDate.getFullYear(), config.startDate.getMonth(), config.startDate.getDate());
+      while (cursor <= config.endDate) {
+        var cursorValue = formatInputDateValue(cursor);
+        trendCounter[cursorValue] = 0;
+        trendPoints.push({ key: cursorValue, label: formatStatsShortDate(cursor), count: 0 });
+        cursor = addDays(cursor, 1);
+      }
+
+      for (var i = 0; i < filtered.length; i++) {
+        var item = filtered[i];
+        var topicLabels = getComplaintTopicLabels(item);
+        if (topicLabels.length > 1) multiTopicCount++;
+        totalTopicHits += topicLabels.length;
+
+        for (var t = 0; t < topicLabels.length; t++) {
+          increaseCounter(topicCounter, topicLabels[t], 1);
+        }
+
+        increaseCounter(sourceCounter, item.source || 'Belirtilmeyen Kaynak', 1);
+        increaseCounter(statusCounter, item.status || 'Belirtilmeyen Durum', 1);
+        increaseCounter(neighborhoodCounter, item.neighborhood || 'Mahalle Girilmedi', 1);
+
+        if (item.date && Object.prototype.hasOwnProperty.call(trendCounter, item.date)) {
+          trendCounter[item.date] += 1;
+        }
+
+        if (item.action && item.action !== 'Henüz İşlem Yapılmadı') {
+          actionedCount++;
+        }
+
+        if (item.status === 'Kapatıldı') {
+          closedCount++;
+        } else if (item.status === 'Açık' || item.status === 'İnceleniyor' || item.status === 'Süre Verildi') {
+          ongoingCount++;
+        }
+      }
+
+      for (var p = 0; p < trendPoints.length; p++) {
+        trendPoints[p].count = Number(trendCounter[trendPoints[p].key] || 0);
+      }
+
+      var topicList = counterToSortedList(topicCounter, 8);
+      var sourceList = counterToSortedList(sourceCounter, 8);
+      var statusList = counterToSortedList(statusCounter, 8);
+      var neighborhoodList = counterToSortedList(neighborhoodCounter, 8);
+
+      var metrics = {
+        totalComplaints: filtered.length,
+        totalTopicHits: totalTopicHits,
+        multiTopicCount: multiTopicCount,
+        actionedCount: actionedCount,
+        closedCount: closedCount,
+        ongoingCount: ongoingCount
+      };
+
+      var periodLine = document.getElementById('statsPeriodLine');
+      if (periodLine) {
+        periodLine.innerHTML = '<strong>' + escapeHtml(config.title) + ' görünüm</strong> için tarih aralığı <strong>' + escapeHtml(config.rangeText) + '</strong> olarak hesaplandı. Toplam şikayet sayısı ile konu başlığı yoğunluğu ayrı mantıkla hesaplanır.';
+      }
+
+      var summaryGrid = document.getElementById('statsSummaryGrid');
+      if (summaryGrid) {
+        summaryGrid.innerHTML = renderStatsSummaryCards(metrics);
+      }
+
+      var highlights = document.getElementById('statsHighlights');
+      if (highlights) {
+        highlights.innerHTML = renderStatsHighlights(topicList, sourceList, neighborhoodList);
+      }
+
+      var trendSubtitle = document.getElementById('statsTrendSubtitle');
+      if (trendSubtitle) {
+        trendSubtitle.textContent = config.rangeText + ' aralığında gün bazlı kayıt yoğunluğunu gösterir.';
+      }
+
+      var trendChart = document.getElementById('statsTrendChart');
+      if (trendChart) trendChart.innerHTML = buildTrendChart(trendPoints);
+      var topicChart = document.getElementById('statsTopicChart');
+      if (topicChart) topicChart.innerHTML = buildHorizontalChart(topicList, 'Bu dönemde konu başlığı verisi bulunmuyor.');
+      var sourceChart = document.getElementById('statsSourceChart');
+      if (sourceChart) sourceChart.innerHTML = buildHorizontalChart(sourceList, 'Bu dönemde kaynak verisi bulunmuyor.');
+      var statusChart = document.getElementById('statsStatusChart');
+      if (statusChart) statusChart.innerHTML = buildHorizontalChart(statusList, 'Bu dönemde durum verisi bulunmuyor.');
+      var neighborhoodChart = document.getElementById('statsNeighborhoodChart');
+      if (neighborhoodChart) neighborhoodChart.innerHTML = buildHorizontalChart(neighborhoodList, 'Bu dönemde mahalle verisi bulunmuyor.');
+
+      var topicText = getTopEntryText(topicList, 'veri yok');
+      var sourceText = getTopEntryText(sourceList, 'veri yok');
+      var neighborhoodText = getTopEntryText(neighborhoodList, 'veri yok');
+      var narrative = document.getElementById('statsNarrative');
+      if (narrative) {
+        narrative.innerHTML = '<strong>Özet değerlendirme:</strong> ' +
+          escapeHtml(config.title + ' görünümde toplam ' + filtered.length + ' şikayet kaydı bulunuyor. Bu kayıtlar içinde toplam ' + totalTopicHits + ' konu geçişi var ve çok konulu kayıt sayısı ' + multiTopicCount + '. En yoğun konu ' + topicText + ', en yoğun kaynak ' + sourceText + ', en çok şikayet gelen mahalle ' + neighborhoodText + '. Kapanan kayıt sayısı ' + closedCount + ', devam eden kayıt sayısı ' + ongoingCount + ', işlem girilmiş kayıt sayısı ' + actionedCount + '.') ;
+      }
+    }
+
+    function setStatsPeriodMode(mode) {
+      statsPeriodMode = mode || 'daily';
+      renderComplaintStatistics();
+    }
+
+    function openStatsModal() {
+      renderComplaintStatistics();
+      document.getElementById('statsModal').classList.add('show');
     }
 
     function getComplaintNeighborhoodOptionsHtml(selectedValue) {
@@ -10058,6 +10517,10 @@ function getTopicNames(item) {
           hasLoadedComplaintsOnce = true;
         }
         renderTable();
+        var statsModal = document.getElementById("statsModal");
+        if (statsModal && statsModal.classList.contains("show")) {
+          renderComplaintStatistics();
+        }
       } catch (error) {
         alert("Kayıtlar yüklenemedi.");
       }
