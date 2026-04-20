@@ -31,8 +31,6 @@ registerIssueModule({ app, pool, rootDir: __dirname, uploadsRoot });
 const complaintUploadsRoot = path.join(uploadsRoot, "complaints");
 const businessUploadsRoot = path.join(uploadsRoot, "businesses");
 const businessInspectionUploadsRoot = path.join(uploadsRoot, "business-inspections");
-const complaintStreamClients = new Set();
-
 function getUploadAbsolutePath(relativePath) {
   if (!relativePath) return "";
 
@@ -41,19 +39,6 @@ function getUploadAbsolutePath(relativePath) {
     .replace(/^uploads\//i, "");
 
   return path.join(uploadsRoot, normalizedPath);
-}
-
-function sendComplaintStreamEvent(response, eventName, payload) {
-  try {
-    response.write("event: " + eventName + "\n");
-    response.write("data: " + JSON.stringify(payload || {}) + "\n\n");
-  } catch (error) {}
-}
-
-function broadcastComplaintStreamEvent(eventName, payload) {
-  complaintStreamClients.forEach(function(client) {
-    sendComplaintStreamEvent(client.response, eventName, payload);
-  });
 }
 
 const DEFAULT_COMPLAINT_TOPICS = [
@@ -1877,36 +1862,6 @@ app.put("/api/complaint-topics/:id", async (req, res) => {
   }
 });
 
-app.get("/api/complaints/stream", (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-
-  if (typeof res.flushHeaders === "function") {
-    res.flushHeaders();
-  }
-
-  res.write("retry: 5000\n\n");
-
-  const client = {
-    response: res,
-    heartbeat: setInterval(function() {
-      try {
-        res.write(": keep-alive\n\n");
-      } catch (error) {}
-    }, 25000)
-  };
-
-  complaintStreamClients.add(client);
-  sendComplaintStreamEvent(res, "connected", { connectedAt: new Date().toISOString() });
-
-  req.on("close", function() {
-    clearInterval(client.heartbeat);
-    complaintStreamClients.delete(client);
-  });
-});
-
 app.get("/api/complaints", async (req, res) => {
 
   try {
@@ -2009,14 +1964,6 @@ app.post("/api/complaints", async (req, res) => {
       topics: topicRows
     });
 
-    broadcastComplaintStreamEvent("new_complaint", {
-      id: createdComplaint.id,
-      no: createdComplaint.no,
-      topicNames: createdComplaint.topicNames,
-      source: createdComplaint.source,
-      neighborhood: createdComplaint.neighborhood,
-      displayDate: createdComplaint.displayDate
-    });
 
     res.json(createdComplaint);
   } catch (error) {
@@ -2130,10 +2077,6 @@ app.put("/api/complaints/:id", async (req, res) => {
       topics: topicRows
     });
 
-    broadcastComplaintStreamEvent("complaints_refresh", {
-      reason: "updated",
-      id: updatedComplaint.id
-    });
 
     res.json(updatedComplaint);
   } catch (error) {
@@ -2152,10 +2095,6 @@ app.delete("/api/complaints/:id", async (req, res) => {
     const filesResult = await pool.query("SELECT file_path FROM complaint_files WHERE complaint_id = $1", [id]);
     await pool.query("DELETE FROM complaints WHERE id = $1", [id]);
 
-    broadcastComplaintStreamEvent("complaints_refresh", {
-      reason: "deleted",
-      id: Number(id)
-    });
 
     for (const row of filesResult.rows) {
       const absolutePath = getUploadAbsolutePath(row.file_path);
@@ -8692,18 +8631,6 @@ app.get("/complaints", (req, res) => {
     .complaint-row-new { background: linear-gradient(90deg, #fff9db 0%, #fffef6 100%); }
     .complaint-row-new:hover { background: linear-gradient(90deg, #fff4bf 0%, #fffbe8 100%); }
     .new-badge { display: inline-flex; align-items: center; justify-content: center; margin-left: 8px; padding: 4px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
-    .live-status-chip { display: inline-flex; align-items: center; gap: 8px; min-width: 170px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: #f8fafc; color: #334155; font-size: 12px; font-weight: 700; }
-    .live-status-dot { width: 10px; height: 10px; border-radius: 999px; background: #94a3b8; box-shadow: 0 0 0 4px rgba(148,163,184,0.16); }
-    .live-status-chip.live-on .live-status-dot { background: #10b981; box-shadow: 0 0 0 4px rgba(16,185,129,0.15); }
-    .live-status-chip.live-waiting .live-status-dot { background: #f59e0b; box-shadow: 0 0 0 4px rgba(245,158,11,0.15); }
-    .live-status-chip.live-off .live-status-dot { background: #ef4444; box-shadow: 0 0 0 4px rgba(239,68,68,0.12); }
-    .live-note { font-size: 11px; color: var(--muted); margin-top: 8px; }
-    .toast-area { position: fixed; top: 18px; right: 18px; display: grid; gap: 10px; z-index: 130; max-width: min(92vw, 380px); }
-    .live-toast { background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #2563eb; border-radius: 14px; box-shadow: 0 18px 40px rgba(15,23,42,0.16); padding: 12px 14px; display: grid; gap: 6px; }
-    .live-toast-title { font-size: 13px; font-weight: 800; color: #0f172a; }
-    .live-toast-text { font-size: 12px; color: #475569; line-height: 1.55; }
-    .live-toast-close { border: none; background: transparent; font-size: 20px; line-height: 1; color: #64748b; cursor: pointer; padding: 0; position: absolute; top: 8px; right: 10px; }
-    .live-toast-wrap { position: relative; }
     .complaint-no { font-weight: 700; color: #0f172a; }
     .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
     .badge-source { background: #e2e8f0; color: #334155; }
@@ -8855,7 +8782,6 @@ app.get("/complaints", (req, res) => {
         </div>
         <div class="hero-side">
           <div class="date-card"><span>Tarih</span><strong id="todayText"></strong></div>
-          <div class="live-status-chip live-waiting" id="liveStatusChip"><span class="live-status-dot"></span><span id="liveStatusText">Canlı takip hazırlanıyor</span></div>
           <div class="section-actions">
             <button class="btn btn-info" type="button" onclick="openStatsModal()">📊 İstatistikler</button>
             <button class="btn btn-secondary" type="button" onclick="openTopicManager()">🏷 Konu Başlıkları</button>
@@ -8896,11 +8822,10 @@ app.get("/complaints", (req, res) => {
         </div>
       </section>
       <section class="panel table-panel">
-        <div class="panel-header"><div><div class="panel-title">Şikayet kayıtları</div><div class="live-note">Yeni kayıtlar, bu cihazda detayı açılana kadar vurgulu kalır.</div></div></div>
+        <div class="panel-header"><div class="panel-title">Şikayet kayıtları</div></div>
         <div class="table-wrap"><table><thead><tr><th>Şikayet No</th><th>Tarih</th><th>Konu</th><th>Kaynak</th><th>Durum</th><th>Yapılan İşlem</th><th>İşlemler</th></tr></thead><tbody id="complaintTableBody"></tbody></table></div>
         <div id="emptyNote" class="empty-note" style="display:none;">Kayıt bulunamadı.</div>
       </section>
-      <div class="toast-area" id="liveToastArea"></div>
     </main>
   </div>
 
@@ -9212,12 +9137,8 @@ app.get("/complaints", (req, res) => {
 
   <script>
         var complaints = [];
-    var complaintStream = null;
     var seenComplaintIds = {};
     var seenComplaintsBootstrapped = false;
-    var audioUnlocked = false;
-    var audioContext = null;
-    var liveToastTimers = {};
     var hasLoadedComplaintsOnce = false;
     var BUCakNeighborhoods = ["Alaattin", "Atilla", "Barbaros", "Camii", "Cumhuriyet", "Çamlıca", "Çavuşlar", "Çukur", "Fatih", "Karayvatlar", "Konak", "Mehmet Akif", "Mimar Sinan", "Oğuzhan", "Onaç", "Pazar", "Sanayi", "Yeni", "Yetmişevler", "Yunus Emre"];
     var complaintTopicDefinitions = [];
@@ -10518,100 +10439,6 @@ function getTopicNames(item) {
       saveSeenComplaintState();
     }
 
-    function updateLiveStatus(mode, text) {
-      var chip = document.getElementById("liveStatusChip");
-      var label = document.getElementById("liveStatusText");
-      if (!chip || !label) return;
-      chip.classList.remove("live-on", "live-waiting", "live-off");
-      chip.classList.add(mode || "live-waiting");
-      label.textContent = text || "Canlı takip hazırlanıyor";
-    }
-
-    function showLiveToast(title, text) {
-      var area = document.getElementById("liveToastArea");
-      if (!area) return;
-      var toastId = "toast_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
-      var wrapper = document.createElement("div");
-      wrapper.className = "live-toast-wrap";
-      wrapper.id = toastId;
-      wrapper.innerHTML = '<div class="live-toast"><button class="live-toast-close" type="button" aria-label="Kapat">&times;</button><div class="live-toast-title"></div><div class="live-toast-text"></div></div>';
-      wrapper.querySelector(".live-toast-title").textContent = title || "Yeni bildirim";
-      wrapper.querySelector(".live-toast-text").textContent = text || "Yeni kayıt geldi.";
-      wrapper.querySelector(".live-toast-close").addEventListener("click", function() {
-        if (liveToastTimers[toastId]) {
-          clearTimeout(liveToastTimers[toastId]);
-          delete liveToastTimers[toastId];
-        }
-        wrapper.remove();
-      });
-      area.prepend(wrapper);
-      liveToastTimers[toastId] = setTimeout(function() {
-        wrapper.remove();
-        delete liveToastTimers[toastId];
-      }, 7000);
-    }
-
-    function unlockLiveAudio() {
-      audioUnlocked = true;
-    }
-
-    function playLiveTone() {
-      if (!audioUnlocked) return;
-      try {
-        var AudioCtor = window.AudioContext || window.webkitAudioContext;
-        if (!AudioCtor) return;
-        if (!audioContext) audioContext = new AudioCtor();
-        if (audioContext.state === "suspended") audioContext.resume();
-        var oscillator = audioContext.createOscillator();
-        var gainNode = audioContext.createGain();
-        oscillator.type = "sine";
-        oscillator.frequency.value = 880;
-        gainNode.gain.setValueAtTime(0.0001, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.06, audioContext.currentTime + 0.02);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.35);
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        oscillator.start();
-        oscillator.stop(audioContext.currentTime + 0.36);
-      } catch (error) {}
-    }
-
-    function setupComplaintStream() {
-      if (!("EventSource" in window)) {
-        updateLiveStatus("live-off", "Canlı takip desteklenmiyor");
-        return;
-      }
-
-      if (complaintStream) {
-        complaintStream.close();
-      }
-
-      updateLiveStatus("live-waiting", "Canlı bağlantı kuruluyor");
-      complaintStream = new EventSource("/api/complaints/stream");
-
-      complaintStream.addEventListener("connected", function() {
-        updateLiveStatus("live-on", "Canlı takip aktif");
-      });
-
-      complaintStream.addEventListener("new_complaint", async function(event) {
-        var payload = {};
-        try { payload = JSON.parse(event.data || "{}"); } catch (error) { payload = {}; }
-        var topicText = payload.topicNames || "Yeni kayıt";
-        var detailText = (payload.no ? payload.no + " • " : "") + topicText + (payload.neighborhood ? " • " + payload.neighborhood : "");
-        showLiveToast("Yeni şikayet eklendi", detailText);
-        playLiveTone();
-        await loadComplaints();
-      });
-
-      complaintStream.addEventListener("complaints_refresh", async function() {
-        await loadComplaints();
-      });
-
-      complaintStream.onerror = function() {
-        updateLiveStatus("live-waiting", "Canlı bağlantı yeniden kuruluyor");
-      };
-    }
-
     async function loadComplaints() {
       try {
         var response = await fetch("/api/complaints");
@@ -11026,7 +10853,6 @@ function getTopicNames(item) {
       populateComplaintNeighborhoodSelects("", "");
       await loadComplaintTopics();
       await loadComplaints();
-      setupComplaintStream();
       document.getElementById("newStatus").addEventListener("change", toggleNewControlDate);
       document.getElementById("editStatus").addEventListener("change", toggleEditControlDate);
       document.getElementById("editClosureFileType").addEventListener("change", updateEditClosureFileInputState);
@@ -11050,8 +10876,6 @@ function getTopicNames(item) {
           closeAllTopicDropdowns();
         }
       });
-      document.addEventListener("pointerdown", unlockLiveAudio, { once: true });
-      document.addEventListener("keydown", unlockLiveAudio, { once: true });
       document.addEventListener("keydown", function(event) {
         if (event.key === "Escape") {
           if (document.body.classList.contains("sidebar-open")) {
