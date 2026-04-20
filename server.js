@@ -8779,6 +8779,7 @@ app.get("/complaints", (req, res) => {
     .stats-modal { max-width: 1240px; }
     .stats-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
     .stats-toolbar-copy { display: grid; gap: 4px; }
+    .stats-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
     .stats-toolbar-title { font-size: 18px; font-weight: 800; color: #0f172a; }
     .stats-toolbar-subtitle { font-size: 12px; color: var(--muted); line-height: 1.55; }
     .stats-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -8916,10 +8917,13 @@ app.get("/complaints", (req, res) => {
             <div class="stats-toolbar-title">Faaliyet raporu istatistik ekranı</div>
             <div class="stats-toolbar-subtitle">Günlük, haftalık ve aylık görünümde toplam kayıt, konu yoğunluğu, mahalle, kaynak ve durum dağılımı birlikte gösterilir.</div>
           </div>
-          <div class="stats-tabs">
-            <button class="stats-tab" type="button" id="statsTabDaily" onclick="setStatsPeriodMode('daily')">Günlük</button>
-            <button class="stats-tab" type="button" id="statsTabWeekly" onclick="setStatsPeriodMode('weekly')">Haftalık</button>
-            <button class="stats-tab" type="button" id="statsTabMonthly" onclick="setStatsPeriodMode('monthly')">Aylık</button>
+          <div class="stats-toolbar-actions">
+            <div class="stats-tabs">
+              <button class="stats-tab" type="button" id="statsTabDaily" onclick="setStatsPeriodMode('daily')">Günlük</button>
+              <button class="stats-tab" type="button" id="statsTabWeekly" onclick="setStatsPeriodMode('weekly')">Haftalık</button>
+              <button class="stats-tab" type="button" id="statsTabMonthly" onclick="setStatsPeriodMode('monthly')">Aylık</button>
+            </div>
+            <button class="btn btn-warning" type="button" onclick="printComplaintStatisticsReport()">📄 PDF Faaliyet Raporu</button>
           </div>
         </div>
         <div class="stats-period-line" id="statsPeriodLine">İstatistikler hazırlanıyor...</div>
@@ -9805,20 +9809,8 @@ app.get("/complaints", (req, res) => {
       return html;
     }
 
-    function renderComplaintStatistics() {
-      var config = getStatsPeriodConfig(statsPeriodMode || 'daily');
-      var tabs = {
-        daily: document.getElementById('statsTabDaily'),
-        weekly: document.getElementById('statsTabWeekly'),
-        monthly: document.getElementById('statsTabMonthly')
-      };
-
-      Object.keys(tabs).forEach(function(key) {
-        if (tabs[key]) {
-          tabs[key].classList.toggle('active', key === config.mode);
-        }
-      });
-
+    function computeComplaintStatisticsData(mode) {
+      var config = getStatsPeriodConfig(mode || statsPeriodMode || 'daily');
       var filtered = complaints.filter(function(item) {
         return item && item.date && item.date >= config.startValue && item.date <= config.endValue;
       });
@@ -9887,8 +9879,125 @@ app.get("/complaints", (req, res) => {
         multiTopicCount: multiTopicCount,
         actionedCount: actionedCount,
         closedCount: closedCount,
-        ongoingCount: ongoingCount
+        ongoingCount: ongoingCount,
+        averageTopicPerComplaint: filtered.length ? (totalTopicHits / filtered.length) : 0,
+        uniqueTopicCount: Object.keys(topicCounter).length
       };
+
+      var topicText = getTopEntryText(topicList, 'veri yok');
+      var sourceText = getTopEntryText(sourceList, 'veri yok');
+      var neighborhoodText = getTopEntryText(neighborhoodList, 'veri yok');
+      var narrativeText = config.title + ' görünümde toplam ' + filtered.length + ' şikayet kaydı bulunuyor. Bu kayıtlar içinde toplam ' + totalTopicHits + ' konu geçişi var ve çok konulu kayıt sayısı ' + multiTopicCount + '. En yoğun konu ' + topicText + ', en yoğun kaynak ' + sourceText + ', en çok şikayet gelen mahalle ' + neighborhoodText + '. Kapanan kayıt sayısı ' + closedCount + ', devam eden kayıt sayısı ' + ongoingCount + ', işlem girilmiş kayıt sayısı ' + actionedCount + '.';
+
+      return {
+        config: config,
+        filtered: filtered,
+        metrics: metrics,
+        topicList: topicList,
+        sourceList: sourceList,
+        statusList: statusList,
+        neighborhoodList: neighborhoodList,
+        trendPoints: trendPoints,
+        topicText: topicText,
+        sourceText: sourceText,
+        neighborhoodText: neighborhoodText,
+        narrativeText: narrativeText
+      };
+    }
+
+    function buildStatsReportTableRows(items, valueHeader, emptyText) {
+      if (!items || !items.length) {
+        return '<tr><td colspan="3">' + escapeHtml(emptyText || 'Veri bulunmuyor.') + '</td></tr>';
+      }
+      return items.map(function(item, index) {
+        return '<tr><td>' + (index + 1) + '</td><td>' + escapeHtml(item.label) + '</td><td>' + escapeHtml(String(item.count)) + '</td></tr>';
+      }).join('');
+    }
+
+    function buildStatsTrendTableRows(points) {
+      if (!points || !points.length) {
+        return '<tr><td colspan="3">Seçilen dönem için tarih bazlı kayıt bulunmuyor.</td></tr>';
+      }
+      return points.map(function(point) {
+        return '<tr><td>' + escapeHtml(point.label) + '</td><td>' + escapeHtml(String(point.count)) + '</td><td>' + escapeHtml(point.count > 0 ? 'Yoğunluk var' : 'Kayıt yok') + '</td></tr>';
+      }).join('');
+    }
+
+    function printComplaintStatisticsReport() {
+      var stats = computeComplaintStatisticsData(statsPeriodMode || 'daily');
+      var generatedAt = new Date().toLocaleString('tr-TR');
+      var avgText = stats.metrics.averageTopicPerComplaint ? stats.metrics.averageTopicPerComplaint.toFixed(2).replace('.', ',') : '0,00';
+      var reportHtml = '<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>Şikayet Faaliyet Raporu</title><style>' +
+        'body{font-family:Inter,Segoe UI,Arial,sans-serif;margin:0;padding:24px;color:#17202f;background:#fff;} .report{max-width:1080px;margin:0 auto;} ' +
+        '.top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:2px solid #e5e7eb;padding-bottom:14px;margin-bottom:18px;} .title{font-size:28px;font-weight:800;letter-spacing:-0.03em;margin:0;} .subtitle{margin-top:6px;color:#667085;font-size:13px;line-height:1.6;} .meta{display:grid;gap:6px;font-size:13px;color:#334155;text-align:right;} ' +
+        '.notice{border:1px solid #dbe7f4;background:#f8fbff;border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.65;color:#334155;margin-bottom:16px;} ' +
+        '.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 12px;} .summary-card{border:1px solid #dbe3ee;border-radius:14px;padding:14px;background:#f8fafc;} .summary-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;} .summary-value{font-size:24px;font-weight:800;margin-top:8px;line-height:1.2;color:#0f172a;} .summary-note{font-size:11.5px;color:#667085;line-height:1.5;margin-top:6px;} ' +
+        '.highlight-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 16px;} .highlight-card{border:1px solid #dbe7f4;background:#f8fbff;border-radius:14px;padding:14px;} .highlight-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#64748b;} .highlight-value{font-size:16px;font-weight:800;color:#0f172a;margin-top:8px;line-height:1.4;} .highlight-note{font-size:12px;color:#667085;line-height:1.55;margin-top:6px;} ' +
+        '.section{margin-top:18px;} .section-title{font-size:17px;font-weight:800;margin:0 0 10px;color:#0f172a;} .section-note{font-size:12px;color:#667085;line-height:1.55;margin-bottom:10px;} ' +
+        '.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;} .three-col{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;} ' +
+        'table{width:100%;border-collapse:collapse;table-layout:fixed;} th,td{border:1px solid #dbe3ee;padding:9px 10px;font-size:12px;vertical-align:top;word-break:break-word;} th{background:#f8fafc;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#667085;} ' +
+        '.narrative{border:1px solid #e5e7eb;border-radius:14px;padding:14px;background:#fff;font-size:13px;line-height:1.75;color:#17202f;} @page{size:A4 portrait;margin:12mm;} @media print{body{padding:0;} .report{max-width:none;} .summary-card,.highlight-card,.narrative,.notice{break-inside:avoid;page-break-inside:avoid;} }' +
+        '</style></head><body><div class="report">' +
+        '<div class="top"><div><h1 class="title">Şikayet Faaliyet Raporu</h1><div class="subtitle">İstatistik ekranındaki günlük, haftalık veya aylık görünümün PDF / yazdır çıktısı için hazırlanmış resmi özet rapordur.</div></div><div class="meta"><div><strong>Dönem:</strong> ' + escapeHtml(stats.config.title) + '</div><div><strong>Tarih Aralığı:</strong> ' + escapeHtml(stats.config.rangeText) + '</div><div><strong>Rapor Tarihi:</strong> ' + escapeHtml(generatedAt) + '</div></div></div>' +
+        '<div class="notice"><strong>Hesaplama Notu:</strong> Toplam şikayet sayısı ile konu başlığı yoğunluğu ayrı mantıkla hesaplanır. Bir kayıtta birden fazla konu seçilmişse toplam kayıt adedi değişmez; ancak konu istatistiğinde her konu ayrı adet olarak yer alır.</div>' +
+        '<div class="summary-grid">' +
+          '<div class="summary-card"><div class="summary-label">Toplam Kayıt</div><div class="summary-value">' + escapeHtml(String(stats.metrics.totalComplaints)) + '</div><div class="summary-note">Seçilen dönem içindeki benzersiz şikayet adedi.</div></div>' +
+          '<div class="summary-card"><div class="summary-label">Konu Geçişi</div><div class="summary-value">' + escapeHtml(String(stats.metrics.totalTopicHits)) + '</div><div class="summary-note">Çoklu konu seçilmiş kayıtlarda her konu ayrı sayılır.</div></div>' +
+          '<div class="summary-card"><div class="summary-label">Çok Konulu Kayıt</div><div class="summary-value">' + escapeHtml(String(stats.metrics.multiTopicCount)) + '</div><div class="summary-note">Birden fazla konu başlığı içeren şikayet sayısı.</div></div>' +
+          '<div class="summary-card"><div class="summary-label">İşlem Yapılan</div><div class="summary-value">' + escapeHtml(String(stats.metrics.actionedCount)) + '</div><div class="summary-note">Henüz işlem yapılmadı dışındaki kayıtlar.</div></div>' +
+          '<div class="summary-card"><div class="summary-label">Kapanan</div><div class="summary-value">' + escapeHtml(String(stats.metrics.closedCount)) + '</div><div class="summary-note">Durumu kapatıldı olan kayıtlar.</div></div>' +
+          '<div class="summary-card"><div class="summary-label">Devam Eden</div><div class="summary-value">' + escapeHtml(String(stats.metrics.ongoingCount)) + '</div><div class="summary-note">Açık, inceleniyor veya süre verilen kayıtlar.</div></div>' +
+          '<div class="summary-card"><div class="summary-label">Ortalama Konu / Kayıt</div><div class="summary-value">' + escapeHtml(avgText) + '</div><div class="summary-note">Konu geçişi toplamının kayıt adedine oranı.</div></div>' +
+          '<div class="summary-card"><div class="summary-label">Farklı Konu Sayısı</div><div class="summary-value">' + escapeHtml(String(stats.metrics.uniqueTopicCount)) + '</div><div class="summary-note">Dönem içinde görülen benzersiz konu başlığı adedi.</div></div>' +
+        '</div>' +
+        '<div class="highlight-grid">' +
+          '<div class="highlight-card"><div class="highlight-label">En Yoğun Konu</div><div class="highlight-value">' + escapeHtml(stats.topicText) + '</div><div class="highlight-note">Çoklu konu seçimleri ayrı ayrı değerlendirilmiştir.</div></div>' +
+          '<div class="highlight-card"><div class="highlight-label">En Yoğun Kaynak</div><div class="highlight-value">' + escapeHtml(stats.sourceText) + '</div><div class="highlight-note">Şikayetlerin sisteme hangi kanaldan geldiğini gösterir.</div></div>' +
+          '<div class="highlight-card"><div class="highlight-label">En Yoğun Mahalle</div><div class="highlight-value">' + escapeHtml(stats.neighborhoodText) + '</div><div class="highlight-note">Mahalle bilgisi girilmiş kayıtlar üzerinden hesaplanır.</div></div>' +
+        '</div>' +
+        '<div class="section"><h2 class="section-title">Yönetici Özeti</h2><div class="narrative">' + escapeHtml(stats.narrativeText) + '</div></div>' +
+        '<div class="section"><h2 class="section-title">Tarih Bazlı Dağılım</h2><div class="section-note">' + escapeHtml(stats.config.rangeText) + ' aralığında gün bazlı kayıt yoğunluğu listelenmiştir.</div><table><thead><tr><th style="width:35%">Tarih</th><th style="width:20%">Kayıt Sayısı</th><th>Durum</th></tr></thead><tbody>' + buildStatsTrendTableRows(stats.trendPoints) + '</tbody></table></div>' +
+        '<div class="section two-col">' +
+          '<div><h2 class="section-title">Konu Başlığı Yoğunluğu</h2><table><thead><tr><th style="width:12%">#</th><th>Konu</th><th style="width:22%">Adet</th></tr></thead><tbody>' + buildStatsReportTableRows(stats.topicList, 'Adet', 'Bu dönemde konu başlığı verisi bulunmuyor.') + '</tbody></table></div>' +
+          '<div><h2 class="section-title">Kaynak Dağılımı</h2><table><thead><tr><th style="width:12%">#</th><th>Kaynak</th><th style="width:22%">Adet</th></tr></thead><tbody>' + buildStatsReportTableRows(stats.sourceList, 'Adet', 'Bu dönemde kaynak verisi bulunmuyor.') + '</tbody></table></div>' +
+        '</div>' +
+        '<div class="section three-col">' +
+          '<div><h2 class="section-title">Durum Dağılımı</h2><table><thead><tr><th style="width:16%">#</th><th>Durum</th><th style="width:26%">Adet</th></tr></thead><tbody>' + buildStatsReportTableRows(stats.statusList, 'Adet', 'Bu dönemde durum verisi bulunmuyor.') + '</tbody></table></div>' +
+          '<div><h2 class="section-title">Mahalle Yoğunluğu</h2><table><thead><tr><th style="width:16%">#</th><th>Mahalle</th><th style="width:26%">Adet</th></tr></thead><tbody>' + buildStatsReportTableRows(stats.neighborhoodList, 'Adet', 'Bu dönemde mahalle verisi bulunmuyor.') + '</tbody></table></div>' +
+          '<div><h2 class="section-title">Faaliyet Raporu Notu</h2><div class="narrative">Bu çıktı, faaliyet raporuna doğrudan eklenebilecek özet mantıkla hazırlanmıştır. Toplam kayıt adedi, konu başlığı yoğunluğu, işlem durumu, kaynak ve mahalle analizi ayrı ayrı sunulmuştur. PDF kaydı almak için yazdırma ekranında hedef olarak <strong>PDF olarak kaydet</strong> seçilebilir.</div></div>' +
+        '</div>' +
+        '</div></body></html>';
+
+      var printWindow = window.open('', '_blank', 'width=1200,height=900');
+      if (!printWindow) {
+        alert('PDF penceresi açılamadı. Tarayıcı açılır pencere engelini kontrol edin.');
+        return;
+      }
+      printWindow.document.open();
+      printWindow.document.write(reportHtml);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.onload = function() {
+        setTimeout(function() {
+          printWindow.print();
+        }, 400);
+      };
+    }
+
+    function renderComplaintStatistics() {
+      var stats = computeComplaintStatisticsData(statsPeriodMode || 'daily');
+      var config = stats.config;
+      var tabs = {
+        daily: document.getElementById('statsTabDaily'),
+        weekly: document.getElementById('statsTabWeekly'),
+        monthly: document.getElementById('statsTabMonthly')
+      };
+
+      Object.keys(tabs).forEach(function(key) {
+        if (tabs[key]) {
+          tabs[key].classList.toggle('active', key === config.mode);
+        }
+      });
 
       var periodLine = document.getElementById('statsPeriodLine');
       if (periodLine) {
@@ -9897,12 +10006,12 @@ app.get("/complaints", (req, res) => {
 
       var summaryGrid = document.getElementById('statsSummaryGrid');
       if (summaryGrid) {
-        summaryGrid.innerHTML = renderStatsSummaryCards(metrics);
+        summaryGrid.innerHTML = renderStatsSummaryCards(stats.metrics);
       }
 
       var highlights = document.getElementById('statsHighlights');
       if (highlights) {
-        highlights.innerHTML = renderStatsHighlights(topicList, sourceList, neighborhoodList);
+        highlights.innerHTML = renderStatsHighlights(stats.topicList, stats.sourceList, stats.neighborhoodList);
       }
 
       var trendSubtitle = document.getElementById('statsTrendSubtitle');
@@ -9911,23 +10020,19 @@ app.get("/complaints", (req, res) => {
       }
 
       var trendChart = document.getElementById('statsTrendChart');
-      if (trendChart) trendChart.innerHTML = buildTrendChart(trendPoints);
+      if (trendChart) trendChart.innerHTML = buildTrendChart(stats.trendPoints);
       var topicChart = document.getElementById('statsTopicChart');
-      if (topicChart) topicChart.innerHTML = buildHorizontalChart(topicList, 'Bu dönemde konu başlığı verisi bulunmuyor.');
+      if (topicChart) topicChart.innerHTML = buildHorizontalChart(stats.topicList, 'Bu dönemde konu başlığı verisi bulunmuyor.');
       var sourceChart = document.getElementById('statsSourceChart');
-      if (sourceChart) sourceChart.innerHTML = buildHorizontalChart(sourceList, 'Bu dönemde kaynak verisi bulunmuyor.');
+      if (sourceChart) sourceChart.innerHTML = buildHorizontalChart(stats.sourceList, 'Bu dönemde kaynak verisi bulunmuyor.');
       var statusChart = document.getElementById('statsStatusChart');
-      if (statusChart) statusChart.innerHTML = buildHorizontalChart(statusList, 'Bu dönemde durum verisi bulunmuyor.');
+      if (statusChart) statusChart.innerHTML = buildHorizontalChart(stats.statusList, 'Bu dönemde durum verisi bulunmuyor.');
       var neighborhoodChart = document.getElementById('statsNeighborhoodChart');
-      if (neighborhoodChart) neighborhoodChart.innerHTML = buildHorizontalChart(neighborhoodList, 'Bu dönemde mahalle verisi bulunmuyor.');
+      if (neighborhoodChart) neighborhoodChart.innerHTML = buildHorizontalChart(stats.neighborhoodList, 'Bu dönemde mahalle verisi bulunmuyor.');
 
-      var topicText = getTopEntryText(topicList, 'veri yok');
-      var sourceText = getTopEntryText(sourceList, 'veri yok');
-      var neighborhoodText = getTopEntryText(neighborhoodList, 'veri yok');
       var narrative = document.getElementById('statsNarrative');
       if (narrative) {
-        narrative.innerHTML = '<strong>Özet değerlendirme:</strong> ' +
-          escapeHtml(config.title + ' görünümde toplam ' + filtered.length + ' şikayet kaydı bulunuyor. Bu kayıtlar içinde toplam ' + totalTopicHits + ' konu geçişi var ve çok konulu kayıt sayısı ' + multiTopicCount + '. En yoğun konu ' + topicText + ', en yoğun kaynak ' + sourceText + ', en çok şikayet gelen mahalle ' + neighborhoodText + '. Kapanan kayıt sayısı ' + closedCount + ', devam eden kayıt sayısı ' + ongoingCount + ', işlem girilmiş kayıt sayısı ' + actionedCount + '.') ;
+        narrative.innerHTML = '<strong>Özet değerlendirme:</strong> ' + escapeHtml(stats.narrativeText);
       }
     }
 
